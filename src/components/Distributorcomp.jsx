@@ -105,7 +105,7 @@ const Distributorcomp = () => {
 
 
   return (
-    <div className="pt-24 px-10 max-w-6xl">
+    <div className="px-4 pt-4 max-w-[1200px] mx-auto w-full">
 
       {/* PAGE TITLE */}
       <h1 className="text-3xl font-bold mb-2">Add Distributor</h1>
