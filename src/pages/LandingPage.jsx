@@ -24,8 +24,8 @@ export default function LandingPage() {
 
       {/* TOP NAVBAR */}
       <nav className="w-full flex items-center justify-between px-4 py-2 animate-fade-in relative z-10">
-        <div className="flex items-center gap-3">
-          <img src={logo} alt="Egg Bucket Logo" className="w-40 h-20" />
+        <div className="flex items-center gap-3 bg-eggBg p-1 rounded-md">
+          <img src={logo} alt="Egg Bucket Logo" className="w-28 sm:w-32 md:w-40 h-auto object-contain mix-blend-multiply opacity-95" />
         </div>
 
         <div className="flex gap-5">
@@ -89,7 +89,9 @@ export default function LandingPage() {
           {/* CONTACT */}
           <div>
             <h3 className="font-bold text-xl mb-4">Contact Us</h3>
-            <img src={logo} className="w-16 mb-4" />
+            <div className="inline-block bg-eggBg p-1 rounded-md">
+              <img src={logo} alt="Egg Bucket Logo" className="w-10 sm:w-12 md:w-16 h-auto mb-4 object-contain mix-blend-multiply opacity-95" />
+            </div>
             <p className="leading-relaxed">
               Kacklewalls Nutrition Pvt. Ltd.<br />
               1179, AECS Layout, Singasandra<br />

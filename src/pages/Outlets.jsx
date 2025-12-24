@@ -22,21 +22,30 @@ const SAMPLE_OUTLETS = [
   },
   {
     id: "OUT-003",
-    name: "Green Valley Grocers",
-    area: "Whitefield",
-    contact: "Suresh Menon",
-    phone: "+91 88776 65544",
-    status: "Inactive",
+    name: "Hosa Road Bakers",
+    area: "Hosa Road",
+    contact: "Manish Patel",
+    phone: "+91 99887 66554",
+    status: "Active",
     reviewStatus: "ok",
   },
   {
     id: "OUT-004",
-    name: "Daily Fresh Needs",
-    area: "Marathahalli",
-    contact: "Priya Singh",
-    phone: "+91 77665 54433",
+    name: "Singasandra Grocers",
+    area: "Singasandra",
+    contact: "Deepa Rao",
+    phone: "+91 88776 55443",
     status: "Active",
-    reviewStatus: "pending",
+    reviewStatus: "ok",
+  },
+  {
+    id: "OUT-005",
+    name: "Kudlu Gate Store",
+    area: "Kudlu Gate",
+    contact: "Vijay Kumar",
+    phone: "+91 77665 44332",
+    status: "Active",
+    reviewStatus: "ok",
   },
 ];
 
@@ -128,6 +137,15 @@ function FilterIcon({ className = "" }) {
 
 const STORAGE_KEY = "egg_outlets_v1";
 
+// The five required layouts used across the app
+const REQUIRED_AREAS = [
+  "AECS Layout",
+  "Bandepalya",
+  "Hosa Road",
+  "Singasandra",
+  "Kudlu Gate",
+];
+
 export default function Outlets() {
   const [outlets, setOutlets] = useState(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -137,7 +155,36 @@ export default function Outlets() {
   // Persist to localStorage when outlets change
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(outlets));
+    // Dispatch a custom event so other pages in the same tab can update immediately
+    try {
+      const areas = outlets.map((o) => o.area);
+      window.dispatchEvent(new CustomEvent('egg:outlets-updated', { detail: areas }));
+    } catch (err) {
+      // ignore
+    }
   }, [outlets]);
+
+  // Ensure required areas exist as outlets (add missing ones automatically)
+  useEffect(() => {
+    setOutlets((prev) => {
+      const areas = prev.map((o) => o.area);
+      const missing = REQUIRED_AREAS.filter((r) => !areas.includes(r));
+      if (missing.length === 0) return prev;
+
+      const nextNumberStart = prev.length + 1;
+      const added = missing.map((area, idx) => ({
+        id: `OUT-${String(nextNumberStart + idx).padStart(3, "0")}`,
+        name: `${area} Outlet`,
+        area,
+        contact: "-",
+        phone: "-",
+        status: "Active",
+        reviewStatus: "ok",
+      }));
+
+      return [...added, ...prev];
+    });
+  }, []);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");

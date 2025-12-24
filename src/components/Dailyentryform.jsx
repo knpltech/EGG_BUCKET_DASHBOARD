@@ -1,41 +1,43 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
-const Dailyentryform = ({ addrow, blockeddates }) => {
+const Dailyentryform = ({ addrow, blockeddates, outlets }) => {
   const [date, setDate] = useState("");
-  const [aecs, setAecs] = useState("");
-  const [bande, setBande] = useState("");
-  const [hosa, setHosa] = useState("");
-  const [singa, setSinga] = useState("");
-  const [kudlu, setKudlu] = useState("");
+  const [values, setValues] = useState(() => {
+    const init = {};
+    outlets.forEach((o) => (init[o] = ""));
+    return init;
+  });
+
+  useEffect(() => {
+    setValues(() => {
+      const init = {};
+      outlets.forEach((o) => (init[o] = ""));
+      return init;
+    });
+  }, [outlets]);
 
   const handleSubmit = () => {
     if (!date) return alert("Date is required");
     if (blockeddates.includes(date)) return alert("Entry for this date already exists");
-    if (!aecs || !bande || !hosa || !singa || !kudlu) return alert("All data is required");
 
-    const total =
-      Number(aecs) +
-      Number(bande) +
-      Number(hosa) +
-      Number(singa) +
-      Number(kudlu);
+    // require all outlets to have values
+    for (const o of outlets) {
+      if (values[o] === "") return alert("All data is required");
+    }
 
-    addrow({
-      date,
-      aecs: Number(aecs),
-      bande: Number(bande),
-      hosa: Number(hosa),
-      singa: Number(singa),
-      kudlu: Number(kudlu),
-      total,
-    });
+    const outletValues = {};
+    outlets.forEach((o) => (outletValues[o] = Number(values[o] || 0)));
+
+    const total = Object.values(outletValues).reduce((s, v) => s + Number(v || 0), 0);
+
+    addrow({ date, outlets: outletValues, total });
 
     setDate("");
-    setAecs("");
-    setBande("");
-    setHosa("");
-    setSinga("");
-    setKudlu("");
+    setValues(() => {
+      const init = {};
+      outlets.forEach((o) => (init[o] = ""));
+      return init;
+    });
   };
 
   return (
@@ -63,19 +65,13 @@ const Dailyentryform = ({ addrow, blockeddates }) => {
 
       {/* Outlets */}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mt-4 text-sm">
-        {[
-          ["AECS Layout", aecs, setAecs],
-          ["Bandepalya", bande, setBande],
-          ["Hosa Road", hosa, setHosa],
-          ["Singasandra", singa, setSinga],
-          ["Kudlu Gate", kudlu, setKudlu],
-        ].map(([label, val, setter]) => (
+        {outlets.map((label) => (
           <div key={label}>
             <label className="text-gray-600 text-xs">{label}</label>
             <input
               type="number"
-              value={val}
-              onChange={(e) => setter(e.target.value)}
+              value={values[label]}
+              onChange={(e) => setValues((prev) => ({ ...prev, [label]: e.target.value }))}
               className="border p-2 rounded-lg w-full text-sm"
             />
           </div>

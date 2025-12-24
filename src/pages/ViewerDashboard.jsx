@@ -11,7 +11,9 @@ export default function AdminDashboard() {
       <div className="w-64 bg-[#F4D7B8] p-6 flex flex-col shadow-xl">
 
         <div className="flex items-center gap-3 mb-8">
-          <img src={logo} className="w-10" />
+          <div className="inline-block bg-eggBg p-1 rounded-md">
+            <img src={logo} alt="Egg Bucket Logo" className="w-8 sm:w-10 md:w-12 h-auto object-contain mix-blend-multiply opacity-95" />
+          </div>
           <h1 className="text-xl font-bold text-gray-800">Egg Bucket</h1>
         </div>
 

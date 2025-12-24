@@ -1,5 +1,6 @@
 // src/pages/CashPayment.jsx
 import { useState, useMemo, useEffect } from "react";
+import * as XLSX from "xlsx";
 
 const DEFAULT_OUTLETS = [
   "AECS Layout",
@@ -254,48 +255,87 @@ function CashCalendar({ rows, selectedDate, onSelectDate, showDots = true }) {
 /* ------------------------------------------------ */
 
 function createInitialCashRows(outlets = DEFAULT_OUTLETS) {
-  const today = new Date();
-  const baseAmounts = [
-    [1300, 3400, 2100, 1500, 900],
-    [1100, 3200, 2000, 1400, 850],
-    [1300, 3500, 2200, 1600, 950],
-    [1150, 3100, 1900, 1350, 880],
-    [1250, 3300, 2050, 1450, 880],
-  ];
-
-  return baseAmounts.map((amounts, index) => {
-    const date = new Date(today);
-    date.setDate(today.getDate() - index);
-
-    const outletValues = {};
-    outlets.forEach((name, i) => {
-      outletValues[name] = amounts[i] || 0;
-    });
-
-    const totalAmount = amounts.reduce((sum, v) => sum + v, 0);
-
-    return {
-      id: index + 1,
-      date: date.toISOString().slice(0, 10),
-      outlets: outletValues,
-      totalAmount,
-    };
-  });
+  // Start with no seeded rows — data should be entered by the user
+  return [];
 }
 
 export default function CashPayment() {
   const [outlets, setOutlets] = useState(DEFAULT_OUTLETS);
 
   useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const savedOutlets = JSON.parse(saved);
-      const outletAreas = savedOutlets.map((o) => o.area);
-      setOutlets(outletAreas.length > 0 ? outletAreas : DEFAULT_OUTLETS);
-    }
+    const loadOutletsFromLocal = () => {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const savedOutlets = JSON.parse(saved);
+        const outletAreas = savedOutlets.map((o) => o.area);
+        const required = DEFAULT_OUTLETS;
+        const hasAllRequired = required.every((r) => outletAreas.includes(r));
+        setOutlets(hasAllRequired ? outletAreas : DEFAULT_OUTLETS);
+      } else {
+        setOutlets(DEFAULT_OUTLETS);
+      }
+    };
+
+    loadOutletsFromLocal();
+
+    const onUpdate = (e) => {
+      const areas = (e && e.detail) || null;
+      if (Array.isArray(areas)) {
+        setOutlets(areas);
+      } else {
+        loadOutletsFromLocal();
+      }
+    };
+
+    window.addEventListener('egg:outlets-updated', onUpdate);
+
+    const onStorage = (evt) => {
+      if (evt.key === STORAGE_KEY) onUpdate();
+    };
+    window.addEventListener('storage', onStorage);
+
+    return () => {
+      window.removeEventListener('egg:outlets-updated', onUpdate);
+      window.removeEventListener('storage', onStorage);
+    };
   }, []);
 
-  const [rows, setRows] = useState(() => createInitialCashRows(outlets));
+  const ROWS_STORAGE_KEY = "egg_cash_rows_v1";
+  const [rows, setRows] = useState(() => {
+    const saved = localStorage.getItem(ROWS_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // persist rows
+  useEffect(() => {
+    localStorage.setItem(ROWS_STORAGE_KEY, JSON.stringify(rows));
+  }, [rows]);
+
+  // If outlets change, remap existing rows so they include all current outlets (missing ones filled with 0) and totals recalculated
+  useEffect(() => {
+    setRows((prevRows) =>
+      prevRows.map((r) => {
+        const newOutlets = {};
+        outlets.forEach((name) => {
+          newOutlets[name] = (r.outlets && r.outlets[name]) || 0;
+        });
+        const totalAmount = Object.values(newOutlets).reduce((s, v) => s + (Number(v) || 0), 0);
+        return { ...r, outlets: newOutlets, totalAmount };
+      })
+    );
+
+    // Also update entry values when outlets change
+    if (entryDate) {
+      const existing = rows.find((r) => r.date === entryDate);
+      if (!existing) {
+        setEntryValues(() => {
+          const reset = {};
+          outlets.forEach((o) => (reset[o] = ""));
+          return reset;
+        });
+      }
+    }
+  }, [outlets]);
 
   const [rangeType, setRangeType] = useState("thisMonth");
   const [customFrom, setCustomFrom] = useState("");
@@ -308,9 +348,41 @@ export default function CashPayment() {
     return initial;
   });
 
+  const [hasEntry, setHasEntry] = useState(false);
+  const [entryTotal, setEntryTotal] = useState(0);
+
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [isCustomFromOpen, setIsCustomFromOpen] = useState(false);
   const [isCustomToOpen, setIsCustomToOpen] = useState(false);
+
+  // Load existing row for selected date
+  useEffect(() => {
+    if (!entryDate) {
+      setHasEntry(false);
+      setEntryValues(() => {
+        const reset = {};
+        outlets.forEach((o) => (reset[o] = ""));
+        return reset;
+      });
+      setEntryTotal(0);
+      return;
+    }
+
+    const existing = rows.find((r) => r.date === entryDate);
+    if (existing) {
+      setEntryValues(() => ({ ...existing.outlets }));
+      setHasEntry(true);
+      setEntryTotal(existing.totalAmount || 0);
+    } else {
+      setHasEntry(false);
+      setEntryValues(() => {
+        const reset = {};
+        outlets.forEach((o) => (reset[o] = ""));
+        return reset;
+      });
+      setEntryTotal(0);
+    }
+  }, [entryDate, rows, outlets]);
 
   // Filter rows based on selected range
   const filteredRows = useMemo(() => {
@@ -354,6 +426,25 @@ export default function CashPayment() {
     return { outletTotals, grandTotal };
   }, [filteredRows, outlets]);
 
+  const downloadExcel = () => {
+    if (!filteredRows || filteredRows.length === 0) {
+      alert("No data available for selected filters");
+      return;
+    }
+
+    const data = filteredRows.map((row) => {
+      const obj = { Date: row.date };
+      outlets.forEach((o) => (obj[o] = row.outlets[o] ?? 0));
+      obj.Total = row.totalAmount;
+      return obj;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Cash Collections");
+    XLSX.writeFile(wb, "Cash_Collections_Report.xlsx");
+  };
+
   const handleEntryChange = (outlet, value) => {
     setEntryValues((prev) => ({
       ...prev,
@@ -365,6 +456,13 @@ export default function CashPayment() {
     e.preventDefault();
     if (!entryDate) {
       alert("Please select a collection date.");
+      return;
+    }
+
+    // Block duplicate
+    if (rows.some((r) => r.date === entryDate)) {
+      alert(`Entry for ${entryDate} already exists and cannot be modified.`);
+      setHasEntry(true);
       return;
     }
 
@@ -388,12 +486,9 @@ export default function CashPayment() {
 
     setRows((prev) => [newRow, ...prev]);
 
-    setEntryDate("");
-    setEntryValues(() => {
-      const reset = {};
-      outlets.forEach((o) => (reset[o] = ""));
-      return reset;
-    });
+    // mark locked
+    setHasEntry(true);
+    setEntryTotal(totalAmount);
   };
 
   const formatDisplayDate = (iso) => {
@@ -420,11 +515,8 @@ export default function CashPayment() {
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <button className="inline-flex items-center rounded-full border border-gray-200 bg-eggWhite px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
+          <button onClick={downloadExcel} className="inline-flex items-center rounded-full border border-gray-200 bg-eggWhite px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
             Export Report
-          </button>
-          <button className="inline-flex items-center rounded-full bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-md hover:bg-orange-600">
-            + New Entry
           </button>
         </div>
       </div>
@@ -639,6 +731,13 @@ export default function CashPayment() {
                 <CalendarIcon className="h-4 w-4 text-gray-500" />
               </button>
 
+              {hasEntry && (
+                <div className="mt-2 flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-500" />
+                  <div className="text-xs font-medium text-green-700">Entry ({entryTotal}) • Locked</div>
+                </div>
+              )}
+
               {isCalendarOpen && (
                 <div className="absolute right-0 bottom-full z-20 mb-2">
                   <CashCalendar
@@ -673,7 +772,8 @@ export default function CashPayment() {
                     onChange={(e) =>
                       handleEntryChange(outlet, e.target.value)
                     }
-                    className="w-full rounded-xl border border-gray-200 bg-eggBg pl-7 pr-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm"
+                    disabled={hasEntry}
+                    className={`w-full rounded-xl border border-gray-200 bg-eggBg pl-7 pr-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm ${hasEntry ? 'bg-gray-50 cursor-not-allowed' : ''}`}
                   />
                 </div>
               </div>
@@ -684,9 +784,10 @@ export default function CashPayment() {
           <div className="flex flex-col items-center gap-2 pt-4">
             <button
               type="submit"
-              className="inline-flex items-center justify-center rounded-2xl bg-orange-500 px-6 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-orange-600"
+              disabled={hasEntry}
+              className={`inline-flex items-center justify-center rounded-2xl px-6 py-2.5 text-sm font-semibold text-white shadow-md ${hasEntry ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'}`}
             >
-              Save Entry
+              {hasEntry ? 'Locked' : 'Save Entry'}
             </button>
             <p className="text-center text-[11px] text-gray-500 md:text-xs">
               Note: Cash values must be whole numbers only. No decimals

@@ -72,8 +72,16 @@ export default function SignIn() {
       <div className="bg-eggWhite w-full max-w-sm p-8 rounded-2xl shadow-xl relative z-10">
 
         <div className="flex flex-col items-center mb-4">
-          <img src={logo} alt="Logo" className="w-32" />
-          <h1 className="text-xl font-semibold mt-2">Egg Bucket</h1>
+          {/* Make the logo container match the card background so white image blends */}
+          <div className="inline-block bg-eggWhite p-0 rounded-md">
+            <img src={logo} alt="Egg Bucket Logo" className="w-24 sm:w-28 md:w-32 h-auto object-contain mix-blend-multiply" />
+          </div>
+          <div className="mt-2">
+            {/* Keep the company name plain so it sits directly on the card background */}
+            <span className="text-sm sm:text-base md:text-lg font-semibold text-[#2C1A0C] opacity-95">
+              KACKLEWALLS NUTRITION PVT LTD
+            </span>
+          </div>
         </div>
 
         <h2 className="text-center text-2xl font-semibold mb-6">Sign In</h2>

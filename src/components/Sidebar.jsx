@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
+import logo from "../assets/Logo.png";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faIndianRupeeSign } from "@fortawesome/free-solid-svg-icons";
 import {
@@ -39,9 +40,11 @@ export default function Sidebar() {
       }`}
     >
       {/* Logo */}
-      <h1 className="text-xl font-bold mb-8 flex items-center gap-2 justify-center">
-        🥚 {open && <span>Egg Bucket</span>}
-      </h1>
+      <div className="mb-8 flex items-center gap-2 justify-center">
+        <div className={`inline-block bg-orange-50 rounded ${open ? 'p-2' : 'p-1'}`}>
+          <img src={logo} alt="Egg Bucket Logo" className={`h-10 sm:h-12 md:h-14 w-auto object-contain mix-blend-multiply opacity-95`} />
+        </div>
+      </div>
 
       {/* Menu Toggle */}
       <div
