@@ -419,16 +419,32 @@ export default function DigitalPayment() {
       0
     );
 
-    const newRow = {
-      id: rows.length + 1,
-      date: entryDate,
-      outlets: outletAmounts,
-      totalAmount,
-    };
+    // Check if entry for this date already exists
+    const existingEntryIndex = rows.findIndex((row) => row.date === entryDate);
 
-    setRows((prev) => [newRow, ...prev]);
+    if (existingEntryIndex !== -1) {
+      // Update existing entry
+      setRows((prev) => {
+        const updated = [...prev];
+        updated[existingEntryIndex] = {
+          ...updated[existingEntryIndex],
+          outlets: outletAmounts,
+          totalAmount,
+        };
+        return updated;
+      });
+    } else {
+      // Create new entry
+      const newRow = {
+        id: rows.length + 1,
+        date: entryDate,
+        outlets: outletAmounts,
+        totalAmount,
+      };
+      setRows((prev) => [newRow, ...prev]);
+    }
+
     setPage(1);
-
     setEntryDate("");
     setEntryValues(() => {
       const reset = {};
@@ -670,6 +686,17 @@ export default function DigitalPayment() {
                     selectedDate={entryDate}
                     onSelectDate={(iso) => {
                       setEntryDate(iso);
+                      // Auto-load existing entry data if it exists
+                      const existingEntry = rows.find((row) => row.date === iso);
+                      if (existingEntry) {
+                        setEntryValues(existingEntry.outlets);
+                      } else {
+                        setEntryValues(() => {
+                          const reset = {};
+                          outlets.forEach((o) => (reset[o] = ""));
+                          return reset;
+                        });
+                      }
                       setIsEntryCalendarOpen(false);
                     }}
                     showDots={true}
