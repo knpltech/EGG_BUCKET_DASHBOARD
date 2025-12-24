@@ -217,18 +217,28 @@ export default function DailyDamages() {
                   onChange={(e) => setEntryDate(e.target.value)}
                   onFocus={() => setShowCalendar(true)}
                   onClick={() => setShowCalendar(true)}
-                  className="w-full border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  className="w-full pr-40 border rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-orange-400"
                 />
 
                 {/* small status indicator */}
-                <div className="flex items-center gap-2 absolute right-0 top-1/2 -translate-y-1/2 mr-3">
-                  <div className={`w-3 h-3 rounded-full ${hasEntry ? 'bg-green-400' : 'bg-red-500'}`}></div>
-                  {hasEntry ? (
-                    <span className="text-sm text-green-700 font-medium">Entry ({entryTotal}) • Locked</span>
-                  ) : (
-                    <span className="text-sm text-red-600">No</span>
-                  )}
-                </div>
+                <div className="pointer-events-none flex items-center gap-2 absolute right-3 top-1/2 -translate-y-1/2">
+                <div
+                  className={`w-3 h-3 rounded-full ${
+                    hasEntry ? "bg-green-400" : "bg-red-500"
+                  }`}
+                ></div>
+
+                {hasEntry ? (
+                  <span className="text-sm text-green-700 font-medium whitespace-nowrap">
+                    Entry ({entryTotal}) • Locked
+                  </span>
+                ) : (
+                  <span className="text-sm text-red-600 whitespace-nowrap">
+                    No
+                  </span>
+                )}
+              </div>
+
 
                 {showCalendar && (
                   <div className="absolute z-50 mt-2 p-3 bg-white rounded-lg shadow-lg w-64">
