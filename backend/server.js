@@ -14,5 +14,8 @@ app.get("/", (req, res) => res.send("EggBucket Backend Running 🚀"));
 app.use("/api/auth", authRoutes);
 app.use("/api/admin", adminRoutes);
 
-const PORT = 5000;
-app.listen(PORT, () => console.log(`Backend running at http://localhost:${PORT}`));
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`Backend running on port ${PORT}`);
+});
+
