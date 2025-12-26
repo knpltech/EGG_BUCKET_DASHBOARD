@@ -284,7 +284,17 @@ const Dailyentryform = ({ addrow, blockeddates, rows }) => {
         </button>
 
         {/* Status message below */}
-        {/* Status message removed as per request */}
+        {hasEntry && (
+          <div className="mt-2 flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-green-500" />
+            <div className="text-xs font-medium text-green-700">
+              Entry ( ₹ {(() => {
+                const found = Array.isArray(rows) ? rows.find(r => r.date === date) : null;
+                return found && found.total ? found.total : '';
+              })()}) • Locked
+            </div>
+          </div>
+        )}
 
         {/* Calendar opens directly above the icon (right-aligned) */}
         {openCal && (
