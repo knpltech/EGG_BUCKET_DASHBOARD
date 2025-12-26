@@ -65,7 +65,11 @@ export default function DailyTable({rows, outlets = []}) {
                 </td>
                 {outletNames.map((outlet) => (
                   <td key={outlet} className="whitespace-nowrap px-4 py-3">
-                    ₹{row.outlets && row.outlets[outlet] ? row.outlets[outlet] : 0}
+                    ₹{
+                        row.outlets
+                          ? row.outlets[outlet] ?? 0
+                          : row[outlet] ?? 0
+                      }
                   </td>
                 ))}
                 <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-orange-600">

@@ -64,9 +64,8 @@ const SAMPLE_OUTLETS = [
   },
 ];
 
-const STORAGE_KEY = "egg_outlets_v1";
-
 const Dailysales = () => {
+  const STORAGE_KEY = "dailySales_v2";
 
   const [rows,setRows]=useState([]);
   const [isLoaded, setIsLoaded]= useState(false);
@@ -115,7 +114,7 @@ const Dailysales = () => {
   }, []);
   
   useEffect(()=>{
-    const savedDate= localStorage.getItem("dailySales");
+    const savedDate= localStorage.getItem(STORAGE_KEY);
     if(savedDate){
       setRows(JSON.parse(savedDate));
     }
@@ -124,11 +123,13 @@ const Dailysales = () => {
 
   useEffect(()=>{
     if(isLoaded){
-      localStorage.setItem("dailySales", JSON.stringify(rows))
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(rows))
     }
   },[rows,isLoaded]);
 
-  const blockeddates=rows.map(row=> row.date);
+  const blockeddates = rows
+  .filter(r => r.locked)
+  .map(r => r.date);
 
   const addrow=(newrow)=>{
     setRows(prev => [newrow, ...prev]);

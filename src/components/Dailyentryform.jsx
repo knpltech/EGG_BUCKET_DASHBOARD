@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect ,useMemo } from "react";
 
 const MONTHS = [
   "January","February","March","April","May","June",
@@ -223,9 +223,11 @@ const Dailyentryform = ({ addrow, blockeddates, rows, outlets = [] }) => {
   const [openCal, setOpenCal] = useState(false);
 
   // Build outlet names from objects, filtering active only for entry
-  const outletNames = Array.isArray(outlets) && outlets.length > 0 
+  const outletNames = useMemo(() => {
+  return Array.isArray(outlets) && outlets.length > 0
     ? outlets.map(o => o.area || o)
     : ["AECS Layout", "Bandepalya", "Hosa Road", "Singasandra", "Kudlu Gate"];
+}, [outlets]);
 
   const [entryValues, setEntryValues] = useState(() => {
     const initial = {};
@@ -246,12 +248,12 @@ const Dailyentryform = ({ addrow, blockeddates, rows, outlets = [] }) => {
 
   // Reset entry values when outlets change
   useEffect(() => {
-    setEntryValues(() => {
-      const initial = {};
-      outletNames.forEach((o) => (initial[o] = ""));
-      return initial;
-    });
-  }, [outletNames]);
+  if (!date) return;
+
+  const reset = {};
+  outletNames.forEach(o => (reset[o] = ""));
+  setEntryValues(reset);
+}, [date]);
 
   const handleEntryChange = (outlet, value) => {
     setEntryValues((prev) => ({
