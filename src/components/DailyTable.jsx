@@ -10,14 +10,26 @@ function formatDisplayDate(iso) {
   });
 }
 
-export default function DailyTable({rows, outlets = ["AECS Layout", "Bandepalya", "Hosa Road", "Singasandra", "Kudlu Gate"]}) {
+export default function DailyTable({rows, outlets = []}) {
+  // Build outlet names from objects or use defaults
+  const outletNames = Array.isArray(outlets) && outlets.length > 0 
+    ? outlets.map(o => o.area || o)
+    : ["AECS Layout", "Bandepalya", "Hosa Road", "Singasandra", "Kudlu Gate"];
+
   // Calculate totals dynamically based on outlets
   const totals = {};
-  outlets.forEach((outlet) => {
+  outletNames.forEach((outlet) => {
     totals[outlet] = rows.reduce((s, r) => s + (r.outlets && r.outlets[outlet] ? Number(r.outlets[outlet]) : 0), 0);
   });
 
   const grandTotal = Object.values(totals).reduce((s, v) => s + v, 0);
+
+  // Check if outlet is active
+  const isOutletActive = (outletName) => {
+    if (!Array.isArray(outlets) || outlets.length === 0) return true;
+    const outletObj = outlets.find(o => o.area === outletName);
+    return !outletObj || outletObj.status === "Active";
+  };
 
   return (
     <div className="overflow-hidden rounded-2xl bg-eggWhite shadow-sm">
@@ -26,11 +38,15 @@ export default function DailyTable({rows, outlets = ["AECS Layout", "Bandepalya"
           <thead className="bg-gray-50">
             <tr className="text-left text-xs font-semibold text-gray-500">
               <th className="min-w-[130px] px-4 py-3">Date</th>
-              {outlets.map((outlet) => (
-                <th key={outlet} className="px-4 py-3 whitespace-nowrap">
-                  {outlet.toUpperCase()}
-                </th>
-              ))}
+              {outletNames.map((outlet) => {
+                const isActive = isOutletActive(outlet);
+                return (
+                  <th key={outlet} className="px-4 py-3 whitespace-nowrap">
+                    {outlet.toUpperCase()}
+                    {!isActive && <span className="text-red-500 text-[10px] block">(Inactive)</span>}
+                  </th>
+                );
+              })}
               <th className="px-4 py-3 whitespace-nowrap text-right">
                 Total
               </th>
@@ -47,7 +63,7 @@ export default function DailyTable({rows, outlets = ["AECS Layout", "Bandepalya"
                 <td className="whitespace-nowrap px-4 py-3">
                   {formatDisplayDate(row.date)}
                 </td>
-                {outlets.map((outlet) => (
+                {outletNames.map((outlet) => (
                   <td key={outlet} className="whitespace-nowrap px-4 py-3">
                     ₹{row.outlets && row.outlets[outlet] ? row.outlets[outlet] : 0}
                   </td>
@@ -61,7 +77,7 @@ export default function DailyTable({rows, outlets = ["AECS Layout", "Bandepalya"
             {/* ⭐ COLUMN TOTAL ROW (GRAND TOTAL) */}
             <tr className="bg-orange-50 font-semibold text-orange-700">
               <td className="whitespace-nowrap px-4 py-3">Grand Total</td>
-              {outlets.map((outlet) => (
+              {outletNames.map((outlet) => (
                 <td key={outlet} className="whitespace-nowrap px-4 py-3">
                   ₹{totals[outlet]}
                 </td>

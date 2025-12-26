@@ -218,13 +218,18 @@ function BaseCalendar({ rows, selectedDate, onSelectDate, showDots }) {
 
 /* ---------------- DAILY ENTRY FORM ---------------- */
 
-const Dailyentryform = ({ addrow, blockeddates, rows, outlets = ["AECS Layout", "Bandepalya", "Hosa Road", "Singasandra", "Kudlu Gate"] }) => {
+const Dailyentryform = ({ addrow, blockeddates, rows, outlets = [] }) => {
   const [date, setDate] = useState("");
   const [openCal, setOpenCal] = useState(false);
 
+  // Build outlet names from objects, filtering active only for entry
+  const outletNames = Array.isArray(outlets) && outlets.length > 0 
+    ? outlets.map(o => o.area || o)
+    : ["AECS Layout", "Bandepalya", "Hosa Road", "Singasandra", "Kudlu Gate"];
+
   const [entryValues, setEntryValues] = useState(() => {
     const initial = {};
-    outlets.forEach((o) => (initial[o] = ""));
+    outletNames.forEach((o) => (initial[o] = ""));
     return initial;
   });
 
@@ -243,10 +248,10 @@ const Dailyentryform = ({ addrow, blockeddates, rows, outlets = ["AECS Layout", 
   useEffect(() => {
     setEntryValues(() => {
       const initial = {};
-      outlets.forEach((o) => (initial[o] = ""));
+      outletNames.forEach((o) => (initial[o] = ""));
       return initial;
     });
-  }, [outlets]);
+  }, [outletNames]);
 
   const handleEntryChange = (outlet, value) => {
     setEntryValues((prev) => ({
@@ -260,27 +265,45 @@ const Dailyentryform = ({ addrow, blockeddates, rows, outlets = ["AECS Layout", 
     if (hasEntry)
       return alert("Entry for this date already exists");
 
-    // Check if all fields are filled
-    const allFilled = outlets.every((outlet) => entryValues[outlet] && entryValues[outlet] !== "");
-    if (!allFilled)
-      return alert("All fields are required");
+    // Check if all active outlets are filled
+    const outletObjects = Array.isArray(outlets) && outlets.length > 0 ? outlets : [];
+    const activeOutlets = outletObjects.length > 0 
+      ? outletObjects.filter(o => o.status === "Active").map(o => o.area)
+      : outletNames;
+    
+    const allActiveFilled = activeOutlets.every((outlet) => entryValues[outlet] && entryValues[outlet] !== "");
+    if (!allActiveFilled)
+      return alert("All active outlets must have values");
 
-    // Calculate total
-    const total = outlets.reduce((sum, outlet) => sum + (Number(entryValues[outlet]) || 0), 0);
+    // Calculate total from active outlets only
+    const total = activeOutlets.reduce((sum, outlet) => sum + (Number(entryValues[outlet]) || 0), 0);
+
+    // Store all outlets, with inactive ones as 0
+    const finalValues = {};
+    outletNames.forEach(outlet => {
+      finalValues[outlet] = Number(entryValues[outlet]) || 0;
+    });
 
     addrow({
       date,
-      outlets: entryValues,
+      outlets: finalValues,
       total,
     });
 
     setDate("");
     setEntryValues(() => {
       const reset = {};
-      outlets.forEach((o) => (reset[o] = ""));
+      outletNames.forEach((o) => (reset[o] = ""));
       return reset;
     });
     setOpenCal(false);
+  };
+
+  // Check if outlet is active
+  const isOutletActive = (outletName) => {
+    if (!Array.isArray(outlets) || outlets.length === 0) return true;
+    const outletObj = outlets.find(o => o.area === outletName);
+    return !outletObj || outletObj.status === "Active";
   };
 
   return (
@@ -335,26 +358,32 @@ const Dailyentryform = ({ addrow, blockeddates, rows, outlets = ["AECS Layout", 
 
       {/* Outlet Inputs - Dynamic based on outlets */}
       <div className="grid gap-4 md:grid-cols-5 mb-6">
-        {outlets.map((outlet) => (
-          <div key={outlet} className="space-y-1">
-            <p className="text-xs font-medium text-gray-600">{outlet}</p>
-            <div className="relative">
-              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">₹</span>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={entryValues[outlet]}
-                onChange={(e) => handleEntryChange(outlet, e.target.value)}
-                disabled={hasEntry}
-                placeholder="0.00"
-                className={`w-full rounded-xl border border-gray-200 bg-eggBg pl-8 pr-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-400 transition ${
-                  hasEntry ? "bg-gray-50 cursor-not-allowed" : ""
-                }`}
-              />
+        {outletNames.map((outlet) => {
+          const isActive = isOutletActive(outlet);
+          return (
+            <div key={outlet} className="space-y-1">
+              <p className="text-xs font-medium text-gray-600">
+                {outlet}
+                {!isActive && <span className="text-red-500 ml-1">(Inactive)</span>}
+              </p>
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">₹</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={entryValues[outlet]}
+                  onChange={(e) => handleEntryChange(outlet, e.target.value)}
+                  disabled={hasEntry || !isActive}
+                  placeholder="0.00"
+                  className={`w-full rounded-xl border border-gray-200 bg-eggBg pl-8 pr-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-400 transition ${
+                    (hasEntry || !isActive) ? "bg-gray-50 cursor-not-allowed" : ""
+                  }`}
+                />
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Save Button */}

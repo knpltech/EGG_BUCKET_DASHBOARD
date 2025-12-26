@@ -157,8 +157,7 @@ export default function Outlets() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(outlets));
     // Dispatch a custom event so other pages in the same tab can update immediately
     try {
-      const areas = outlets.map((o) => o.area);
-      window.dispatchEvent(new CustomEvent('egg:outlets-updated', { detail: areas }));
+      window.dispatchEvent(new CustomEvent('egg:outlets-updated', { detail: outlets }));
     } catch (err) {
       // ignore
     }
@@ -330,7 +329,7 @@ const handleDeleteOutlet = (id) => {
         area: newOutlet.area,
         contact: newOutlet.contact || "-",
         phone: newOutlet.phone || "-",
-        status: newOutlet.status,
+        status: "Inactive",
         reviewStatus: "pending",
       };
 
