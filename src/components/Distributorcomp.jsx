@@ -121,9 +121,9 @@ const Distributorcomp = () => {
     <div className="px-4 pt-4 max-w-[1200px] mx-auto w-full">
 
       {/* PAGE TITLE */}
-      <h1 className="text-3xl font-bold mb-2">Add Distributor</h1>
+      <h1 className="text-3xl font-bold mb-2">Add Data Agent</h1>
       <p className="text-gray-600 mb-8">
-        Create a new distributor account and assign module access.
+        Create a new data agent account and assign module access.
       </p>
 
       <div className="bg-white shadow rounded-xl">
@@ -131,7 +131,7 @@ const Distributorcomp = () => {
         {/* SECTION 1 */}
         <div className="p-6">
           <h2 className="text-xl font-semibold flex items-center gap-2 pb-3">
-            <FontAwesomeIcon icon={faUser} /> Distributor Details
+            <FontAwesomeIcon icon={faUser} /> Data Agent Details
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4 mb-4">
