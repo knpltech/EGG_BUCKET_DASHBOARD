@@ -10,14 +10,12 @@ function formatDisplayDate(iso) {
   });
 }
 
-export default function DailyTable({rows}) {
-  const totals = {
-      aecs: rows.reduce((s, r) => s + r.aecs, 0),
-      bande: rows.reduce((s, r) => s + r.bande, 0),
-      hosa: rows.reduce((s, r) => s + r.hosa, 0),
-      singa: rows.reduce((s, r) => s + r.singa, 0),
-      kudlu: rows.reduce((s, r) => s + r.kudlu, 0),
-    };
+export default function DailyTable({rows, outlets = ["AECS Layout", "Bandepalya", "Hosa Road", "Singasandra", "Kudlu Gate"]}) {
+  // Calculate totals dynamically based on outlets
+  const totals = {};
+  outlets.forEach((outlet) => {
+    totals[outlet] = rows.reduce((s, r) => s + (r.outlets && r.outlets[outlet] ? Number(r.outlets[outlet]) : 0), 0);
+  });
 
   const grandTotal = Object.values(totals).reduce((s, v) => s + v, 0);
 
@@ -28,11 +26,11 @@ export default function DailyTable({rows}) {
           <thead className="bg-gray-50">
             <tr className="text-left text-xs font-semibold text-gray-500">
               <th className="min-w-[130px] px-4 py-3">Date</th>
-              <th className="px-4 py-3 whitespace-nowrap">AECS Layout</th>
-              <th className="px-4 py-3 whitespace-nowrap">Bandepalya</th>
-              <th className="px-4 py-3 whitespace-nowrap">Hosa Road</th>
-              <th className="px-4 py-3 whitespace-nowrap">Singasandra</th>
-              <th className="px-4 py-3 whitespace-nowrap">Kudlu Gate</th>
+              {outlets.map((outlet) => (
+                <th key={outlet} className="px-4 py-3 whitespace-nowrap">
+                  {outlet.toUpperCase()}
+                </th>
+              ))}
               <th className="px-4 py-3 whitespace-nowrap text-right">
                 Total
               </th>
@@ -49,11 +47,11 @@ export default function DailyTable({rows}) {
                 <td className="whitespace-nowrap px-4 py-3">
                   {formatDisplayDate(row.date)}
                 </td>
-                <td className="whitespace-nowrap px-4 py-3">₹{row.aecs}</td>
-                <td className="whitespace-nowrap px-4 py-3">₹{row.bande}</td>
-                <td className="whitespace-nowrap px-4 py-3">₹{row.hosa}</td>
-                <td className="whitespace-nowrap px-4 py-3">₹{row.singa}</td>
-                <td className="whitespace-nowrap px-4 py-3">₹{row.kudlu}</td>
+                {outlets.map((outlet) => (
+                  <td key={outlet} className="whitespace-nowrap px-4 py-3">
+                    ₹{row.outlets && row.outlets[outlet] ? row.outlets[outlet] : 0}
+                  </td>
+                ))}
                 <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-orange-600">
                   ₹{row.total}
                 </td>
@@ -63,11 +61,11 @@ export default function DailyTable({rows}) {
             {/* ⭐ COLUMN TOTAL ROW (GRAND TOTAL) */}
             <tr className="bg-orange-50 font-semibold text-orange-700">
               <td className="whitespace-nowrap px-4 py-3">Grand Total</td>
-              <td className="whitespace-nowrap px-4 py-3">₹{totals.aecs}</td>
-              <td className="whitespace-nowrap px-4 py-3">₹{totals.bande}</td>
-              <td className="whitespace-nowrap px-4 py-3">₹{totals.hosa}</td>
-              <td className="whitespace-nowrap px-4 py-3">₹{totals.singa}</td>
-              <td className="whitespace-nowrap px-4 py-3">₹{totals.kudlu}</td>
+              {outlets.map((outlet) => (
+                <td key={outlet} className="whitespace-nowrap px-4 py-3">
+                  ₹{totals[outlet]}
+                </td>
+              ))}
               <td className="whitespace-nowrap px-4 py-3 text-right text-orange-800">
                 ₹{grandTotal}
               </td>

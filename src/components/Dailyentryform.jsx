@@ -218,15 +218,15 @@ function BaseCalendar({ rows, selectedDate, onSelectDate, showDots }) {
 
 /* ---------------- DAILY ENTRY FORM ---------------- */
 
-const Dailyentryform = ({ addrow, blockeddates, rows }) => {
+const Dailyentryform = ({ addrow, blockeddates, rows, outlets = ["AECS Layout", "Bandepalya", "Hosa Road", "Singasandra", "Kudlu Gate"] }) => {
   const [date, setDate] = useState("");
   const [openCal, setOpenCal] = useState(false);
 
-  const [aecs, setAecs] = useState("");
-  const [bande, setBande] = useState("");
-  const [hosa, setHosa] = useState("");
-  const [singa, setSinga] = useState("");
-  const [kudlu, setKudlu] = useState("");
+  const [entryValues, setEntryValues] = useState(() => {
+    const initial = {};
+    outlets.forEach((o) => (initial[o] = ""));
+    return initial;
+  });
 
   const [hasEntry, setHasEntry] = useState(false);
 
@@ -239,26 +239,47 @@ const Dailyentryform = ({ addrow, blockeddates, rows }) => {
     setHasEntry(existing);
   }, [date, blockeddates]);
 
+  // Reset entry values when outlets change
+  useEffect(() => {
+    setEntryValues(() => {
+      const initial = {};
+      outlets.forEach((o) => (initial[o] = ""));
+      return initial;
+    });
+  }, [outlets]);
+
+  const handleEntryChange = (outlet, value) => {
+    setEntryValues((prev) => ({
+      ...prev,
+      [outlet]: value,
+    }));
+  };
+
   const handleSubmit = () => {
     if (!date) return alert("Date is required");
     if (hasEntry)
       return alert("Entry for this date already exists");
 
-    if (!aecs || !bande || !hosa || !singa || !kudlu)
+    // Check if all fields are filled
+    const allFilled = outlets.every((outlet) => entryValues[outlet] && entryValues[outlet] !== "");
+    if (!allFilled)
       return alert("All fields are required");
+
+    // Calculate total
+    const total = outlets.reduce((sum, outlet) => sum + (Number(entryValues[outlet]) || 0), 0);
 
     addrow({
       date,
-      aecs: +aecs,
-      bande: +bande,
-      hosa: +hosa,
-      singa: +singa,
-      kudlu: +kudlu,
-      total: +aecs + +bande + +hosa + +singa + +kudlu,
+      outlets: entryValues,
+      total,
     });
 
     setDate("");
-    setAecs(""); setBande(""); setHosa(""); setSinga(""); setKudlu("");
+    setEntryValues(() => {
+      const reset = {};
+      outlets.forEach((o) => (reset[o] = ""));
+      return reset;
+    });
     setOpenCal(false);
   };
 
@@ -302,35 +323,28 @@ const Dailyentryform = ({ addrow, blockeddates, rows }) => {
         )}
       </div>
 
-      {/* Outlet Inputs */}
+      {/* Outlet Inputs - Dynamic based on outlets */}
       <div className="grid gap-4 md:grid-cols-5 mb-6">
-        {["AECS", "Bandepalya", "Hosa Road", "Singasandra", "Kudlu Gate"].map((label, idx) => {
-          const setters = [setAecs, setBande, setHosa, setSinga, setKudlu];
-          const values = [aecs, bande, hosa, singa, kudlu];
-          const setter = setters[idx];
-          const value = values[idx];
-
-          return (
-            <div key={label} className="space-y-1">
-              <p className="text-xs font-medium text-gray-600">{label}</p>
-              <div className="relative">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">₹</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={value}
-                  onChange={(e) => setter(e.target.value)}
-                  disabled={hasEntry}
-                  placeholder="0.00"
-                  className={`w-full rounded-xl border border-gray-200 bg-eggBg pl-8 pr-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-400 transition ${
-                    hasEntry ? "bg-gray-50 cursor-not-allowed" : ""
-                  }`}
-                />
-              </div>
+        {outlets.map((outlet) => (
+          <div key={outlet} className="space-y-1">
+            <p className="text-xs font-medium text-gray-600">{outlet}</p>
+            <div className="relative">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">₹</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={entryValues[outlet]}
+                onChange={(e) => handleEntryChange(outlet, e.target.value)}
+                disabled={hasEntry}
+                placeholder="0.00"
+                className={`w-full rounded-xl border border-gray-200 bg-eggBg pl-8 pr-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-400 transition ${
+                  hasEntry ? "bg-gray-50 cursor-not-allowed" : ""
+                }`}
+              />
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
 
       {/* Save Button */}

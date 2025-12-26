@@ -572,17 +572,35 @@ const handleDeleteOutlet = (id) => {
                         <div data-action-menu className="absolute right-0 mt-2 w-36 rounded-lg border bg-white shadow-lg z-30 text-xs">
                           <button
                             type="button"
-                            onClick={() => handleOpenEditModal(outlet)}
+                            onClick={() => {
+                              setOutlets((prev) =>
+                                prev.map((o) =>
+                                  o.id === outlet.id
+                                    ? { ...o, status: "Active" }
+                                    : o
+                                )
+                              );
+                              setOpenActionId(null);
+                            }}
                             className="block w-full text-left px-3 py-2 hover:bg-gray-100"
                           >
-                            Edit
+                            Active
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleDeleteOutlet(outlet.id)}
+                            onClick={() => {
+                              setOutlets((prev) =>
+                                prev.map((o) =>
+                                  o.id === outlet.id
+                                    ? { ...o, status: "Inactive" }
+                                    : o
+                                )
+                              );
+                              setOpenActionId(null);
+                            }}
                             className="block w-full text-left px-3 py-2 text-red-600 hover:bg-gray-100"
                           >
-                            Delete
+                            Inactive
                           </button>
                         </div>
                       )}
