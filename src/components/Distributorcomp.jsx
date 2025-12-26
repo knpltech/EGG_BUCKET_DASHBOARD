@@ -48,13 +48,13 @@ const Distributorcomp = () => {
       desc: "Log and verify cash transactions.",
     },
     {
-      name: "Necc-Rate",
+      name: "NECC Rate",
       value:"neccrate",
       icon: faIndianRupeeSign,
       desc: "Average amount of eggs.",
     },
     {
-      name: "daily-damages",
+      name: "Daily Damages",
       value:"dailydamages",
       icon: faArrowsSplitUpAndLeft,
       desc: "total eggs damaged.",
