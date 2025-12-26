@@ -1,4 +1,5 @@
 import React from 'react'
+import * as XLSX from 'xlsx';
 import Topbar from '../components/Topbar'
 import Dailyheader from '../components/Dailyheader'
 import DailyTable from '../components/DailyTable'
@@ -136,12 +137,36 @@ const Dailysales = () => {
   // Sort rows by date ascending (oldest to newest)
   const sortedRows = [...rows].sort((a, b) => new Date(a.date) - new Date(b.date));
 
+  // Download as Excel (robust for both possible row structures)
+  const handleDownload = () => {
+    if (!sortedRows.length) {
+      alert('No data to export!');
+      return;
+    }
+    // Try to handle both {date, outlets, total} and flat {date, ...outlet, total}
+    const data = sortedRows.map(row => {
+      const obj = { Date: row.date };
+      if (row.outlets && typeof row.outlets === 'object') {
+        outlets.forEach(o => obj[o] = row.outlets[o] ?? 0);
+      } else {
+        outlets.forEach(o => obj[o] = row[o] ?? 0);
+      }
+      obj.Total = row.total ?? row.Total ?? 0;
+      return obj;
+    });
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Daily Sales');
+    XLSX.writeFile(wb, 'Daily_Sales_Report.xlsx');
+  };
+
   return (
     <div className='flex'>
       <div className='bg-[#F8F6F2] min-h-screen p-6 w-340'>
 
       <Topbar/>
-      <Dailyheader/>
+        <Dailyheader onDownload={handleDownload}/>
+        {/* Removed left-side Download Excel button */}
       <DailyTable rows={sortedRows} outlets={outlets}/>
       <div className="grid grid-cols-3 gap-6 mt-10">
 

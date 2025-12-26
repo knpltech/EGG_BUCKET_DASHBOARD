@@ -1,0 +1,4 @@
+// xlsx dependency for browser export
+// If you use npm: npm install xlsx
+// If you use yarn: yarn add xlsx
+// This file is a placeholder to remind you to install xlsx if not present.

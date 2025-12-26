@@ -222,7 +222,7 @@ function BaseCalendar({ selectedDate, onSelectDate, showDots = false }) {
   );
 }
 
-const Dailyheader = () => {
+const Dailyheader = ({ onDownload }) => {
   const [filterDate, setFilterDate] = useState("");
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
@@ -296,7 +296,10 @@ const Dailyheader = () => {
           Last Month
         </button>
 
-        <button className="bg-orange-500 text-white px-5 py-2 rounded-lg text-sm font-semibold">
+        <button
+          className="bg-orange-500 text-white px-5 py-2 rounded-lg text-sm font-semibold"
+          onClick={onDownload}
+        >
           Download
         </button>
 
