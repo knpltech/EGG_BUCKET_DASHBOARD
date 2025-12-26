@@ -260,28 +260,23 @@ function createInitialCashRows(outlets = DEFAULT_OUTLETS) {
 }
 
 export default function CashPayment() {
-  const [outlets, setOutlets] = useState(DEFAULT_OUTLETS);
+  const [outlets, setOutlets] = useState([]);
 
   useEffect(() => {
     const loadOutletsFromLocal = () => {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const savedOutlets = JSON.parse(saved);
-        const outletAreas = savedOutlets.map((o) => o.area);
-        const required = DEFAULT_OUTLETS;
-        const hasAllRequired = required.every((r) => outletAreas.includes(r));
-        setOutlets(hasAllRequired ? outletAreas : DEFAULT_OUTLETS);
-      } else {
-        setOutlets(DEFAULT_OUTLETS);
+        setOutlets(Array.isArray(savedOutlets) ? savedOutlets : []);
       }
     };
 
     loadOutletsFromLocal();
 
     const onUpdate = (e) => {
-      const areas = (e && e.detail) || null;
-      if (Array.isArray(areas)) {
-        setOutlets(areas);
+      const outletsList = (e && e.detail && Array.isArray(e.detail)) ? e.detail : null;
+      if (outletsList) {
+        setOutlets(outletsList);
       } else {
         loadOutletsFromLocal();
       }
@@ -313,11 +308,14 @@ export default function CashPayment() {
 
   // If outlets change, remap existing rows so they include all current outlets (missing ones filled with 0) and totals recalculated
   useEffect(() => {
+    if (!Array.isArray(outlets) || outlets.length === 0) return;
+
     setRows((prevRows) =>
       prevRows.map((r) => {
         const newOutlets = {};
-        outlets.forEach((name) => {
-          newOutlets[name] = (r.outlets && r.outlets[name]) || 0;
+        outlets.forEach((outletObj) => {
+          const area = outletObj.area || outletObj;
+          newOutlets[area] = (r.outlets && r.outlets[area]) || 0;
         });
         const totalAmount = Object.values(newOutlets).reduce((s, v) => s + (Number(v) || 0), 0);
         return { ...r, outlets: newOutlets, totalAmount };
@@ -414,13 +412,21 @@ export default function CashPayment() {
   // Totals by outlet and grand total
   const totals = useMemo(() => {
     const outletTotals = {};
-    outlets.forEach((o) => (outletTotals[o] = 0));
+    if (Array.isArray(outlets) && outlets.length > 0) {
+      outlets.forEach((outletObj) => {
+        const area = outletObj.area || outletObj;
+        outletTotals[area] = 0;
+      });
+    }
     let grandTotal = 0;
 
     filteredRows.forEach((row) => {
-      outlets.forEach((o) => {
-        outletTotals[o] += row.outlets[o] || 0;
-      });
+      if (Array.isArray(outlets) && outlets.length > 0) {
+        outlets.forEach((outletObj) => {
+          const area = outletObj.area || outletObj;
+          outletTotals[area] += row.outlets[area] || 0;
+        });
+      }
       grandTotal += row.totalAmount || 0;
     });
 
@@ -435,7 +441,12 @@ export default function CashPayment() {
 
     const data = filteredRows.map((row) => {
       const obj = { Date: row.date };
-      outlets.forEach((o) => (obj[o] = row.outlets[o] ?? 0));
+      if (Array.isArray(outlets) && outlets.length > 0) {
+        outlets.forEach((outletObj) => {
+          const area = outletObj.area || outletObj;
+          obj[area] = row.outlets[area] ?? 0;
+        });
+      }
       obj.Total = row.totalAmount;
       return obj;
     });
@@ -656,11 +667,16 @@ export default function CashPayment() {
             <thead className="bg-gray-50">
               <tr className="text-left text-xs font-semibold text-gray-500">
                 <th className="min-w-[130px] px-4 py-3">Date</th>
-                {outlets.map((outlet) => (
-                  <th key={outlet} className="px-4 py-3 whitespace-nowrap">
-                    {outlet.toUpperCase()}
-                  </th>
-                ))}
+                {outlets.map((outlet) => {
+                  const area = outlet.area || outlet;
+                  const isActive = !outlet.status || outlet.status === "Active";
+                  return (
+                    <th key={area} className="px-4 py-3 whitespace-nowrap">
+                      {area.toUpperCase()}
+                      {!isActive && <span className="text-red-500 text-[10px] block">(Inactive)</span>}
+                    </th>
+                  );
+                })}
                 <th className="px-4 py-3 whitespace-nowrap text-right">
                   TOTAL AMOUNT
                 </th>
@@ -677,14 +693,17 @@ export default function CashPayment() {
                   <td className="whitespace-nowrap px-4 py-3">
                     {formatDisplayDate(row.date)}
                   </td>
-                  {outlets.map((outlet) => (
-                    <td
-                      key={outlet}
-                      className="whitespace-nowrap px-4 py-3"
-                    >
-                      {formatCurrencyNoDecimals(row.outlets[outlet])}
-                    </td>
-                  ))}
+                  {outlets.map((outlet) => {
+                    const area = outlet.area || outlet;
+                    return (
+                      <td
+                        key={area}
+                        className="whitespace-nowrap px-4 py-3"
+                      >
+                        {formatCurrencyNoDecimals(row.outlets[area])}
+                      </td>
+                    );
+                  })}
                   <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">
                     {formatCurrencyNoDecimals(row.totalAmount)}
                   </td>
@@ -693,14 +712,17 @@ export default function CashPayment() {
 
               <tr className="border-t border-orange-100 bg-orange-50 text-xs font-semibold text-gray-900 md:text-sm">
                 <td className="px-4 py-3">Total</td>
-                {outlets.map((outlet) => (
-                  <td
-                    key={outlet}
-                    className="whitespace-nowrap px-4 py-3"
-                  >
-                    {formatCurrencyNoDecimals(totals.outletTotals[outlet])}
-                  </td>
-                ))}
+                {outlets.map((outlet) => {
+                  const area = outlet.area || outlet;
+                  return (
+                    <td
+                      key={area}
+                      className="whitespace-nowrap px-4 py-3"
+                    >
+                      {formatCurrencyNoDecimals(totals.outletTotals[area] || 0)}
+                    </td>
+                  );
+                })}
                 <td className="whitespace-nowrap px-4 py-3 text-right">
                   {formatCurrencyNoDecimals(totals.grandTotal)}
                 </td>
@@ -783,29 +805,34 @@ export default function CashPayment() {
 
           {/* Amounts per outlet */}
           <div className="grid gap-3 md:grid-cols-5">
-            {outlets.map((outlet) => (
-              <div key={outlet} className="space-y-1">
-                <p className="text-xs font-medium text-gray-600">
-                  {outlet}
-                </p>
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
-                    ₹
-                  </span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={entryValues[outlet]}
-                    onChange={(e) =>
-                      handleEntryChange(outlet, e.target.value)
-                    }
-                    disabled={hasEntry}
-                    className={`w-full rounded-xl border border-gray-200 bg-eggBg pl-7 pr-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm ${hasEntry ? 'bg-gray-50 cursor-not-allowed' : ''}`}
-                  />
+            {outlets.map((outlet) => {
+              const area = outlet.area || outlet;
+              const isActive = !outlet.status || outlet.status === "Active";
+              return (
+                <div key={area} className="space-y-1">
+                  <p className="text-xs font-medium text-gray-600">
+                    {area.toUpperCase()}
+                    {!isActive && <span className="text-red-500 ml-1">(Inactive)</span>}
+                  </p>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+                      ₹
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={entryValues[area]}
+                      onChange={(e) =>
+                        handleEntryChange(area, e.target.value)
+                      }
+                      disabled={hasEntry || !isActive}
+                      className={`w-full rounded-xl border border-gray-200 bg-eggBg pl-7 pr-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm ${(hasEntry || !isActive) ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                    />
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Centered button + note below */}

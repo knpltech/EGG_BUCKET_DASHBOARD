@@ -15,6 +15,54 @@ const DEFAULT_OUTLETS = [
   "Kudlu Gate",
 ];
 
+const SAMPLE_OUTLETS = [
+  {
+    id: "OUT-001",
+    name: "Sunrise Bakery",
+    area: "AECS Layout",
+    contact: "Rajesh Kumar",
+    phone: "+91 98765 43210",
+    status: "Active",
+    reviewStatus: "ok",
+  },
+  {
+    id: "OUT-002",
+    name: "City Mart Supermarket",
+    area: "Bandepalya",
+    contact: "Anita Roy",
+    phone: "+91 91234 56789",
+    status: "Active",
+    reviewStatus: "ok",
+  },
+  {
+    id: "OUT-003",
+    name: "Hosa Road Bakers",
+    area: "Hosa Road",
+    contact: "Manish Patel",
+    phone: "+91 99887 66554",
+    status: "Active",
+    reviewStatus: "ok",
+  },
+  {
+    id: "OUT-004",
+    name: "Singasandra Grocers",
+    area: "Singasandra",
+    contact: "Deepa Rao",
+    phone: "+91 88776 55443",
+    status: "Active",
+    reviewStatus: "ok",
+  },
+  {
+    id: "OUT-005",
+    name: "Kudlu Gate Store",
+    area: "Kudlu Gate",
+    contact: "Vijay Kumar",
+    phone: "+91 77665 44332",
+    status: "Active",
+    reviewStatus: "ok",
+  },
+];
+
 const STORAGE_KEY = "egg_outlets_v1";
 
 const Dailysales = () => {
@@ -28,21 +76,25 @@ const Dailysales = () => {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const savedOutlets = JSON.parse(saved);
-        const outletAreas = savedOutlets.map((o) => o.area);
         const required = DEFAULT_OUTLETS;
-        const hasAllRequired = required.every((r) => outletAreas.includes(r));
-        setOutlets(hasAllRequired ? outletAreas : DEFAULT_OUTLETS);
+        const hasAllRequired = required.every((r) => savedOutlets.some(o => o.area === r));
+        setOutlets(hasAllRequired ? savedOutlets : 
+          // If not all required, mix with defaults
+          savedOutlets.concat(
+            SAMPLE_OUTLETS.filter(s => !savedOutlets.some(o => o.area === s.area))
+          )
+        );
       } else {
-        setOutlets(DEFAULT_OUTLETS);
+        setOutlets(SAMPLE_OUTLETS);
       }
     };
 
     loadOutletsFromLocal();
 
     const onUpdate = (e) => {
-      const areas = (e && e.detail) || null;
-      if (Array.isArray(areas)) {
-        setOutlets(areas);
+      const outlets = (e && e.detail && Array.isArray(e.detail)) ? e.detail : null;
+      if (outlets) {
+        setOutlets(outlets);
       } else {
         loadOutletsFromLocal();
       }

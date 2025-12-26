@@ -303,28 +303,23 @@ function createInitialDigitalRows(outlets = DEFAULT_OUTLETS) {
 } 
 
 export default function DigitalPayment() {
-  const [outlets, setOutlets] = useState(DEFAULT_OUTLETS);
+  const [outlets, setOutlets] = useState([]);
 
   useEffect(() => {
     const loadOutletsFromLocal = () => {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const savedOutlets = JSON.parse(saved);
-        const outletAreas = savedOutlets.map((o) => o.area);
-        const required = DEFAULT_OUTLETS;
-        const hasAllRequired = required.every((r) => outletAreas.includes(r));
-        setOutlets(hasAllRequired ? outletAreas : DEFAULT_OUTLETS);
-      } else {
-        setOutlets(DEFAULT_OUTLETS);
+        setOutlets(Array.isArray(savedOutlets) ? savedOutlets : []);
       }
     };
 
     loadOutletsFromLocal();
 
     const onUpdate = (e) => {
-      const areas = (e && e.detail) || null;
-      if (Array.isArray(areas)) {
-        setOutlets(areas);
+      const outletsList = (e && e.detail && Array.isArray(e.detail)) ? e.detail : null;
+      if (outletsList) {
+        setOutlets(outletsList);
       } else {
         loadOutletsFromLocal();
       }
@@ -356,11 +351,14 @@ export default function DigitalPayment() {
 
   // If outlets change, remap existing rows so they include all current outlets (missing ones filled with 0) and totals recalculated
   useEffect(() => {
+    if (!Array.isArray(outlets) || outlets.length === 0) return;
+    
     setRows((prevRows) =>
       prevRows.map((r) => {
         const newOutlets = {};
-        outlets.forEach((name) => {
-          newOutlets[name] = (r.outlets && r.outlets[name]) || 0;
+        outlets.forEach((outletObj) => {
+          const area = outletObj.area || outletObj;
+          newOutlets[area] = (r.outlets && r.outlets[area]) || 0;
         });
         const totalAmount = Object.values(newOutlets).reduce((s, v) => s + (Number(v) || 0), 0);
         return { ...r, outlets: newOutlets, totalAmount };
@@ -373,7 +371,10 @@ export default function DigitalPayment() {
       if (!existing) {
         setEntryValues(() => {
           const reset = {};
-          outlets.forEach((o) => (reset[o] = ""));
+          outlets.forEach((o) => {
+            const area = o.area || o;
+            reset[area] = "";
+          });
           return reset;
         });
       }
@@ -386,7 +387,12 @@ export default function DigitalPayment() {
   const [entryDate, setEntryDate] = useState("");
   const [entryValues, setEntryValues] = useState(() => {
     const initial = {};
-    outlets.forEach((o) => (initial[o] = ""));
+    if (Array.isArray(outlets) && outlets.length > 0) {
+      outlets.forEach((o) => {
+        const area = o.area || o;
+        initial[area] = "";
+      });
+    }
     return initial;
   });
 
@@ -676,11 +682,16 @@ export default function DigitalPayment() {
             <thead className="bg-gray-50">
               <tr className="text-left text-xs font-semibold text-gray-500">
                 <th className="min-w-[130px] px-4 py-3">Date</th>
-                {outlets.map((outlet) => (
-                  <th key={outlet} className="px-4 py-3 whitespace-nowrap">
-                    {outlet.toUpperCase()}
-                  </th>
-                ))}
+                {outlets.map((outlet) => {
+                  const area = outlet.area || outlet;
+                  const isActive = !outlet.status || outlet.status === "Active";
+                  return (
+                    <th key={area} className="px-4 py-3 whitespace-nowrap">
+                      {area.toUpperCase()}
+                      {!isActive && <span className="text-red-500 text-[10px] block">(Inactive)</span>}
+                    </th>
+                  );
+                })}
                 <th className="px-4 py-3 whitespace-nowrap text-right">
                   TOTAL AMOUNT
                 </th>
@@ -697,14 +708,17 @@ export default function DigitalPayment() {
                   <td className="whitespace-nowrap px-4 py-3">
                     {formatDisplayDate(row.date)}
                   </td>
-                  {outlets.map((outlet) => (
-                    <td
-                      key={outlet}
-                      className="whitespace-nowrap px-4 py-3"
-                    >
-                      {formatCurrencyTwoDecimals(row.outlets[outlet])}
-                    </td>
-                  ))}
+                  {outlets.map((outlet) => {
+                    const area = outlet.area || outlet;
+                    return (
+                      <td
+                        key={area}
+                        className="whitespace-nowrap px-4 py-3"
+                      >
+                        {formatCurrencyTwoDecimals(row.outlets[area])}
+                      </td>
+                    );
+                  })}
                   <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">
                     {formatCurrencyTwoDecimals(row.totalAmount)}
                   </td>
@@ -714,9 +728,10 @@ export default function DigitalPayment() {
               <tr className="bg-orange-50 font-semibold text-orange-700">
                 <td className="whitespace-nowrap px-4 py-3">Grand Total</td>
                 {outlets.map((outlet) => {
-                  const total = rows.reduce((sum, r) => sum + (r.outlets && r.outlets[outlet] ? Number(r.outlets[outlet]) : 0), 0);
+                  const area = outlet.area || outlet;
+                  const total = rows.reduce((sum, r) => sum + (r.outlets && r.outlets[area] ? Number(r.outlets[area]) : 0), 0);
                   return (
-                    <td key={outlet} className="whitespace-nowrap px-4 py-3">{formatCurrencyTwoDecimals(total)}</td>
+                    <td key={area} className="whitespace-nowrap px-4 py-3">{formatCurrencyTwoDecimals(total)}</td>
                   );
                 })}
                 <td className="whitespace-nowrap px-4 py-3 text-right">{formatCurrencyTwoDecimals(rows.reduce((sum, r) => sum + (r.totalAmount || 0), 0))}</td>
@@ -826,29 +841,34 @@ export default function DigitalPayment() {
 
           {/* Amounts */}
           <div className="grid gap-3 md:grid-cols-5">
-            {outlets.map((outlet) => (
-              <div key={outlet} className="space-y-1">
-                <p className="text-xs font-medium text-gray-600">
-                  {outlet}
-                </p>
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
-                    ₹
-                  </span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={entryValues[outlet]}
-                    onChange={(e) =>
-                      handleEntryChange(outlet, e.target.value)
-                    }
-                    disabled={hasEntry}
-                    className={`w-full rounded-xl border border-gray-200 bg-eggBg pl-7 pr-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm ${hasEntry ? 'bg-gray-50 cursor-not-allowed' : ''}`}
-                  />
+            {outlets.map((outlet) => {
+              const area = outlet.area || outlet;
+              const isActive = !outlet.status || outlet.status === "Active";
+              return (
+                <div key={area} className="space-y-1">
+                  <p className="text-xs font-medium text-gray-600">
+                    {area.toUpperCase()}
+                    {!isActive && <span className="text-red-500 ml-1">(Inactive)</span>}
+                  </p>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
+                      ₹
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={entryValues[area]}
+                      onChange={(e) =>
+                        handleEntryChange(area, e.target.value)
+                      }
+                      disabled={hasEntry || !isActive}
+                      className={`w-full rounded-xl border border-gray-200 bg-eggBg pl-7 pr-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm ${(hasEntry || !isActive) ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                    />
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Save button + note */}
