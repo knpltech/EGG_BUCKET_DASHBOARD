@@ -328,7 +328,10 @@ export default function CashPayment() {
       if (!existing) {
         setEntryValues(() => {
           const reset = {};
-          outlets.forEach((o) => (reset[o] = ""));
+          outlets.forEach((o) => {
+            const area = o.area || o;
+            reset[area] = "";
+          });
           return reset;
         });
       }
@@ -342,7 +345,10 @@ export default function CashPayment() {
   const [entryDate, setEntryDate] = useState("");
   const [entryValues, setEntryValues] = useState(() => {
     const initial = {};
-    outlets.forEach((o) => (initial[o] = ""));
+    outlets.forEach((o) => {
+      const area = o.area || o;
+      initial[area] = "";
+    });
     return initial;
   });
 
@@ -359,7 +365,10 @@ export default function CashPayment() {
       setHasEntry(false);
       setEntryValues(() => {
         const reset = {};
-        outlets.forEach((o) => (reset[o] = ""));
+        outlets.forEach((o) => {
+          const area = o.area || o;
+          reset[area] = "";
+        });
         return reset;
       });
       setEntryTotal(0);
@@ -375,7 +384,10 @@ export default function CashPayment() {
       setHasEntry(false);
       setEntryValues(() => {
         const reset = {};
-        outlets.forEach((o) => (reset[o] = ""));
+        outlets.forEach((o) => {
+          const area = o.area || o;
+          reset[area] = "";
+        });
         return reset;
       });
       setEntryTotal(0);
@@ -480,8 +492,9 @@ export default function CashPayment() {
 
     const outletAmounts = {};
     outlets.forEach((o) => {
-      const num = Number(entryValues[o]) || 0;
-      outletAmounts[o] = num;
+      const area = o.area || o;
+      const num = Number(entryValues[area]) || 0;
+      outletAmounts[area] = num;
     });
 
     const totalAmount = Object.values(outletAmounts).reduce(
@@ -517,6 +530,17 @@ export default function CashPayment() {
     // mark locked
     setHasEntry(true);
     setEntryTotal(totalAmount);
+
+    // Reset form after successful save
+    setEntryDate("");
+    setEntryValues(() => {
+      const reset = {};
+      outlets.forEach((o) => {
+        const area = o.area || o;
+        reset[area] = "";
+      });
+      return reset;
+    });
   };
 
   const formatDisplayDate = (iso) => {
@@ -791,7 +815,10 @@ export default function CashPayment() {
                       } else {
                         setEntryValues(() => {
                           const reset = {};
-                          outlets.forEach((o) => (reset[o] = ""));
+                          outlets.forEach((o) => {
+                            const area = o.area || o;
+                            reset[area] = "";
+                          });
                           return reset;
                         });
                       }

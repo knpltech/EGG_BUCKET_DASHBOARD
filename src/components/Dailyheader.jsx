@@ -23,7 +23,8 @@ function downloadCSV(data) {
   }
 
   const headers = Object.keys(data[0]).join(",");
-  const rows = data.map(r => Object.values(r).join(","));
+  // Ensure all values are primitives (string/number) for CSV
+  const rows = data.map(r => Object.values(r).map(v => (typeof v === 'object' ? JSON.stringify(v) : v)).join(","));
   const csv = [headers, ...rows].join("\n");
 
   const blob = new Blob([csv], { type: "text/csv" });

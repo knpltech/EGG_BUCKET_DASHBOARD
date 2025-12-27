@@ -64,9 +64,9 @@ const SAMPLE_OUTLETS = [
   },
 ];
 
-const STORAGE_KEY = "egg_outlets_v1";
-
 const Dailysales = () => {
+  const STORAGE_KEY = "dailySales_v2";
+  const OUTLETS_KEY = "egg_outlets_v1";
 
   const [rows,setRows]=useState([]);
   const [isLoaded, setIsLoaded]= useState(false);
@@ -74,7 +74,7 @@ const Dailysales = () => {
   
   useEffect(()=>{
     const loadOutletsFromLocal = () => {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(OUTLETS_KEY);
       if (saved) {
         const savedOutlets = JSON.parse(saved);
         const required = DEFAULT_OUTLETS;
@@ -104,7 +104,7 @@ const Dailysales = () => {
     window.addEventListener('egg:outlets-updated', onUpdate);
 
     const onStorage = (evt) => {
-      if (evt.key === STORAGE_KEY) onUpdate();
+      if (evt.key === OUTLETS_KEY) onUpdate();
     };
     window.addEventListener('storage', onStorage);
 
@@ -115,7 +115,7 @@ const Dailysales = () => {
   }, []);
   
   useEffect(()=>{
-    const savedDate= localStorage.getItem("dailySales");
+    const savedDate= localStorage.getItem(STORAGE_KEY);
     if(savedDate){
       setRows(JSON.parse(savedDate));
     }
@@ -124,11 +124,30 @@ const Dailysales = () => {
 
   useEffect(()=>{
     if(isLoaded){
-      localStorage.setItem("dailySales", JSON.stringify(rows))
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(rows))
     }
   },[rows,isLoaded]);
 
-  const blockeddates=rows.map(row=> row.date);
+  // If outlets change, remap existing rows to include all current outlets
+  useEffect(() => {
+    if (!Array.isArray(outlets) || outlets.length === 0) return;
+    
+    setRows((prevRows) =>
+      prevRows.map((r) => {
+        const newOutlets = {};
+        outlets.forEach((outletObj) => {
+          const area = outletObj.area || outletObj;
+          newOutlets[area] = (r.outlets && r.outlets[area]) || 0;
+        });
+        const total = Object.values(newOutlets).reduce((s, v) => s + (Number(v) || 0), 0);
+        return { ...r, outlets: newOutlets, total };
+      })
+    );
+  }, [outlets]);
+
+  const blockeddates = rows
+  .filter(r => r.locked)
+  .map(r => r.date);
 
   const addrow=(newrow)=>{
     setRows(prev => [newrow, ...prev]);
@@ -147,9 +166,15 @@ const Dailysales = () => {
     const data = sortedRows.map(row => {
       const obj = { Date: row.date };
       if (row.outlets && typeof row.outlets === 'object') {
-        outlets.forEach(o => obj[o] = row.outlets[o] ?? 0);
+        outlets.forEach(o => {
+          const area = o.area || o;
+          obj[area] = row.outlets[area] ?? 0;
+        });
       } else {
-        outlets.forEach(o => obj[o] = row[o] ?? 0);
+        outlets.forEach(o => {
+          const area = o.area || o;
+          obj[area] = row[area] ?? 0;
+        });
       }
       obj.Total = row.total ?? row.Total ?? 0;
       return obj;
@@ -166,7 +191,7 @@ const Dailysales = () => {
 
       <Topbar/>
       <Dailyheader dailySalesData={rows}/>
-      <DailyTable rows={rows}/>
+      <DailyTable rows={rows} outlets={outlets}/>
       <div className="grid grid-cols-3 gap-6 mt-10">
 
         {/* Entry Form (biggest block) */}
