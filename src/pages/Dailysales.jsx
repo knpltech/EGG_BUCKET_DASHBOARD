@@ -150,7 +150,14 @@ const Dailysales = () => {
   .map(r => r.date);
 
   const addrow=(newrow)=>{
-    setRows(prev => [newrow, ...prev]);
+    setRows(prev => {
+      // Prevent duplicate date entries
+      if (prev.some(r => r.date === newrow.date)) {
+        alert('');
+        return prev;
+      }
+      return [newrow, ...prev];
+    });
   }
 
   // Sort rows by date ascending (oldest to newest)

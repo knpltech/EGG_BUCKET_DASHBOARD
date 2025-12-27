@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useLocation } from "react-router-dom";
 import {
   faUser,
   faLock,
@@ -13,13 +14,15 @@ import {
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 
 const Distributorcomp = () => {
+  const location = useLocation();
+  const user = location.state?.user;
   const [form, setForm] = useState({
-    fullName: "",
-    phone: "",
-    username: "",
+    fullName: user?.fullName || "",
+    phone: user?.phone || "",
+    username: user?.username || "",
     password: "",
     confirmPassword: "",
-    roles: [],
+    roles: user?.roles || [],
   });
 
   const roles = [
