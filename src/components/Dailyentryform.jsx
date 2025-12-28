@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect ,useMemo } from "react";
 
 const MONTHS = [
   "January","February","March","April","May","June",
@@ -223,9 +223,11 @@ const Dailyentryform = ({ addrow, blockeddates, rows, outlets = [] }) => {
   const [openCal, setOpenCal] = useState(false);
 
   // Build outlet names from objects, filtering active only for entry
-  const outletNames = Array.isArray(outlets) && outlets.length > 0 
+  const outletNames = useMemo(() => {
+  return Array.isArray(outlets) && outlets.length > 0
     ? outlets.map(o => o.area || o)
     : ["AECS Layout", "Bandepalya", "Hosa Road", "Singasandra", "Kudlu Gate"];
+}, [outlets]);
 
   const [entryValues, setEntryValues] = useState(() => {
     const initial = {};
@@ -234,24 +236,46 @@ const Dailyentryform = ({ addrow, blockeddates, rows, outlets = [] }) => {
   });
 
   const [hasEntry, setHasEntry] = useState(false);
+  const [entryTotal, setEntryTotal] = useState(0);
 
   useEffect(() => {
     if (!date) {
       setHasEntry(false);
+      setEntryTotal(0);
       return;
     }
-    const existing = blockeddates.includes(date);
-    setHasEntry(existing);
-  }, [date, blockeddates]);
+    const found = Array.isArray(rows) ? rows.find(r => r.date === date) : null;
+    if (found) {
+      setHasEntry(true);
+      setEntryTotal(found.total || 0);
+      // Set entry values to the found row's values
+      setEntryValues(() => {
+        const vals = {};
+        outletNames.forEach(o => {
+          vals[o] = found.outlets[o] !== undefined ? found.outlets[o] : "";
+        });
+        return vals;
+      });
+    } else {
+      setHasEntry(false);
+      setEntryTotal(0);
+      // Reset entry values
+      setEntryValues(() => {
+        const vals = {};
+        outletNames.forEach(o => { vals[o] = ""; });
+        return vals;
+      });
+    }
+  }, [date, rows, outletNames]);
 
   // Reset entry values when outlets change
   useEffect(() => {
-    setEntryValues(() => {
-      const initial = {};
-      outletNames.forEach((o) => (initial[o] = ""));
-      return initial;
-    });
-  }, [outletNames]);
+  if (!date) return;
+
+  const reset = {};
+  outletNames.forEach(o => (reset[o] = ""));
+  setEntryValues(reset);
+}, [date]);
 
   const handleEntryChange = (outlet, value) => {
     setEntryValues((prev) => ({
@@ -308,14 +332,14 @@ const Dailyentryform = ({ addrow, blockeddates, rows, outlets = [] }) => {
 
   return (
     <div className="bg-white shadow rounded-xl p-6 m-6">
-      <h1 className="text-xl font-bold mb-6">Daily Sales Entry</h1>
+      <h1 className="text-xl font-bold mb-2">Daily Sales Entry</h1>
+      <p className="text-gray-500 mb-6">Add new daily sales amounts for each outlet.</p>
 
       {/* DATE PICKER - Full width, calendar aligned to icon */}
       <div className="relative mb-6">
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Select Date
         </label>
-
         <button
           type="button"
           onClick={() => setOpenCal(prev => !prev)}
@@ -326,11 +350,14 @@ const Dailyentryform = ({ addrow, blockeddates, rows, outlets = [] }) => {
           </span>
           <CalendarIcon className="h-5 w-5 text-gray-500" />
         </button>
-
-        {/* Status message below */}
-        {/* Status message removed as per request */}
-
-        {/* Calendar opens directly above the icon (right-aligned) */}
+        {hasEntry && (
+          <div className="mt-2 flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-green-500" />
+            <div className="text-xs font-medium text-green-700">
+              Entry ( ₹ {entryTotal}) • Locked
+            </div>
+          </div>
+        )}
         {openCal && (
           <div className="absolute right-0 bottom-full mb-2 z-50">
             <BaseCalendar
@@ -366,9 +393,7 @@ const Dailyentryform = ({ addrow, blockeddates, rows, outlets = [] }) => {
                   onChange={(e) => handleEntryChange(outlet, e.target.value)}
                   disabled={hasEntry || !isActive}
                   placeholder="0.00"
-                  className={`w-full rounded-xl border border-gray-200 bg-eggBg pl-8 pr-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-400 transition ${
-                    (hasEntry || !isActive) ? "bg-gray-50 cursor-not-allowed" : ""
-                  }`}
+                  className={`w-full rounded-xl border border-gray-200 bg-eggBg pl-8 pr-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-400 transition ${(hasEntry || !isActive) ? "bg-gray-50 cursor-not-allowed" : ""}`}
                 />
               </div>
             </div>
@@ -381,13 +406,9 @@ const Dailyentryform = ({ addrow, blockeddates, rows, outlets = [] }) => {
         <button
           onClick={handleSubmit}
           disabled={hasEntry}
-          className={`inline-flex items-center justify-center rounded-2xl px-8 py-3 text-base font-semibold text-white shadow-lg transition-all ${
-            hasEntry
-              ? "bg-gray-400 cursor-not-allowed"
-              : "bg-orange-500 hover:bg-orange-600 active:scale-95"
-          }`}
+          className={`inline-flex items-center justify-center rounded-2xl px-8 py-3 text-base font-semibold text-white shadow-lg transition-all ${hasEntry ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600 active:scale-95'}`}
         >
-          {hasEntry ? "Locked" : "Save Entry"}
+          {hasEntry ? 'Locked' : 'Save Entry'}
         </button>
       </div>
     </div>

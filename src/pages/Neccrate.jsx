@@ -14,15 +14,15 @@ const Neccrate = () => {
   const blockedDates = rows.map(row => row.date);
 
 
-  const filteredRows = rows.filter((row) => {
-    if (!fromDate || !toDate) return true;
-
-    const rowDate = new Date(row.date);
-    const from = new Date(fromDate);
-    const to = new Date(toDate);
-
-    return rowDate >= from && rowDate <= to;
-  });
+  const filteredRows = rows
+    .filter((row) => {
+      if (!fromDate || !toDate) return true;
+      const rowDate = new Date(row.date);
+      const from = new Date(fromDate);
+      const to = new Date(toDate);
+      return rowDate >= from && rowDate <= to;
+    })
+    .sort((a, b) => new Date(a.date) - new Date(b.date)); // Sort by date ascending (oldest to newest)
 
 
   // Load data from localStorage

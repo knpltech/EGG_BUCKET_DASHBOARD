@@ -414,7 +414,10 @@ export default function DigitalPayment() {
       setHasEntry(false);
       setEntryValues(() => {
         const reset = {};
-        outlets.forEach((o) => (reset[o] = ""));
+        outlets.forEach((o) => {
+          const area = o.area || o;
+          reset[area] = "";
+        });
         return reset;
       });
       setEntryTotal(0);
@@ -430,7 +433,10 @@ export default function DigitalPayment() {
       setHasEntry(false);
       setEntryValues(() => {
         const reset = {};
-        outlets.forEach((o) => (reset[o] = ""));
+        outlets.forEach((o) => {
+          const area = o.area || o;
+          reset[area] = "";
+        });
         return reset;
       });
       setEntryTotal(0);
@@ -440,12 +446,14 @@ export default function DigitalPayment() {
     let from = filterFrom ? new Date(filterFrom) : null;
     let to = filterTo ? new Date(filterTo) : null;
 
-    return rows.filter((row) => {
-      const d = new Date(row.date);
-      if (from && d < from) return false;
-      if (to && d > to) return false;
-      return true;
-    });
+    return rows
+      .filter((row) => {
+        const d = new Date(row.date);
+        if (from && d < from) return false;
+        if (to && d > to) return false;
+        return true;
+      })
+      .sort((a, b) => new Date(a.date) - new Date(b.date)); // Sort by date ascending (oldest to newest)
   }, [rows, filterFrom, filterTo]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
@@ -497,7 +505,8 @@ export default function DigitalPayment() {
 
     const outletAmounts = {};
     outlets.forEach((o) => {
-      outletAmounts[o] = Number(entryValues[o]) || 0;
+      const area = o.area || o;
+      outletAmounts[area] = Number(entryValues[area]) || 0;
     });
 
     const totalAmount = Object.values(outletAmounts).reduce(
@@ -532,10 +541,14 @@ export default function DigitalPayment() {
 
     setPage(1);
 
+    // Reset form after successful save
     setEntryDate("");
     setEntryValues(() => {
       const reset = {};
-      outlets.forEach((o) => (reset[o] = ""));
+      outlets.forEach((o) => {
+        const area = o.area || o;
+        reset[area] = "";
+      });
       return reset;
     });
   };
@@ -550,7 +563,10 @@ export default function DigitalPayment() {
 
     const data = filteredRows.map((row) => {
       const obj = { Date: row.date };
-      outlets.forEach((o) => (obj[o] = row.outlets[o] ?? 0));
+      outlets.forEach((o) => {
+        const area = o.area || o;
+        obj[area] = row.outlets[area] ?? 0;
+      });
       obj.Total = row.totalAmount;
       return obj;
     });
@@ -824,7 +840,10 @@ export default function DigitalPayment() {
                       } else {
                         setEntryValues(() => {
                           const reset = {};
-                          outlets.forEach((o) => (reset[o] = ""));
+                          outlets.forEach((o) => {
+                            const area = o.area || o;
+                            reset[area] = "";
+                          });
                           return reset;
                         });
                       }

@@ -3,6 +3,7 @@ import { useState } from "react";
 import logo from "../assets/Logo.png";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faIndianRupeeSign } from "@fortawesome/free-solid-svg-icons";
+import { faMoneyBillWave } from "@fortawesome/free-solid-svg-icons";
 import {
   faTableCells,
   faEgg,
@@ -88,19 +89,19 @@ export default function Sidebar() {
         </Link>
 
         <Link
-          to="/admin/cash-payments"
-          className={linkClass("/admin/cash-payments")}
-        >
-          <FontAwesomeIcon icon={faIndianRupeeSign} />
-          {open && "Cash Payments"}
-        </Link>
+  to="/admin/cash-payments"
+  className={linkClass("/admin/cash-payments")}
+>
+  <FontAwesomeIcon icon={faMoneyBillWave} />
+  {open && "Cash Payments"}
+</Link>
 
         <Link
           to="/admin/distribution"
           className={linkClass("/admin/distribution")}
         >
           <FontAwesomeIcon icon={faUsers} />
-          {open && "Add Distributor"}
+          {open && "Add Data Agent"}
         </Link>
 
         <Link to="/admin/outlets" className={linkClass("/admin/outlets")}>

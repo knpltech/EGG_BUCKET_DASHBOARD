@@ -5,6 +5,37 @@ import Sidebar from "../components/Sidebar";
 const escapeRegExp = (s = "") => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const Users = () => {
+    const [editModalOpen, setEditModalOpen] = useState(false);
+    const [editUser, setEditUser] = useState(null);
+
+    // Delete user handler
+    const handleDeleteUser = (id) => {
+      if (!window.confirm('Are you sure you want to delete this user?')) return;
+      const updated = users.filter(u => u.id !== id);
+      setUsers(updated);
+      localStorage.setItem('users', JSON.stringify(updated));
+    };
+
+    // Edit user handler
+    const handleEditUser = (user) => {
+      setEditUser(user);
+      setEditModalOpen(true);
+    };
+
+    // Save edited user
+    const handleSaveEdit = (updatedUser) => {
+      const updated = users.map(u => u.id === updatedUser.id ? updatedUser : u);
+      setUsers(updated);
+      localStorage.setItem('users', JSON.stringify(updated));
+      setEditModalOpen(false);
+      setEditUser(null);
+    };
+
+    // Cancel edit
+    const handleCancelEdit = () => {
+      setEditModalOpen(false);
+      setEditUser(null);
+    };
   const [users, setUsers] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -265,11 +296,71 @@ const Users = () => {
                   </div>
 
                   <div className="mt-4 flex gap-2">
-                    <button className="text-xs px-3 py-1 rounded-lg border bg-eggAccent text-white hover:opacity-90 transition">Edit</button>
-                    <button className="text-xs px-3 py-1 rounded-lg border border-red-200 bg-red-50 text-red-700 hover:opacity-90 transition">Delete</button>
+                    <button className="text-xs px-3 py-1 rounded-lg border border-red-200 bg-red-50 text-red-700 hover:opacity-90 transition" onClick={() => handleDeleteUser(u.id)}>Delete</button>
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+          {/* Edit Modal (outside map and grid) */}
+          {editModalOpen && editUser && (
+            <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30">
+              <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
+                <h2 className="text-lg font-semibold mb-4">Edit User</h2>
+                <form
+                  onSubmit={e => {
+                    e.preventDefault();
+                    handleSaveEdit(editUser);
+                  }}
+                  className="space-y-4"
+                >
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                    <input
+                      type="text"
+                      value={editUser.fullName || ""}
+                      onChange={e => setEditUser({ ...editUser, fullName: e.target.value })}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                    <input
+                      type="text"
+                      value={editUser.username || ""}
+                      onChange={e => setEditUser({ ...editUser, username: e.target.value })}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    <input
+                      type="text"
+                      value={editUser.phone || ""}
+                      onChange={e => setEditUser({ ...editUser, phone: e.target.value })}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                    <input
+                      type="text"
+                      value={Array.isArray(editUser.roles) ? editUser.roles.join(", ") : (editUser.role || "")}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setEditUser({ ...editUser, roles: val.split(",").map(r => r.trim()).filter(Boolean) });
+                      }}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2 mt-4">
+                    <button type="button" onClick={handleCancelEdit} className="px-4 py-2 rounded-lg border bg-gray-100 text-gray-700">Cancel</button>
+                    <button type="submit" className="px-4 py-2 rounded-lg bg-eggAccent text-white">Save</button>
+                  </div>
+                </form>
+              </div>
             </div>
           )}
         </div>

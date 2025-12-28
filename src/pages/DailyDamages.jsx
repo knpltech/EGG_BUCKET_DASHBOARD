@@ -386,10 +386,12 @@ export default function DailyDamages() {
     setEntryTotal(total);
   };
 
-  const filteredData = damages.filter((d) => {
-    if (!fromDate || !toDate) return true;
-    return d.date >= fromDate && d.date <= toDate;
-  });
+  const filteredData = damages
+    .filter((d) => {
+      if (!fromDate || !toDate) return true;
+      return d.date >= fromDate && d.date <= toDate;
+    })
+    .sort((a, b) => new Date(a.date) - new Date(b.date)); // Sort by date ascending (oldest to newest)
 
   const downloadExcel = () => {
     if (filteredData.length === 0) {
@@ -568,7 +570,7 @@ export default function DailyDamages() {
                 <div className="mt-2 flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-green-500" />
                   <div className="text-xs font-medium text-green-700">
-                    Entry (₹{entryTotal}) • Locked
+                    Entry ({entryTotal}) • Locked
                   </div>
                 </div>
               )}
