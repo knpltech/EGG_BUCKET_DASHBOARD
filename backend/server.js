@@ -46,7 +46,7 @@ app.use("/api/digital-payments", digitalPaymentsRoutes);
 app.use("/api/outlets", outletRoutes);
 
 // Serve React app for all other routes (client-side routing)
-app.get("/*", (req, res) => {
+app.use((req, res) => {
 	res.sendFile(path.join(frontendPath, "index.html"));
 });
 
