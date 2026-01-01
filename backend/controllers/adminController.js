@@ -60,6 +60,7 @@ export const addUser = async (req, res) => {
         password: hashed,
         fullName: fullName || "",
         phone: phone || "",
+        role:"Viewer",
         roles: Array.isArray(roles) && roles.length > 0 ? roles : ["viewer"],
         createdAt: new Date()
       };
@@ -74,6 +75,7 @@ export const addUser = async (req, res) => {
       password: hashed,
       fullName: fullName || "",
       phone: phone || "",
+      role: "Admin",
       roles: Array.isArray(roles) ? roles : (roles ? [roles] : []),
       createdAt: new Date()
     };
