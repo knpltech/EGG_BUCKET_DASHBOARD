@@ -298,11 +298,6 @@ function BaseCalendar({ rows, selectedDate, onSelectDate, showDots }) {
 }
 /* ----------------------------------------------- */
 
-function createInitialDigitalRows(outlets = DEFAULT_OUTLETS) {
-  // Start with no seeded rows — data should be entered by the user
-  return [];
-} 
-
 export default function DigitalPayment() {
   const [outlets, setOutlets] = useState([]);
 
@@ -339,7 +334,6 @@ export default function DigitalPayment() {
     };
   }, []);
 
-
   const [rows, setRows] = useState([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -347,7 +341,7 @@ export default function DigitalPayment() {
   useEffect(() => {
     const fetchPayments = async () => {
       try {
-        const res = await fetch(`${API_URL}/digital-payments/all`);
+        const res = await fetch(`${API_URL}/api/digital-payments/all`);
         const data = await res.json();
         setRows(Array.isArray(data) ? data : []);
       } catch {
@@ -396,12 +390,10 @@ export default function DigitalPayment() {
   const [entryDate, setEntryDate] = useState("");
   const [entryValues, setEntryValues] = useState(() => {
     const initial = {};
-    if (Array.isArray(outlets) && outlets.length > 0) {
-      outlets.forEach((o) => {
-        const area = o.area || o;
-        initial[area] = "";
-      });
-    }
+    // Initialize with default outlets to avoid undefined values
+    DEFAULT_OUTLETS.forEach((area) => {
+      initial[area] = "";
+    });
     return initial;
   });
 
@@ -451,6 +443,7 @@ export default function DigitalPayment() {
       setEntryTotal(0);
     }
   }, [entryDate, rows, outlets]);
+
   const filteredRows = useMemo(() => {
     let from = filterFrom ? new Date(filterFrom) : null;
     let to = filterTo ? new Date(filterTo) : null;
@@ -462,7 +455,7 @@ export default function DigitalPayment() {
         if (to && d > to) return false;
         return true;
       })
-      .sort((a, b) => new Date(a.date) - new Date(b.date)); // Sort by date ascending (oldest to newest)
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
   }, [rows, filterFrom, filterTo]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
@@ -498,18 +491,14 @@ export default function DigitalPayment() {
     }));
   };
 
-
   const handleSaveEntry = async (e) => {
     e.preventDefault();
     if (!entryDate) {
-      alert("Please select a date.");
       return;
     }
 
     // Block if an entry for the date already exists
     if (rows.some((r) => r.date === entryDate)) {
-      alert(`Entry for ${entryDate} already exists and cannot be modified.`);
-      setHasEntry(true);
       return;
     }
 
@@ -521,38 +510,44 @@ export default function DigitalPayment() {
 
     // Save to backend
     try {
-      await fetch(`${API_URL}/digital-payments/add`, {
+      const response = await fetch(`${API_URL}/api/digital-payments/add`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date: entryDate, outlets: outletAmounts }),
       });
+
+      if (!response.ok) {
+        console.error('Failed to add payment');
+        return;
+      }
+
       // Refetch from backend after adding
-      const res = await fetch(`${API_URL}/digital-payments/all`);
+      const res = await fetch(`${API_URL}/api/digital-payments/all`);
       const data = await res.json();
-      setRows(Array.isArray(data) ? data : []);
-    } catch (err) {
-      // Ignore backend error for now
-    }
+      const newRows = Array.isArray(data) ? data : [];
+      setRows(newRows);
 
-    setPage(1);
-
-    // Reset form after successful save
-    setEntryDate("");
-    setEntryValues(() => {
-      const reset = {};
-      outlets.forEach((o) => {
-        const area = o.area || o;
-        reset[area] = "";
+      // Reset form after successful save
+      setEntryDate("");
+      setEntryValues(() => {
+        const reset = {};
+        outlets.forEach((o) => {
+          const area = o.area || o;
+          reset[area] = "";
+        });
+        return reset;
       });
-      return reset;
-    });
+      setHasEntry(false);
+      setPage(1);
+    } catch (err) {
+      console.error('Error adding payment:', err);
+    }
   };
 
   const totalRecordsLabel = `${currentPageRows.length} of ${rows.length} records`;
 
   const downloadExcel = () => {
     if (!filteredRows || filteredRows.length === 0) {
-      alert("No data available for selected filters");
       return;
     }
 
@@ -893,7 +888,7 @@ export default function DigitalPayment() {
                       type="number"
                       min="0"
                       step="0.01"
-                      value={entryValues[area]}
+                      value={entryValues[area] || ""}
                       onChange={(e) =>
                         handleEntryChange(area, e.target.value)
                       }

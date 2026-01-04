@@ -14,7 +14,6 @@ const Neccrate = () => {
   const [isLoaded, setIsLoaded] = useState(false);
   const blockedDates = rows.map(row => row.date);
 
-
   const filteredRows = rows
     .filter((row) => {
       if (!fromDate || !toDate) return true;
@@ -25,13 +24,11 @@ const Neccrate = () => {
     })
     .sort((a, b) => new Date(a.date) - new Date(b.date)); // Sort by date ascending (oldest to newest)
 
-
-
   // Fetch NECC rates from backend
   useEffect(() => {
     const fetchRates = async () => {
       try {
-        const res = await fetch(`${API_URL}/neccrate/all`);
+        const res = await fetch(`${API_URL}/api/neccrate/all`);
         const data = await res.json();
         setRows(Array.isArray(data) ? data : []);
       } catch {
@@ -45,17 +42,23 @@ const Neccrate = () => {
   // Add new entry
   const addRow = async (newRow) => {
     try {
-      await fetch(`${API_URL}/neccrate/add`, {
+      const response = await fetch(`${API_URL}/api/neccrate/add`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newRow),
       });
+
+      if (!response.ok) {
+        console.error('Failed to add NECC rate');
+        return;
+      }
+
       // Refetch from backend after adding
-      const res = await fetch(`${API_URL}/neccrate/all`);
+      const res = await fetch(`${API_URL}/api/neccrate/all`);
       const data = await res.json();
       setRows(Array.isArray(data) ? data : []);
     } catch (err) {
-      // Ignore backend error for now
+      console.error('Error adding NECC rate:', err);
     }
   };
 

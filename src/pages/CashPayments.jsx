@@ -255,11 +255,6 @@ function CashCalendar({ rows, selectedDate, onSelectDate, showDots = true }) {
 }
 /* ------------------------------------------------ */
 
-function createInitialCashRows(outlets = DEFAULT_OUTLETS) {
-  // Start with no seeded rows — data should be entered by the user
-  return [];
-}
-
 export default function CashPayment() {
   const [outlets, setOutlets] = useState([]);
 
@@ -296,7 +291,6 @@ export default function CashPayment() {
     };
   }, []);
 
-
   const [rows, setRows] = useState([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
@@ -304,7 +298,7 @@ export default function CashPayment() {
   useEffect(() => {
     const fetchPayments = async () => {
       try {
-        const res = await fetch(`${API_URL}/cash-payments/all`);
+        const res = await fetch(`${API_URL}/api/cash-payments/all`);
         const data = await res.json();
         setRows(Array.isArray(data) ? data : []);
       } catch {
@@ -354,8 +348,7 @@ export default function CashPayment() {
   const [entryDate, setEntryDate] = useState("");
   const [entryValues, setEntryValues] = useState(() => {
     const initial = {};
-    outlets.forEach((o) => {
-      const area = o.area || o;
+    DEFAULT_OUTLETS.forEach((area) => {
       initial[area] = "";
     });
     return initial;
@@ -427,7 +420,7 @@ export default function CashPayment() {
           const d = new Date(row.date);
           return d >= from && d <= to;
         });
-    return filtered.sort((a, b) => new Date(a.date) - new Date(b.date)); // Sort by date ascending (oldest to newest)
+    return filtered.sort((a, b) => new Date(a.date) - new Date(b.date));
   }, [rows, rangeType, customFrom, customTo]);
 
   // Totals by outlet and grand total
@@ -456,7 +449,6 @@ export default function CashPayment() {
 
   const downloadExcel = () => {
     if (!filteredRows || filteredRows.length === 0) {
-      alert("No data available for selected filters");
       return;
     }
 
@@ -488,14 +480,11 @@ export default function CashPayment() {
   const handleSaveEntry = async (e) => {
     e.preventDefault();
     if (!entryDate) {
-      alert("Please select a collection date.");
       return;
     }
 
     // Block duplicate
     if (rows.some((r) => r.date === entryDate)) {
-      alert(`Entry for ${entryDate} already exists and cannot be modified.`);
-      setHasEntry(true);
       return;
     }
 
@@ -508,33 +497,36 @@ export default function CashPayment() {
 
     // Save to backend
     try {
-      await fetch(`${API_URL}/cash-payments/add`, {
+      const response = await fetch(`${API_URL}/api/cash-payments/add`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date: entryDate, outlets: outletAmounts }),
       });
+
+      if (!response.ok) {
+        console.error('Failed to add payment');
+        return;
+      }
+
       // Refetch from backend after adding
-      const res = await fetch(`${API_URL}/cash-payments/all`);
+      const res = await fetch(`${API_URL}/api/cash-payments/all`);
       const data = await res.json();
       setRows(Array.isArray(data) ? data : []);
-    } catch (err) {
-      // Ignore backend error for now
-    }
 
-    // mark locked
-    setHasEntry(true);
-    setEntryTotal(Object.values(outletAmounts).reduce((sum, v) => sum + v, 0));
-
-    // Reset form after successful save
-    setEntryDate("");
-    setEntryValues(() => {
-      const reset = {};
-      outlets.forEach((o) => {
-        const area = o.area || o;
-        reset[area] = "";
+      // Reset form after successful save
+      setEntryDate("");
+      setEntryValues(() => {
+        const reset = {};
+        outlets.forEach((o) => {
+          const area = o.area || o;
+          reset[area] = "";
+        });
+        return reset;
       });
-      return reset;
-    });
+      setHasEntry(false);
+    } catch (err) {
+      console.error('Error adding payment:', err);
+    }
   };
 
   const formatDisplayDate = (iso) => {
@@ -864,7 +856,7 @@ export default function CashPayment() {
                       type="number"
                       min="0"
                       step="1"
-                      value={entryValues[area]}
+                      value={entryValues[area] || ""}
                       onChange={(e) =>
                         handleEntryChange(area, e.target.value)
                       }

@@ -16,14 +16,19 @@ const Users = () => {
       const isViewer = (Array.isArray(roles) ? roles : [roles]).some(r => (r || '').toLowerCase() === 'viewer');
       const collection = isViewer ? 'viewers' : 'users';
       try {
-        await fetch(`${API_URL}/admin/delete-user`, {
+        const response = await fetch(`${API_URL}/api/admin/delete-user`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username, collection }),
         });
-        setUsers(users.filter(u => u.id !== id));
-      } catch {
-        alert('Failed to delete user from database.');
+
+        if (response.ok) {
+          setUsers(users.filter(u => u.id !== id));
+        } else {
+          console.error('Failed to delete user');
+        }
+      } catch (err) {
+        console.error('Error deleting user:', err);
       }
     };
 
@@ -37,7 +42,6 @@ const Users = () => {
     const handleSaveEdit = (updatedUser) => {
       const updated = users.map(u => u.id === updatedUser.id ? updatedUser : u);
       setUsers(updated);
-      localStorage.setItem('users', JSON.stringify(updated));
       setEditModalOpen(false);
       setEditUser(null);
     };
@@ -47,6 +51,7 @@ const Users = () => {
       setEditModalOpen(false);
       setEditUser(null);
     };
+
   const [users, setUsers] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [debounced, setDebounced] = useState("");
@@ -77,10 +82,11 @@ const Users = () => {
     };
   }, [overflowOpen]);
 
+  // Fetch users from backend
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const res = await fetch(`${API_URL}/admin/all-viewers`);
+        const res = await fetch(`${API_URL}/api/admin/all-viewers`);
         const data = await res.json();
         setUsers(Array.isArray(data) ? data : []);
       } catch {
@@ -88,6 +94,10 @@ const Users = () => {
       }
     };
     fetchUsers();
+
+    // Poll for new users every 5 seconds to keep data fresh
+    const interval = setInterval(fetchUsers, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   // Debounce search input for smoother UX
@@ -298,7 +308,7 @@ const Users = () => {
                   </div>
 
                   <div className="mt-4 flex gap-2">
-                    <button className="text-xs px-3 py-1 rounded-lg border border-red-200 bg-red-50 text-red-700 hover:opacity-90 transition" onClick={() => handleDeleteUser(u.id)}>Delete</button>
+                    <button className="text-xs px-3 py-1 rounded-lg border border-red-200 bg-red-50 text-red-700 hover:opacity-90 transition" onClick={() => handleDeleteUser(u.id, u.username, u.roles)}>Delete</button>
                   </div>
                 </div>
               ))}

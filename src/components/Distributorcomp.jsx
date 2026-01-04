@@ -1,3 +1,4 @@
+const API_URL = import.meta.env.VITE_API_URL;
 import React, { useState } from "react";
 import { useLocation } from "react-router-dom";
 import {
@@ -62,23 +63,20 @@ const Distributorcomp = () => {
       icon: faArrowsSplitUpAndLeft,
       desc: "total eggs damaged.",
     },
-    // Viewer role removed from selection
   ];
+
   const handleSubmit = async () => {
     // Basic validation
     if (!form.fullName || !form.username) {
-      alert("Please provide full name and username.");
       return;
     }
 
     if (form.password !== form.confirmPassword) {
-      alert("Passwords do not match!");
       return;
     }
 
-    // Always store as viewer in viewers collection, but include access roles
     try {
-      const res = await fetch("/api/admin/add-user", {
+      const res = await fetch(`${API_URL}/api/admin/add-user`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -90,9 +88,10 @@ const Distributorcomp = () => {
           roles: Array.isArray(form.roles) && form.roles.length > 0 ? [...form.roles, "viewer"] : ["viewer"]
         }),
       });
+
       const data = await res.json();
+      
       if (res.ok) {
-        alert("Distributor added successfully!");
         setForm({
           fullName: "",
           phone: "",
@@ -102,10 +101,10 @@ const Distributorcomp = () => {
           roles: [],
         });
       } else {
-        alert(data.error || "Failed to add distributor.");
+        console.error(data.error || "Failed to add distributor");
       }
     } catch (err) {
-      alert("Network error. Please try again.");
+      console.error("Network error:", err);
     }
   };
 

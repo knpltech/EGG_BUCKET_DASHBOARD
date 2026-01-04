@@ -116,14 +116,24 @@ const Dailysales = () => {
   }, []);
   
 
-  // Fetch daily sales from backend
+  // ✅ FIX: Fetch daily sales from backend with correct path
   useEffect(() => {
     const fetchSales = async () => {
       try {
-        const res = await fetch(`${API_URL}/dailysales/all`);
+        // ✅ FIXED: Added /api prefix to match backend route
+        const res = await fetch(`${API_URL}/api/dailysales/all`);
         const data = await res.json();
-        setRows(Array.isArray(data) ? data : []);
-      } catch {
+        
+        // ✅ Handle both response formats
+        if (data.success && Array.isArray(data.data)) {
+          setRows(data.data);
+        } else if (Array.isArray(data)) {
+          setRows(data);
+        } else {
+          setRows([]);
+        }
+      } catch (err) {
+        console.error('Error fetching sales:', err);
         setRows([]);
       }
       setIsLoaded(true);
@@ -153,21 +163,33 @@ const Dailysales = () => {
   .map(r => r.date);
 
   const addrow = async (newrow) => {
-    // Save to backend for persistence
-    try {
-      await fetch(`${API_URL}/dailysales/add`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newrow),
-      });
-      // Refetch from backend after adding
-      const res = await fetch(`${API_URL}/dailysales/all`);
-      const data = await res.json();
-      setRows(Array.isArray(data) ? data : []);
-    } catch (err) {
-      // Ignore backend error for now
+  try {
+    const response = await fetch(`${API_URL}/api/dailysales/add`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newrow),
+    });
+    
+    if (!response.ok) {
+      console.error('Failed to add sales');
+      return;
     }
-  };
+    
+    // Refetch from backend after adding
+    const res = await fetch(`${API_URL}/api/dailysales/all`);
+    const data = await res.json();
+    
+    if (data.success && Array.isArray(data.data)) {
+      setRows(data.data);
+    } else if (Array.isArray(data)) {
+      setRows(data);
+    } else {
+      setRows([]);
+    }
+  } catch (err) {
+    console.error('Error adding sales:', err);
+  }
+};
 
   // Sort rows by date ascending (oldest to newest)
   const sortedRows = [...rows].sort((a, b) => new Date(a.date) - new Date(b.date));
