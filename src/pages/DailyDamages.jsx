@@ -261,7 +261,27 @@ function BaseCalendar({ rows, selectedDate, onSelectDate, showDots }) {
 }
 
 export default function DailyDamages() {
-  const { damages, addDamage, remapDamagesForOutlets } = useDamage();
+  const { damages, setDamages, addDamage, remapDamagesForOutlets } = useDamage();
+    // Fetch damages from backend on mount (after login)
+    useEffect(() => {
+      const fetchDamages = async () => {
+        try {
+          const res = await fetch(`${API_URL}/api/daily-damage/all`);
+          const data = await res.json();
+          if (Array.isArray(data)) {
+            // Flatten backend damages (damages field) to match local format
+            setDamages(data.map(d => ({
+              date: d.date,
+              ...((d.damages && typeof d.damages === 'object') ? d.damages : {}),
+              total: d.total || 0
+            })));
+          }
+        } catch (err) {
+          // ignore fetch error
+        }
+      };
+      fetchDamages();
+    }, [setDamages]);
   const [isFromCalendarOpen, setIsFromCalendarOpen] = useState(false);
   const [isToCalendarOpen, setIsToCalendarOpen] = useState(false);
 
@@ -383,7 +403,7 @@ export default function DailyDamages() {
     }
     // Save to backend for persistence
     try {
-      await fetch(`${API_URL}/daily-damage/add-daily-damage`, {
+      await fetch(`${API_URL}/api/daily-damage/add-daily-damage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date: entryDate, damages: { ...form }, total }),

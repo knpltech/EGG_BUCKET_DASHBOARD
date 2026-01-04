@@ -255,7 +255,7 @@ function CashCalendar({ rows, selectedDate, onSelectDate, showDots = true }) {
 }
 /* ------------------------------------------------ */
 
-export default function CashPayment() {
+export default function CashPayments() {
   const [outlets, setOutlets] = useState([]);
 
   useEffect(() => {

@@ -192,7 +192,16 @@ const Dailysales = () => {
 };
 
   // Sort rows by date ascending (oldest to newest)
-  const sortedRows = [...rows].sort((a, b) => new Date(a.date) - new Date(b.date));
+  // Only show last 10 days
+  const today = new Date();
+  const tenDaysAgo = new Date(today);
+  tenDaysAgo.setDate(today.getDate() - 9); // includes today
+  const sortedRows = [...rows]
+    .filter(row => {
+      const d = new Date(row.date);
+      return d >= tenDaysAgo && d <= today;
+    })
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
 
   // Download as Excel (robust for both possible row structures)
   const handleDownload = () => {

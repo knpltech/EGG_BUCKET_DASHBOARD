@@ -445,17 +445,23 @@ export default function DigitalPayment() {
   }, [entryDate, rows, outlets]);
 
   const filteredRows = useMemo(() => {
+    // Only show last 10 days
+    const today = new Date();
+    const tenDaysAgo = new Date(today);
+    tenDaysAgo.setDate(today.getDate() - 9);
+    let filtered = rows.filter(row => {
+      const d = new Date(row.date);
+      return d >= tenDaysAgo && d <= today;
+    });
+    // Optionally, apply additional filters (date range)
     let from = filterFrom ? new Date(filterFrom) : null;
     let to = filterTo ? new Date(filterTo) : null;
-
-    return rows
-      .filter((row) => {
+    if (from && to)
+      filtered = filtered.filter((row) => {
         const d = new Date(row.date);
-        if (from && d < from) return false;
-        if (to && d > to) return false;
-        return true;
-      })
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
+        return d >= from && d <= to;
+      });
+    return filtered.sort((a, b) => new Date(a.date) - new Date(b.date));
   }, [rows, filterFrom, filterTo]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));

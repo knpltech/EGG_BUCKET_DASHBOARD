@@ -15,14 +15,21 @@ const Neccrate = () => {
   const blockedDates = rows.map(row => row.date);
 
   const filteredRows = rows
+    // Only show last 10 days
     .filter((row) => {
-      if (!fromDate || !toDate) return true;
+      const today = new Date();
+      const tenDaysAgo = new Date(today);
+      tenDaysAgo.setDate(today.getDate() - 9);
       const rowDate = new Date(row.date);
-      const from = new Date(fromDate);
-      const to = new Date(toDate);
-      return rowDate >= from && rowDate <= to;
+      if (rowDate < tenDaysAgo || rowDate > today) return false;
+      if (fromDate && toDate) {
+        const from = new Date(fromDate);
+        const to = new Date(toDate);
+        return rowDate >= from && rowDate <= to;
+      }
+      return true;
     })
-    .sort((a, b) => new Date(a.date) - new Date(b.date)); // Sort by date ascending (oldest to newest)
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
 
   // Fetch NECC rates from backend
   useEffect(() => {

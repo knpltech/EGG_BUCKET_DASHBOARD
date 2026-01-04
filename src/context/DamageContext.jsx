@@ -48,6 +48,7 @@ export function DamageProvider({ children }) {
     <DamageContext.Provider
       value={{
         damages,
+        setDamages, // Expose setDamages for backend sync
         addDamage,
         remapDamagesForOutlets,
         totalDamages,
