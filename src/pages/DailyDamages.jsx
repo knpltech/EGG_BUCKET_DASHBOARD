@@ -313,8 +313,8 @@ export default function DailyDamages() {
       const updatedDamages = { ...editValues };
       const total = outlets.reduce((s, name) => s + Number(updatedDamages[name] || 0), 0);
       try {
-        console.log("PATCH to", `${API_URL}/api/daily-damage/${editRow.id}`);
-        const response = await fetch(`${API_URL}/api/daily-damage/${editRow.id}`, {
+        console.log("PATCH to", `${API_URL}/daily-damage/${editRow.id}`);
+        const response = await fetch(`${API_URL}/daily-damage/${editRow.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ date: editRow.date, damages: updatedDamages, total }),
@@ -325,7 +325,7 @@ export default function DailyDamages() {
           return;
         }
         // Refetch damages after update
-        const res = await fetch(`${API_URL}/api/daily-damage/all`);
+        const res = await fetch(`${API_URL}/daily-damage/all`);
         const data = await res.json();
         if (Array.isArray(data)) {
           setDamages(data.map(d => ({
@@ -348,7 +348,7 @@ export default function DailyDamages() {
     useEffect(() => {
       const fetchDamages = async () => {
         try {
-          const res = await fetch(`${API_URL}/api/daily-damage/all`);
+          const res = await fetch(`${API_URL}/daily-damage/all`);
           const data = await res.json();
           if (Array.isArray(data)) {
             // Always include id in damages context
@@ -486,7 +486,7 @@ export default function DailyDamages() {
     }
     // Save to backend for persistence
     try {
-      await fetch(`${API_URL}/api/daily-damage/add-daily-damage`, {
+      await fetch(`${API_URL}/daily-damage/add-daily-damage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date: entryDate, damages: { ...form }, total }),

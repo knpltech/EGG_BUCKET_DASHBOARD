@@ -23,7 +23,7 @@ export default function SignIn() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_URL}/api/auth/signin`, {
+      const res = await fetch(`${API_URL}/auth/signin`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

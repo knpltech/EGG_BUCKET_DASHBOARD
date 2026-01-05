@@ -91,7 +91,7 @@ const Distributorcomp = () => {
         if (!rolesArr.includes("dataagent")) rolesArr.push("dataagent");
         rolesArr = Array.from(new Set(rolesArr)); // Remove duplicates
       }
-      const res = await fetch(`${API_URL}/api/admin/add-user`, {
+      const res = await fetch(`${API_URL}/admin/add-user`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

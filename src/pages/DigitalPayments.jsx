@@ -341,7 +341,7 @@ export default function DigitalPayments() {
       updatedOutlets[area] = Number(editValues[area]) || 0;
     });
     try {
-      const response = await fetch(`${API_URL}/api/digital-payments/${editRow.id}`, {
+      const response = await fetch(`${API_URL}/digital-payments/${editRow.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date: editRow.date, outlets: updatedOutlets }),
@@ -351,7 +351,7 @@ export default function DigitalPayments() {
         return;
       }
       // Refetch rows after update
-      const res = await fetch(`${API_URL}/api/digital-payments/all`);
+      const res = await fetch(`${API_URL}/digital-payments/all`);
       const data = await res.json();
       setRows(Array.isArray(data) ? data : []);
       setEditModalOpen(false);
@@ -383,7 +383,7 @@ export default function DigitalPayments() {
   useEffect(() => {
     const fetchPayments = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/digital-payments/all`);
+        const res = await fetch(`${API_URL}/digital-payments/all`);
         const data = await res.json();
         setRows(Array.isArray(data) ? data : []);
       } catch {
@@ -553,7 +553,7 @@ export default function DigitalPayments() {
 
     // Save to backend
     try {
-      const response = await fetch(`${API_URL}/api/digital-payments/add`, {
+      const response = await fetch(`${API_URL}/digital-payments/add`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date: entryDate, outlets: outletAmounts }),
@@ -565,7 +565,7 @@ export default function DigitalPayments() {
       }
 
       // Refetch from backend after adding
-      const res = await fetch(`${API_URL}/api/digital-payments/all`);
+      const res = await fetch(`${API_URL}/digital-payments/all`);
       const data = await res.json();
       const newRows = Array.isArray(data) ? data : [];
       setRows(newRows);

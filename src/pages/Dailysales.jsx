@@ -73,7 +73,7 @@ const Dailysales = () => {
     useEffect(() => {
       const fetchSales = async () => {
         try {
-          const res = await fetch(`${API_URL}/api/dailysales/all`);
+          const res = await fetch(`${API_URL}/dailysales/all`);
           const data = await res.json();
           if (Array.isArray(data)) {
             setRows(data.map(d => ({ id: d.id, ...d })));
@@ -122,7 +122,7 @@ const Dailysales = () => {
       const updatedOutlets = { ...editValues };
       const total = Object.values(updatedOutlets).reduce((s, v) => s + (Number(v) || 0), 0);
       try {
-        const response = await fetch(`${API_URL}/api/dailysales/${editRow.id}`, {
+        const response = await fetch(`${API_URL}/dailysales/${editRow.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ date: editRow.date, outlets: updatedOutlets, total }),
@@ -132,7 +132,7 @@ const Dailysales = () => {
           return;
         }
         // Refetch sales after update
-        const res = await fetch(`${API_URL}/api/dailysales/all`);
+        const res = await fetch(`${API_URL}/dailysales/all`);
         const data = await res.json();
         if (Array.isArray(data)) {
           setRows(data.map(d => ({ id: d.id, ...d })));
@@ -203,7 +203,7 @@ const Dailysales = () => {
     const fetchSales = async () => {
       try {
         // ✅ FIXED: Added /api prefix to match backend route
-        const res = await fetch(`${API_URL}/api/dailysales/all`);
+        const res = await fetch(`${API_URL}/dailysales/all`);
         const data = await res.json();
         
         // ✅ Handle both response formats
@@ -246,7 +246,7 @@ const Dailysales = () => {
 
   const addrow = async (newrow) => {
   try {
-    const response = await fetch(`${API_URL}/api/dailysales/add`, {
+    const response = await fetch(`${API_URL}/dailysales/add`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(newrow),
@@ -258,7 +258,7 @@ const Dailysales = () => {
     }
     
     // Refetch from backend after adding
-    const res = await fetch(`${API_URL}/api/dailysales/all`);
+    const res = await fetch(`${API_URL}/dailysales/all`);
     const data = await res.json();
     
     if (data.success && Array.isArray(data.data)) {

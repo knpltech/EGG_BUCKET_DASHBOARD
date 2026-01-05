@@ -32,7 +32,7 @@ const Neccrate = () => {
   useEffect(() => {
     const fetchRates = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/neccrate/all`);
+        const res = await fetch(`${API_URL}/neccrate/all`);
         const data = await res.json();
         // Always include id in rows
         setRows(Array.isArray(data) ? data.map(d => ({ id: d.id, ...d })) : []);
@@ -74,7 +74,7 @@ const Neccrate = () => {
       return;
     }
     try {
-      const response = await fetch(`${API_URL}/api/neccrate/${editRow.id}`, {
+      const response = await fetch(`${API_URL}/neccrate/${editRow.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date: editRow.date, rate: editValues.rate, remarks: editValues.remarks }),
@@ -84,7 +84,7 @@ const Neccrate = () => {
         return;
       }
       // Refetch rates after update
-      const res = await fetch(`${API_URL}/api/neccrate/all`);
+      const res = await fetch(`${API_URL}/neccrate/all`);
       const data = await res.json();
       setRows(Array.isArray(data) ? data.map(d => ({ id: d.id, ...d })) : []);
       setEditModalOpen(false);
@@ -98,7 +98,7 @@ const Neccrate = () => {
   // Add new entry
   const addRow = async (newRow) => {
     try {
-      const response = await fetch(`${API_URL}/api/neccrate/add`, {
+      const response = await fetch(`${API_URL}/neccrate/add`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newRow),
@@ -110,7 +110,7 @@ const Neccrate = () => {
       }
 
       // Refetch from backend after adding
-      const res = await fetch(`${API_URL}/api/neccrate/all`);
+      const res = await fetch(`${API_URL}/neccrate/all`);
       const data = await res.json();
       setRows(Array.isArray(data) ? data : []);
     } catch (err) {

@@ -295,7 +295,7 @@ export default function CashPayments() {
       const updatedOutlets = { ...editValues };
       const totalAmount = Object.values(updatedOutlets).reduce((s, v) => s + (Number(v) || 0), 0);
       try {
-        const response = await fetch(`${API_URL}/api/cash-payments/${editRow.id}`, {
+        const response = await fetch(`${API_URL}/cash-payments/${editRow.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ date: editRow.date, outlets: updatedOutlets, totalAmount }),
@@ -305,7 +305,7 @@ export default function CashPayments() {
           return;
         }
         // Refetch payments after update
-        const res = await fetch(`${API_URL}/api/cash-payments/all`);
+        const res = await fetch(`${API_URL}/cash-payments/all`);
         const data = await res.json();
         setRows(Array.isArray(data) ? data : []);
         setEditModalOpen(false);
@@ -357,7 +357,7 @@ export default function CashPayments() {
   useEffect(() => {
     const fetchPayments = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/cash-payments/all`);
+        const res = await fetch(`${API_URL}/cash-payments/all`);
         const data = await res.json();
         setRows(Array.isArray(data) ? data : []);
       } catch {
@@ -556,7 +556,7 @@ export default function CashPayments() {
 
     // Save to backend
     try {
-      const response = await fetch(`${API_URL}/api/cash-payments/add`, {
+      const response = await fetch(`${API_URL}/cash-payments/add`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date: entryDate, outlets: outletAmounts }),
@@ -568,7 +568,7 @@ export default function CashPayments() {
       }
 
       // Refetch from backend after adding
-      const res = await fetch(`${API_URL}/api/cash-payments/all`);
+      const res = await fetch(`${API_URL}/cash-payments/all`);
       const data = await res.json();
       setRows(Array.isArray(data) ? data : []);
 

@@ -16,7 +16,7 @@ const Users = () => {
       const isDataAgent = (Array.isArray(roles) ? roles : [roles]).some(r => (r || '').toLowerCase() === 'dataagent');
       const collection = isDataAgent ? 'dataagents' : 'users';
       try {
-        const response = await fetch(`${API_URL}/api/admin/delete-user`, {
+        const response = await fetch(`${API_URL}/admin/delete-user`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username, collection }),
@@ -86,7 +86,7 @@ const Users = () => {
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const res = await fetch(`${API_URL}/api/admin/all-dataagents`);
+        const res = await fetch(`${API_URL}/admin/all-dataagents`);
         const data = await res.json();
         setUsers(Array.isArray(data) ? data : []);
       } catch {
