@@ -17,6 +17,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+
+// ✅ Root route for Render and browser GET /
+app.get("/", (req, res) => {
+  res.send("EggBucket API is live!");
+});
+
 // ✅ API health check
 app.get("/api", (req, res) => {
   res.json({ success: true, message: "EggBucket Backend Running 🚀" });
