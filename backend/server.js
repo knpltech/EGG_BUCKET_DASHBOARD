@@ -11,6 +11,7 @@ import distributorRoutes from "./routes/distributorRoutes.js";
 import digitalPaymentsRoutes from "./routes/digitalPaymentsRoutes.js";
 import cashPaymentsRoutes from "./routes/cashPaymentsRoutes.js";
 import outletRoutes from "./routes/outletRoutes.js";
+import reportsRoutes from "./routes/reportsRoutes.js"; // ← ADD THIS LINE
 
 const app = express();
 
@@ -32,8 +33,7 @@ app.use("/api/distributor", distributorRoutes);
 app.use("/api/cash-payments", cashPaymentsRoutes);
 app.use("/api/digital-payments", digitalPaymentsRoutes);
 app.use("/api/outlets", outletRoutes);
-
-
+app.use("/api/reports", reportsRoutes); // ← ADD THIS LINE
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () =>

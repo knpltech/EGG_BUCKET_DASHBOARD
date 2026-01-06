@@ -12,11 +12,12 @@
   "dependencies": {
     "@fortawesome/free-solid-svg-icons": "^7.1.0",
     "@fortawesome/react-fontawesome": "^3.1.1",
+    "axios": "^1.13.2",
     "date-fns": "^4.1.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.10.1",
-    "recharts": "^3.5.1",
+    "recharts": "^3.6.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
