@@ -629,9 +629,13 @@ export default function DigitalPayments() {
           </p>
         </div>
 
-        <button onClick={downloadExcel} className="inline-flex items-center rounded-full border border-gray-200 bg-eggWhite px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
-          Download Data
-        </button>
+        <button
+  onClick={downloadExcel}
+  className="inline-flex items-center rounded-full bg-[#ff7518] px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90"
+>
+  Download Data
+</button>
+
       </div>
 
       {/* Filters row */}

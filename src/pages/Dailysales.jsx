@@ -150,7 +150,7 @@ const Dailysales = () => {
 
   return (
     <div className="flex">
-      <div className="bg-[#F8F6F2] min-h-screen p-6 w-full">
+      <div className="bg-eggBg min-h-screen p-6 w-full">
 
         <Topbar />
 

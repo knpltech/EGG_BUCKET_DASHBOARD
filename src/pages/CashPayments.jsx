@@ -616,9 +616,13 @@ export default function CashPayments() {
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <button onClick={downloadExcel} className="inline-flex items-center rounded-full border border-gray-200 bg-eggWhite px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">
-            Export Report
-          </button>
+          <button
+  onClick={downloadExcel}
+  className="inline-flex items-center rounded-full bg-[#ff7518] px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90"
+>
+  Export Report
+</button>
+
         </div>
       </div>
 
