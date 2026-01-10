@@ -621,7 +621,7 @@ export default function DailyDamages() {
                       </div>
                     )}
                     {isEntryCalendarOpen && (
-                      <div className="absolute right-0 bottom-full z-50 mb-2">
+                      <div className="absolute right-0 top-full z-50 mt-2">
                         <BaseCalendar
                           rows={damages}
                           selectedDate={entryDate}

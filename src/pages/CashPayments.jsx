@@ -681,7 +681,7 @@ export default function CashPayments() {
               )}
 
               {isCalendarOpen && (
-                <div className="absolute right-0 bottom-full z-20 mb-2">
+                <div className="absolute right-0 top-full z-50 mt-2">
                   <CashCalendar
                     rows={rows}
                     selectedDate={entryDate}
@@ -852,7 +852,7 @@ export default function CashPayments() {
                   <CalendarIcon className="h-4 w-4 text-gray-500" />
                 </button>
                 {isCustomToOpen && (
-                  <div className="absolute right-0 top-full z-50 mt-2">
+                  <div className="absolute right-0 bottom-full z-50 mt-2">
                     <CashCalendar
                       rows={[]}
                       selectedDate={customTo}
