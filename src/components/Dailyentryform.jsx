@@ -1,4 +1,4 @@
-import React, { useState, useEffect ,useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 
 const MONTHS = [
   "January","February","March","April","May","June",
@@ -221,13 +221,28 @@ function BaseCalendar({ rows, selectedDate, onSelectDate, showDots }) {
 const Dailyentryform = ({ addrow, blockeddates, rows, outlets = [] }) => {
   const [date, setDate] = useState("");
   const [openCal, setOpenCal] = useState(false);
+  const calendarRef = useRef(null);
+
+  // Click outside to close calendar
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (calendarRef.current && !calendarRef.current.contains(event.target)) {
+        setOpenCal(false);
+      }
+    };
+
+    if (openCal) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [openCal]);
 
   // Build outlet names from objects, filtering active only for entry
   const outletNames = useMemo(() => {
-  return Array.isArray(outlets) && outlets.length > 0
-    ? outlets.map(o => o.area || o)
-    : ["AECS Layout", "Bandepalya", "Hosa Road", "Singasandra", "Kudlu Gate"];
-}, [outlets]);
+    return Array.isArray(outlets) && outlets.length > 0
+      ? outlets.map(o => o.area || o)
+      : ["AECS Layout", "Bandepalya", "Hosa Road", "Singasandra", "Kudlu Gate"];
+  }, [outlets]);
 
   const [entryValues, setEntryValues] = useState(() => {
     const initial = {};
@@ -252,7 +267,7 @@ const Dailyentryform = ({ addrow, blockeddates, rows, outlets = [] }) => {
       setEntryValues(() => {
         const vals = {};
         outletNames.forEach(o => {
-          vals[o] = found.outlets[o] !== undefined ? found.outlets[o] : "";
+          vals[o] = found.outlets && found.outlets[o] !== undefined ? found.outlets[o] : "";
         });
         return vals;
       });
@@ -270,12 +285,12 @@ const Dailyentryform = ({ addrow, blockeddates, rows, outlets = [] }) => {
 
   // Reset entry values when outlets change
   useEffect(() => {
-  if (!date) return;
+    if (!date) return;
 
-  const reset = {};
-  outletNames.forEach(o => (reset[o] = ""));
-  setEntryValues(reset);
-}, [date]);
+    const reset = {};
+    outletNames.forEach(o => (reset[o] = ""));
+    setEntryValues(reset);
+  }, [outletNames]);
 
   const handleEntryChange = (outlet, value) => {
     setEntryValues((prev) => ({
@@ -336,7 +351,7 @@ const Dailyentryform = ({ addrow, blockeddates, rows, outlets = [] }) => {
       <p className="text-gray-500 mb-6">Add new daily sales amounts for each outlet.</p>
 
       {/* DATE PICKER - Full width, calendar aligned to icon */}
-      <div className="relative mb-6">
+      <div className="relative mb-6 z-30" ref={calendarRef}>
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Select Date
         </label>

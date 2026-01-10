@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const MONTHS = [
   "January",
@@ -22,6 +22,12 @@ function formatDateDMY(iso) {
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const year = d.getFullYear();
   return `${day}-${month}-${year}`;
+}
+
+function formatDateDisplay(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString('en-GB').replace(/\//g, '-');
 }
 
 function CalendarIcon({ className = "" }) {
@@ -222,59 +228,76 @@ function BaseCalendar({ selectedDate, onSelectDate, showDots = false }) {
   );
 }
 
-export default function NeccTableSection({rows,
+export default function NeccTableSection({
+  rows,
   fromDate,
   toDate,
   setFromDate,
   setToDate,
   onEdit,
-  showEditColumn}) {
-  
-    const downloadCSV = (data) => {
-      if (data.length === 0) {
-        alert("No data to download");
-        return;
+  showEditColumn
+}) {
+  const fromCalendarRef = useRef(null);
+  const toCalendarRef = useRef(null);
+  const [isFromCalendarOpen, setIsFromCalendarOpen] = useState(false);
+  const [isToCalendarOpen, setIsToCalendarOpen] = useState(false);
+
+  // Click outside to close calendars
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (fromCalendarRef.current && !fromCalendarRef.current.contains(event.target)) {
+        setIsFromCalendarOpen(false);
       }
-
-      const header = ["Date", "Rate", "Remarks"];
-      const rows = data.map(row => [
-        row.date,
-        row.rate,
-        row.remarks
-      ]);
-
-      let csvContent =
-        "data:text/csv;charset=utf-8," +
-        [header, ...rows].map(e => e.join(",")).join("\n");
-
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", "necc_rate_data.csv");
-      document.body.appendChild(link);
-      link.click();
+      if (toCalendarRef.current && !toCalendarRef.current.contains(event.target)) {
+        setIsToCalendarOpen(false);
+      }
     };
 
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
-    const setLastWeek = (setFromDate, setToDate) => {
-      const today = new Date();
-      const lastWeek = new Date();
-      lastWeek.setDate(today.getDate() - 7);
+  const downloadCSV = (data) => {
+    if (data.length === 0) {
+      alert("No data to download");
+      return;
+    }
 
-      setFromDate(lastWeek.toISOString().split("T")[0]);
-      setToDate(today.toISOString().split("T")[0]);
-    };
+    const header = ["Date", "Rate", "Remarks"];
+    const csvRows = data.map(row => [
+      row.date,
+      row.rate,
+      row.remarks
+    ]);
 
-    const setLastMonth = (setFromDate, setToDate) => {
-      const today = new Date();
-      const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    let csvContent =
+      "data:text/csv;charset=utf-8," +
+      [header, ...csvRows].map(e => e.join(",")).join("\n");
 
-      setFromDate(lastMonthStart.toISOString().split("T")[0]);
-      setToDate(today.toISOString().split("T")[0]);
-    };
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "necc_rate_data.csv");
+    document.body.appendChild(link);
+    link.click();
+  };
 
-    const [isFromCalendarOpen, setIsFromCalendarOpen] = useState(false);
-    const [isToCalendarOpen, setIsToCalendarOpen] = useState(false);
+  const setLastWeek = () => {
+    const today = new Date();
+    const lastWeek = new Date();
+    lastWeek.setDate(today.getDate() - 7);
+
+    setFromDate(lastWeek.toISOString().split("T")[0]);
+    setToDate(today.toISOString().split("T")[0]);
+  };
+
+  const setLastMonth = () => {
+    const today = new Date();
+    const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+
+    setFromDate(lastMonthStart.toISOString().split("T")[0]);
+    setToDate(today.toISOString().split("T")[0]);
+  };
 
   return (
     <div className="pt-10"> 
@@ -284,10 +307,13 @@ export default function NeccTableSection({rows,
       {/* 🟠 Filters */}
       <div className='flex justify-between items-center gap-3 mb-6'>
         <div className='flex gap-5 ml-4'>
-          <div className="relative">
+          <div className="relative z-30" ref={fromCalendarRef}>
             <button
               type="button"
-              onClick={() => setIsFromCalendarOpen((o) => !o)}
+              onClick={() => {
+                setIsFromCalendarOpen((o) => !o);
+                setIsToCalendarOpen(false);
+              }}
               className="flex min-w-[120px] items-center justify-between rounded-lg border p-2 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400"
             >
               <span>
@@ -296,19 +322,25 @@ export default function NeccTableSection({rows,
               <CalendarIcon className="h-4 w-4 text-gray-500 ml-2" />
             </button>
             {isFromCalendarOpen && (
-              <div className="absolute left-0 top-full z-30 mt-2">
+              <div className="absolute left-0 top-full z-50 mt-2">
                 <BaseCalendar
                   selectedDate={fromDate}
-                  onSelectDate={setFromDate}
+                  onSelectDate={(iso) => {
+                    setFromDate(iso);
+                    setIsFromCalendarOpen(false);
+                  }}
                   showDots={false}
                 />
               </div>
             )}
           </div>
-          <div className="relative">
+          <div className="relative z-30" ref={toCalendarRef}>
             <button
               type="button"
-              onClick={() => setIsToCalendarOpen((o) => !o)}
+              onClick={() => {
+                setIsToCalendarOpen((o) => !o);
+                setIsFromCalendarOpen(false);
+              }}
               className="flex min-w-[120px] items-center justify-between rounded-lg border p-2 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400"
             >
               <span>
@@ -317,10 +349,13 @@ export default function NeccTableSection({rows,
               <CalendarIcon className="h-4 w-4 text-gray-500 ml-2" />
             </button>
             {isToCalendarOpen && (
-              <div className="absolute left-0 top-full z-30 mt-2">
+              <div className="absolute left-0 top-full z-50 mt-2">
                 <BaseCalendar
                   selectedDate={toDate}
-                  onSelectDate={setToDate}
+                  onSelectDate={(iso) => {
+                    setToDate(iso);
+                    setIsToCalendarOpen(false);
+                  }}
                   showDots={false}
                 />
               </div>
@@ -328,54 +363,55 @@ export default function NeccTableSection({rows,
           </div>
         </div>
         <div className='flex gap-5 mr-4'>
-          <button className="border px-4 py-2 rounded-lg bg-orange-500 text-white" onClick={() => downloadCSV(rows)}>
+          <button className="border px-4 py-2 rounded-lg bg-orange-500 text-white hover:bg-orange-600" onClick={() => downloadCSV(rows)}>
             Download Data
           </button>
 
-          <button onClick={() => setLastWeek(setFromDate, setToDate)} className="border px-4 py-2 rounded-lg bg-orange-500 text-white">
+          <button onClick={setLastWeek} className="border px-4 py-2 rounded-lg bg-orange-500 text-white hover:bg-orange-600">
             Last week
           </button>
 
-          <button onClick={() => setLastMonth(setFromDate, setToDate)} className="border px-4 py-2 rounded-lg bg-orange-500 text-white">
+          <button onClick={setLastMonth} className="border px-4 py-2 rounded-lg bg-orange-500 text-white hover:bg-orange-600">
             Last month
           </button>
         </div>
-        
       </div>
 
-      {/* 🟠 Table */}
-      <table className="w-full bg-white rounded-xl shadow">
-        <thead>
-          <tr className="bg-gray-100 text-left text-gray-700">
-            <th className="py-3 px-4">Date</th>
-            <th className="py-3 px-4">NECC Rate</th>
-            <th className="py-3 px-4">Remarks</th>
-            {showEditColumn && <th className="py-3 px-4">Edit</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
-            <tr>
-              <td colSpan={showEditColumn ? 4 : 3} className="text-center py-6 text-gray-500">
-                No data available
-              </td>
+      {/* 🟠 Table with horizontal scroll */}
+      <div className="overflow-x-auto">
+        <table className="w-full bg-white rounded-xl shadow min-w-max">
+          <thead>
+            <tr className="bg-gray-100 text-left text-gray-700">
+              <th className="py-3 px-4 sticky left-0 bg-gray-100 z-10 min-w-[120px]">Date</th>
+              <th className="py-3 px-4 min-w-[150px]">NECC Rate</th>
+              <th className="py-3 px-4 min-w-[200px]">Remarks</th>
+              {showEditColumn && <th className="py-3 px-4 sticky right-0 bg-gray-100 z-10 min-w-[80px]">Edit</th>}
             </tr>
-          ) : (
-            rows.map((row, i) => (
-              <tr key={i} className="border-b">
-                <td className="py-3 px-4">{row.date}</td>
-                <td className="py-3 px-4">{row.rate}</td>
-                <td className="py-3 px-4">{row.remarks}</td>
-                {showEditColumn && typeof onEdit === 'function' && (
-                  <td className="py-3 px-4">
-                    <button className="text-blue-600 hover:underline text-xs font-medium" onClick={() => onEdit(row)}>Edit</button>
-                  </td>
-                )}
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={showEditColumn ? 4 : 3} className="text-center py-6 text-gray-500">
+                  No data available
+                </td>
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+            ) : (
+              rows.map((row, i) => (
+                <tr key={i} className="border-b hover:bg-gray-50 transition">
+                  <td className="py-3 px-4 sticky left-0 bg-white z-10">{formatDateDisplay(row.date)}</td>
+                  <td className="py-3 px-4">{row.rate}</td>
+                  <td className="py-3 px-4">{row.remarks}</td>
+                  {showEditColumn && typeof onEdit === 'function' && (
+                    <td className="py-3 px-4 sticky right-0 bg-white z-10">
+                      <button className="text-blue-600 hover:underline text-xs font-medium" onClick={() => onEdit(row)}>Edit</button>
+                    </td>
+                  )}
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

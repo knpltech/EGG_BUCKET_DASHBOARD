@@ -1,6 +1,6 @@
 const API_URL = import.meta.env.VITE_API_URL;
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Entryform from "../components/Entryform";
 import Rateanalytics from "../components/Rateanalytics";
 import Table from "../components/Table";
@@ -20,10 +20,33 @@ const Neccrate = () => {
 
   const blockedDates = rows.map((row) => row.date);
 
-  // Always show latest 6 entries
-  const filteredRows = [...rows]
-    .sort((a, b) => new Date(a.date) - new Date(b.date))
-    .slice(-6);
+  // Filter data based on date range or show latest 7 entries
+  const getFilteredRows = () => {
+    const sortedRows = [...rows].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // If both dates are selected, filter by range
+    if (fromDate && toDate) {
+      return sortedRows.filter(row => {
+        const rowDate = new Date(row.date);
+        return rowDate >= new Date(fromDate) && rowDate <= new Date(toDate);
+      });
+    }
+
+    // If only fromDate is selected
+    if (fromDate) {
+      return sortedRows.filter(row => new Date(row.date) >= new Date(fromDate));
+    }
+
+    // If only toDate is selected
+    if (toDate) {
+      return sortedRows.filter(row => new Date(row.date) <= new Date(toDate));
+    }
+
+    // No filter applied - show latest 7 entries
+    return sortedRows.slice(-7);
+  };
+
+  const filteredRows = getFilteredRows();
 
   /* ================= FETCH DATA ================= */
 
@@ -109,13 +132,18 @@ const Neccrate = () => {
         body: JSON.stringify(newRow),
       });
 
-      if (!response.ok) return;
+      if (!response.ok) {
+        alert("Failed to add entry");
+        return;
+      }
 
+      // Refetch all data after adding
       const res = await fetch(`${API_URL}/neccrate/all`);
       const data = await res.json();
-      setRows(Array.isArray(data) ? data : []);
+      setRows(Array.isArray(data) ? data.map(d => ({ id: d.id, ...d })) : []);
     } catch (err) {
       console.error("Error adding NECC rate:", err);
+      alert("Error adding entry");
     }
   };
 
@@ -134,7 +162,8 @@ const Neccrate = () => {
           setFromDate={setFromDate}
           setToDate={setToDate}
           onEdit={isAdmin ? handleEditClick : null}
-          showEditColumn={isAdmin} // Explicitly show Edit column for admin
+          showEditColumn={isAdmin}
+          allRows={rows} // Pass all rows for calendar dots
         />
       )}
 
@@ -187,13 +216,13 @@ const Neccrate = () => {
             <div className="flex justify-end gap-2 mt-6">
               <button
                 onClick={handleEditCancel}
-                className="px-4 py-2 bg-gray-200 rounded-lg text-xs"
+                className="px-4 py-2 bg-gray-200 rounded-lg text-xs hover:bg-gray-300"
               >
                 Cancel
               </button>
               <button
                 onClick={handleEditSave}
-                className="px-4 py-2 bg-orange-500 text-white rounded-lg text-xs"
+                className="px-4 py-2 bg-orange-500 text-white rounded-lg text-xs hover:bg-orange-600"
               >
                 Save
               </button>

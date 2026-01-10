@@ -1,11 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import * as XLSX from "xlsx";
 const API_URL = import.meta.env.VITE_API_URL;
 import { getRoleFlags } from "../utils/role";
 
 // src/pages/DigitalPayment.jsx
-
-// Edit modal state and handlers must be inside the component body, after imports
 
 const DEFAULT_OUTLETS = [
   "AECS Layout",
@@ -303,67 +301,64 @@ function BaseCalendar({ rows, selectedDate, onSelectDate, showDots }) {
 /* ----------------------------------------------- */
 
 export default function DigitalPayments() {
-  // Get user from localStorage and check admin
-  
   const { isAdmin, isViewer, isDataAgent } = getRoleFlags();
+
+  // Refs for click outside
+  const entryCalendarRef = useRef(null);
+  const filterFromRef = useRef(null);
+  const filterToRef = useRef(null);
 
   // --- Edit Modal State ---
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editRow, setEditRow] = useState({});
   const [editValues, setEditValues] = useState({});
 
-  // Open modal and set values for editing
-  const handleEditClick = (row) => {
-    setEditRow(row);
-    setEditValues({ ...(row.outlets || {}) });
-    setEditModalOpen(true);
-  };
-
-  // Handle value change in modal
-  const handleEditValueChange = (area, value) => {
-    setEditValues((prev) => ({ ...prev, [area]: value }));
-  };
-
-  // Cancel edit
-  const handleEditCancel = () => {
-    setEditModalOpen(false);
-    setEditRow({});
-    setEditValues({});
-  };
-
-  // Save edit
-  const handleEditSave = async () => {
-    if (!editRow.id) return;
-    const updatedOutlets = {};
-    outlets.forEach((o) => {
-      const area = o.area || o;
-      updatedOutlets[area] = Number(editValues[area]) || 0;
-    });
-    try {
-      const response = await fetch(`${API_URL}/digital-payments/${editRow.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: editRow.date, outlets: updatedOutlets }),
-      });
-      if (!response.ok) {
-        alert("Failed to update entry");
-        return;
-      }
-      // Refetch rows after update
-      const res = await fetch(`${API_URL}/digital-payments/all`);
-      const data = await res.json();
-      setRows(Array.isArray(data) ? data : []);
-      setEditModalOpen(false);
-      setEditRow({});
-      setEditValues({});
-    } catch (err) {
-      alert("Error updating entry");
-    }
-  };
-
   const [rows, setRows] = useState([]);
   const [outlets, setOutlets] = useState(DEFAULT_OUTLETS);
+  const [isLoaded, setIsLoaded] = useState(false);
 
+  const [filterFrom, setFilterFrom] = useState("");
+  const [filterTo, setFilterTo] = useState("");
+
+  const [entryDate, setEntryDate] = useState("");
+  const [entryValues, setEntryValues] = useState(() => {
+    const initial = {};
+    DEFAULT_OUTLETS.forEach((area) => {
+      initial[area] = "";
+    });
+    return initial;
+  });
+
+  const [hasEntry, setHasEntry] = useState(false);
+  const [entryTotal, setEntryTotal] = useState(0);
+
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+
+  // Calendar open states
+  const [isEntryCalendarOpen, setIsEntryCalendarOpen] = useState(false);
+  const [isFilterFromOpen, setIsFilterFromOpen] = useState(false);
+  const [isFilterToOpen, setIsFilterToOpen] = useState(false);
+
+  // Click outside handlers
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (entryCalendarRef.current && !entryCalendarRef.current.contains(event.target)) {
+        setIsEntryCalendarOpen(false);
+      }
+      if (filterFromRef.current && !filterFromRef.current.contains(event.target)) {
+        setIsFilterFromOpen(false);
+      }
+      if (filterToRef.current && !filterToRef.current.contains(event.target)) {
+        setIsFilterToOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Load outlets
   useEffect(() => {
     const loadOutletsFromLocal = () => {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -381,16 +376,15 @@ export default function DigitalPayments() {
     loadOutletsFromLocal();
   }, []);
 
-  const [isLoaded, setIsLoaded] = useState(false);
-
   // Fetch digital payments from backend
   useEffect(() => {
     const fetchPayments = async () => {
       try {
         const res = await fetch(`${API_URL}/digital-payments/all`);
         const data = await res.json();
-        setRows(Array.isArray(data) ? data : []);
-      } catch {
+        setRows(Array.isArray(data) ? data.map(d => ({ id: d.id || d._id, ...d })) : []);
+      } catch (err) {
+        console.error("Error fetching payments:", err);
         setRows([]);
       }
       setIsLoaded(true);
@@ -398,7 +392,7 @@ export default function DigitalPayments() {
     fetchPayments();
   }, []);
 
-  // If outlets change, remap existing rows so they include all current outlets (missing ones filled with 0) and totals recalculated
+  // Remap rows when outlets change
   useEffect(() => {
     if (!Array.isArray(outlets) || outlets.length === 0) return;
     
@@ -414,7 +408,6 @@ export default function DigitalPayments() {
       })
     );
 
-    // Also update entry values if currently selected date exists in rows
     if (entryDate) {
       const existing = rows.find((r) => r.date === entryDate);
       if (!existing) {
@@ -430,32 +423,7 @@ export default function DigitalPayments() {
     }
   }, [outlets]);
 
-  const [filterFrom, setFilterFrom] = useState("");
-  const [filterTo, setFilterTo] = useState("");
-
-  const [entryDate, setEntryDate] = useState("");
-  const [entryValues, setEntryValues] = useState(() => {
-    const initial = {};
-    // Initialize with default outlets to avoid undefined values
-    DEFAULT_OUTLETS.forEach((area) => {
-      initial[area] = "";
-    });
-    return initial;
-  });
-
-  // Whether the currently selected entry date already has a saved row
-  const [hasEntry, setHasEntry] = useState(false);
-  const [entryTotal, setEntryTotal] = useState(0);
-
-  const [page, setPage] = useState(1);
-  const pageSize = 10;
-
-  // Calendar open states
-  const [isEntryCalendarOpen, setIsEntryCalendarOpen] = useState(false);
-  const [isFilterFromOpen, setIsFilterFromOpen] = useState(false);
-  const [isFilterToOpen, setIsFilterToOpen] = useState(false);
-
-  // Load entry values and set locked status when entryDate or rows change
+  // Load entry values when date changes
   useEffect(() => {
     if (!entryDate) {
       setHasEntry(false);
@@ -490,19 +458,30 @@ export default function DigitalPayments() {
     }
   }, [entryDate, rows, outlets]);
 
-  // Always show the latest 6 entries, regardless of date
+  // Filter and show latest 7 entries
   const filteredRows = useMemo(() => {
-    let filtered = [...rows];
-    // Optionally, apply additional filters (date range)
-    let from = filterFrom ? new Date(filterFrom) : null;
-    let to = filterTo ? new Date(filterTo) : null;
-    if (from && to)
-      filtered = filtered.filter((row) => {
-        const d = new Date(row.date);
-        return d >= from && d <= to;
+    const sortedRows = [...rows].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // If both dates are selected, filter by range
+    if (filterFrom && filterTo) {
+      return sortedRows.filter((row) => {
+        const rowDate = new Date(row.date);
+        return rowDate >= new Date(filterFrom) && rowDate <= new Date(filterTo);
       });
-    // Sort by date ascending, then take the last 6
-    return filtered.sort((a, b) => new Date(a.date) - new Date(b.date)).slice(-6);
+    }
+
+    // If only filterFrom is selected
+    if (filterFrom) {
+      return sortedRows.filter((row) => new Date(row.date) >= new Date(filterFrom));
+    }
+
+    // If only filterTo is selected
+    if (filterTo) {
+      return sortedRows.filter((row) => new Date(row.date) <= new Date(filterTo));
+    }
+
+    // No filter applied - show latest 7 entries
+    return sortedRows.slice(-7);
   }, [rows, filterFrom, filterTo]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
@@ -544,7 +523,6 @@ export default function DigitalPayments() {
       return;
     }
 
-    // Block if an entry for the date already exists
     if (rows.some((r) => r.date === entryDate)) {
       return;
     }
@@ -555,7 +533,6 @@ export default function DigitalPayments() {
       outletAmounts[area] = Number(entryValues[area]) || 0;
     });
 
-    // Save to backend
     try {
       const response = await fetch(`${API_URL}/digital-payments/add`, {
         method: "POST",
@@ -564,17 +541,16 @@ export default function DigitalPayments() {
       });
 
       if (!response.ok) {
-        console.error('Failed to add payment');
+        alert('Failed to add payment');
         return;
       }
 
-      // Refetch from backend after adding
+      // Refetch all data
       const res = await fetch(`${API_URL}/digital-payments/all`);
       const data = await res.json();
-      const newRows = Array.isArray(data) ? data : [];
-      setRows(newRows);
+      setRows(Array.isArray(data) ? data.map(d => ({ id: d.id || d._id, ...d })) : []);
 
-      // Reset form after successful save
+      // Reset form
       setEntryDate("");
       setEntryValues(() => {
         const reset = {};
@@ -588,13 +564,69 @@ export default function DigitalPayments() {
       setPage(1);
     } catch (err) {
       console.error('Error adding payment:', err);
+      alert('Error adding payment');
     }
   };
 
-  const totalRecordsLabel = `${currentPageRows.length} of ${rows.length} records`;
+  // Edit handlers
+  const handleEditClick = (row) => {
+    const fullRow = { ...row };
+    if (!row.id) {
+      const found = rows.find(r => r.date === row.date);
+      if (found?.id) fullRow.id = found.id;
+    }
+    setEditRow(fullRow);
+    setEditValues({ ...(row.outlets || {}) });
+    setEditModalOpen(true);
+  };
+
+  const handleEditValueChange = (area, value) => {
+    setEditValues((prev) => ({ ...prev, [area]: value }));
+  };
+
+  const handleEditCancel = () => {
+    setEditModalOpen(false);
+    setEditRow({});
+    setEditValues({});
+  };
+
+  const handleEditSave = async () => {
+    if (!editRow.id) {
+      alert("No ID found. Cannot update.");
+      return;
+    }
+    const updatedOutlets = {};
+    outlets.forEach((o) => {
+      const area = o.area || o;
+      updatedOutlets[area] = Number(editValues[area]) || 0;
+    });
+    try {
+      const response = await fetch(`${API_URL}/digital-payments/${editRow.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: editRow.date, outlets: updatedOutlets }),
+      });
+      if (!response.ok) {
+        alert("Failed to update entry");
+        return;
+      }
+      // Refetch
+      const res = await fetch(`${API_URL}/digital-payments/all`);
+      const data = await res.json();
+      setRows(Array.isArray(data) ? data.map(d => ({ id: d.id || d._id, ...d })) : []);
+      setEditModalOpen(false);
+      setEditRow({});
+      setEditValues({});
+    } catch (err) {
+      alert("Error updating entry: " + err.message);
+    }
+  };
+
+  const totalRecordsLabel = `${filteredRows.length} of ${rows.length} records`;
 
   const downloadExcel = () => {
     if (!filteredRows || filteredRows.length === 0) {
+      alert("No data available");
       return;
     }
 
@@ -630,12 +662,11 @@ export default function DigitalPayments() {
         </div>
 
         <button
-  onClick={downloadExcel}
-  className="inline-flex items-center rounded-full bg-[#ff7518] px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90"
->
-  Download Data
-</button>
-
+          onClick={downloadExcel}
+          className="inline-flex items-center rounded-full bg-[#ff7518] px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90"
+        >
+          Download Data
+        </button>
       </div>
 
       {/* Filters row */}
@@ -646,7 +677,7 @@ export default function DigitalPayments() {
             <label className="text-xs md:text-sm font-medium text-gray-700">
               Date From
             </label>
-            <div className="relative">
+            <div className="relative z-30" ref={filterFromRef}>
               <button
                 type="button"
                 onClick={() => {
@@ -661,7 +692,7 @@ export default function DigitalPayments() {
                 <CalendarIcon className="h-4 w-4 text-gray-500" />
               </button>
               {isFilterFromOpen && (
-                <div className="absolute left-0 top-full z-30 mt-2">
+                <div className="absolute left-0 top-full z-50 mt-2">
                   <BaseCalendar
                     rows={[]}
                     selectedDate={filterFrom}
@@ -682,7 +713,7 @@ export default function DigitalPayments() {
             <label className="text-xs md:text-sm font-medium text-gray-700">
               Date To
             </label>
-            <div className="relative">
+            <div className="relative z-30" ref={filterToRef}>
               <button
                 type="button"
                 onClick={() => {
@@ -697,7 +728,7 @@ export default function DigitalPayments() {
                 <CalendarIcon className="h-4 w-4 text-gray-500" />
               </button>
               {isFilterToOpen && (
-                <div className="absolute left-0 top-full z-30 mt-2">
+                <div className="absolute left-0 top-full z-50 mt-2">
                   <BaseCalendar
                     rows={[]}
                     selectedDate={filterTo}
@@ -758,112 +789,80 @@ export default function DigitalPayments() {
               </tr>
             </thead>
             <tbody>
-              {currentPageRows.map((row, idx) => (
-                <tr
-                  key={row.id}
-                  className={`text-xs text-gray-700 md:text-sm ${
-                    idx % 2 === 0 ? "bg-white" : "bg-gray-50/60"
-                  }`}
-                >
-                  <td className="whitespace-nowrap px-4 py-3">
-                    {formatDisplayDate(row.date)}
+              {currentPageRows.length === 0 ? (
+                <tr>
+                  <td colSpan={outlets.length + 2 + (isAdmin ? 1 : 0)} className="text-center py-6 text-gray-500">
+                    No data available
                   </td>
-                  {outlets.map((outlet) => {
-                    const area = outlet.area || outlet;
-                    return (
-                      <td
-                        key={area}
-                        className="whitespace-nowrap px-4 py-3"
-                      >
-                        {formatCurrencyTwoDecimals(row.outlets[area])}
-                      </td>
-                    );
-                  })}
-                  <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">
-                    {formatCurrencyTwoDecimals(
-                      typeof row.totalAmount === 'number'
-                        ? row.totalAmount
-                        : Object.values(row.outlets || {}).reduce((sum, v) => sum + (Number(v) || 0), 0)
-                    )}
-                  </td>
-                  {isAdmin && (
-                    <td className="whitespace-nowrap px-4 py-3 text-right">
-                      {isAdmin ? (
+                </tr>
+              ) : (
+                currentPageRows.map((row, idx) => (
+                  <tr
+                    key={row.id}
+                    className={`text-xs text-gray-700 md:text-sm ${
+                      idx % 2 === 0 ? "bg-white" : "bg-gray-50/60"
+                    }`}
+                  >
+                    <td className="whitespace-nowrap px-4 py-3">
+                      {formatDisplayDate(row.date)}
+                    </td>
+                    {outlets.map((outlet) => {
+                      const area = outlet.area || outlet;
+                      return (
+                        <td
+                          key={area}
+                          className="whitespace-nowrap px-4 py-3"
+                        >
+                          {formatCurrencyTwoDecimals(row.outlets[area])}
+                        </td>
+                      );
+                    })}
+                    <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">
+                      {formatCurrencyTwoDecimals(
+                        typeof row.totalAmount === 'number'
+                          ? row.totalAmount
+                          : Object.values(row.outlets || {}).reduce((sum, v) => sum + (Number(v) || 0), 0)
+                      )}
+                    </td>
+                    {isAdmin && (
+                      <td className="whitespace-nowrap px-4 py-3 text-right">
                         <button
                           className="text-blue-600 hover:underline text-xs font-medium"
                           onClick={() => handleEditClick(row)}
                         >
                           Edit
                         </button>
-                      ) : (
-                        <span className="text-gray-400 text-xs font-medium flex items-center gap-1">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="inline h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 11c0-1.104.896-2 2-2s2 .896 2 2v2m-4 0v2m0 0h4m-4 0H8m4-6V7a4 4 0 10-8 0v4a4 4 0 008 0z" /></svg>
-                          Locked
-                        </span>
-                      )}
-                    </td>
-                  )}
-                      {/* Edit Modal */}
-                      {editModalOpen && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
-                          <div className="bg-white rounded-xl shadow-lg p-6 min-w-[320px] max-w-full">
-                            <h2 className="text-lg font-semibold mb-4">Edit Digital Payment ({formatDisplayDate(editRow.date)})</h2>
-                            <div className="space-y-3">
-                              {outlets.map((outlet) => {
-                                const area = outlet.area || outlet;
-                                return (
-                                  <div key={area} className="flex items-center gap-2">
-                                    <label className="w-32 text-xs font-medium text-gray-700">{area.toUpperCase()}</label>
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      step="0.01"
-                                      value={editValues[area] || ""}
-                                      onChange={e => handleEditValueChange(area, e.target.value)}
-                                      className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400"
-                                    />
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            <div className="flex justify-end gap-2 mt-6">
-                              <button
-                                onClick={handleEditCancel}
-                                className="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 text-xs font-medium hover:bg-gray-300"
-                              >Cancel</button>
-                              <button
-                                onClick={handleEditSave}
-                                className="px-4 py-2 rounded-lg bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600"
-                              >Save</button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                </tr>
-              ))}
+                      </td>
+                    )}
+                  </tr>
+                ))
+              )}
               {/* Grand Total Row */}
-              <tr className="bg-orange-50 font-semibold text-orange-700">
-                <td className="whitespace-nowrap px-4 py-3">Grand Total</td>
-                {outlets.map((outlet) => {
-                  const area = outlet.area || outlet;
-                  const total = rows.reduce((sum, r) => sum + (r.outlets && r.outlets[area] ? Number(r.outlets[area]) : 0), 0);
-                  return (
-                    <td key={area} className="whitespace-nowrap px-4 py-3">{formatCurrencyTwoDecimals(total)}</td>
-                  );
-                })}
-                <td className="whitespace-nowrap px-4 py-3 text-right">
-                  {formatCurrencyTwoDecimals(
-                    rows.reduce(
-                      (sum, r) => sum + (
-                        typeof r.totalAmount === 'number'
-                          ? r.totalAmount
-                          : Object.values(r.outlets || {}).reduce((s, v) => s + (Number(v) || 0), 0)
-                      ),
-                      0
-                    )
-                  )}
-                </td>
-              </tr>
+              {filteredRows.length > 0 && (
+                <tr className="bg-orange-50 font-semibold text-orange-700">
+                  <td className="whitespace-nowrap px-4 py-3">Grand Total</td>
+                  {outlets.map((outlet) => {
+                    const area = outlet.area || outlet;
+                    const total = filteredRows.reduce((sum, r) => sum + (r.outlets && r.outlets[area] ? Number(r.outlets[area]) : 0), 0);
+                    return (
+                      <td key={area} className="whitespace-nowrap px-4 py-3">{formatCurrencyTwoDecimals(total)}</td>
+                    );
+                  })}
+                  <td className="whitespace-nowrap px-4 py-3 text-right">
+                    {formatCurrencyTwoDecimals(
+                      filteredRows.reduce(
+                        (sum, r) => sum + (
+                          typeof r.totalAmount === 'number'
+                            ? r.totalAmount
+                            : Object.values(r.outlets || {}).reduce((s, v) => s + (Number(v) || 0), 0)
+                        ),
+                        0
+                      )
+                    )}
+                  </td>
+                  {isAdmin && <td className="whitespace-nowrap px-4 py-3"></td>}
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -898,6 +897,43 @@ export default function DigitalPayments() {
           </div>
         </div>
       </div>
+
+      {/* Edit Modal */}
+      {editModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
+          <div className="bg-white rounded-xl shadow-lg p-6 min-w-[320px] max-w-full max-h-[80vh] overflow-y-auto">
+            <h2 className="text-lg font-semibold mb-4">Edit Digital Payment ({formatDisplayDate(editRow.date)})</h2>
+            <div className="space-y-3">
+              {outlets.map((outlet) => {
+                const area = outlet.area || outlet;
+                return (
+                  <div key={area} className="flex items-center gap-2">
+                    <label className="w-32 text-xs font-medium text-gray-700">{area.toUpperCase()}</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={editValues[area] || ""}
+                      onChange={e => handleEditValueChange(area, e.target.value)}
+                      className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                onClick={handleEditCancel}
+                className="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 text-xs font-medium hover:bg-gray-300"
+              >Cancel</button>
+              <button
+                onClick={handleEditSave}
+                className="px-4 py-2 rounded-lg bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600"
+              >Save</button>
+            </div>
+          </div>
+        </div>
+      )}
       </>
       )}
 
@@ -919,12 +955,12 @@ export default function DigitalPayments() {
         </div>
 
         <form onSubmit={handleSaveEntry} className="space-y-5">
-          {/* Select Date with custom calendar (with dots) */}
+          {/* Select Date */}
           <div className="grid gap-4 md:grid-cols-[160px,1fr] md:items-center">
             <label className="text-xs font-medium text-gray-700 md:text-sm">
               Select Date
             </label>
-            <div className="relative w-full">
+            <div className="relative w-full z-30" ref={entryCalendarRef}>
               <button
                 type="button"
                 onClick={() =>
@@ -952,13 +988,12 @@ export default function DigitalPayments() {
                 </div>
               )}
               {isEntryCalendarOpen && (
-                <div className="absolute right-0 bottom-full z-30 mb-2">
+                <div className="absolute right-0 bottom-full z-50 mb-2">
                   <BaseCalendar
                     rows={rows}
                     selectedDate={entryDate}
                     onSelectDate={(iso) => {
                       setEntryDate(iso);
-                      // Auto-load existing entry data if it exists
                       const existingEntry = rows.find((row) => row.date === iso);
                       if (existingEntry) {
                         setEntryValues(existingEntry.outlets);
@@ -1013,7 +1048,7 @@ export default function DigitalPayments() {
             })}
           </div>
 
-          {/* Save button + note */}
+          {/* Save button */}
           <div className="flex flex-col items-center gap-2 pt-4">
             <button
               type="submit"

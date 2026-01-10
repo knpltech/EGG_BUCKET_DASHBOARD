@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 const MONTHS = [
   "January","February","March","April","May","June",
@@ -224,6 +224,21 @@ const Entryform = ({ addRow, blockedDates, rows }) => {
   const [remarks, setRemarks] = useState("");
   const [open, setOpen] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
+  const calendarRef = useRef(null);
+
+  // Click outside to close calendar
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (calendarRef.current && !calendarRef.current.contains(event.target)) {
+        setOpen(false);
+      }
+    };
+
+    if (open) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [open]);
 
   useEffect(() => {
     if (!date) {
@@ -260,22 +275,24 @@ const Entryform = ({ addRow, blockedDates, rows }) => {
       <div className="bg-white shadow rounded-xl p-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-center">
           {/* DATE (CUSTOM CALENDAR) */}
-          <div className="relative">
+          <div className="relative z-30" ref={calendarRef}>
             <p className="mb-2 text-xs font-medium text-gray-700">Date</p>
-            <button
-              type="button"
-              onClick={() => setOpen((o) => !o)}
-              className="flex w-full items-center justify-between rounded-xl border border-gray-200 bg-eggBg px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm"
-            >
-              <span>
-                {date ? formatDateDMY(date) : "dd-mm-yyyy"}
-              </span>
-              <CalendarIcon className="h-4 w-4 text-gray-500" />
-            </button>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setOpen((o) => !o)}
+                className="flex w-full items-center justify-between rounded-xl border border-gray-200 bg-eggBg px-3 py-2 pr-10 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm"
+              >
+                <span>
+                  {date ? formatDateDMY(date) : "dd-mm-yyyy"}
+                </span>
+              </button>
+              <CalendarIcon className="h-4 w-4 text-gray-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
 
-            {/* Calendar opens upwards - always enabled */}
+            {/* Calendar opens upwards */}
             {open && (
-              <div className="absolute left-0 right-0 bottom-full mb-2 z-30">
+              <div className="absolute left-0 right-0 bottom-full mb-2 z-50">
                 <BaseCalendar
                   rows={rows}
                   selectedDate={date}
@@ -317,7 +334,7 @@ const Entryform = ({ addRow, blockedDates, rows }) => {
             />
           </div>
 
-          {/* SAVE BUTTON - lock if entry exists */}
+          {/* SAVE BUTTON */}
           <div className="md:ml-auto flex items-end h-full">
             <button
               onClick={handleSubmit}

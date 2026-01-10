@@ -90,7 +90,6 @@ function DamageEntryIcon({ className = "" }) {
   );
 }
 
-/* BaseCalendar component remains unchanged (same as in your original code) */
 function BaseCalendar({ rows, selectedDate, onSelectDate, showDots }) {
   const today = new Date();
   const initialDate = selectedDate ? new Date(selectedDate) : today;
@@ -262,108 +261,22 @@ function BaseCalendar({ rows, selectedDate, onSelectDate, showDots }) {
 }
 
 export default function DailyDamages() {
-    // Get user from localStorage and check admin
-    const {isAdmin, isViewer, isDataAgent}= getRoleFlags();
+  const {isAdmin, isViewer, isDataAgent}= getRoleFlags();
+  const { damages, setDamages, addDamage } = useDamage();
 
-    // Edit modal state
-    const [editModalOpen, setEditModalOpen] = useState(false);
-    const [editRow, setEditRow] = useState({});
-    const [editValues, setEditValues] = useState({});
+  // Edit modal state
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editRow, setEditRow] = useState({});
+  const [editValues, setEditValues] = useState({});
 
-    // Open modal and set values for editing
-    const handleEditClick = (row) => {
-      // Ensure row.id is present
-      const fullRow = { ...row };
-      if (!row.id) {
-        // Try to find id from damages context
-        const found = damages.find(d => d.date === row.date);
-        if (found && found.id) fullRow.id = found.id;
-      }
-      setEditRow(fullRow);
-      const vals = {};
-      outlets.forEach((name) => {
-        vals[name] = row[name] ?? 0;
-      });
-      setEditValues(vals);
-      setEditModalOpen(true);
-    };
+  // Refs for click outside detection
+  const fromCalendarRef = useRef(null);
+  const toCalendarRef = useRef(null);
+  const entryCalendarRef = useRef(null);
 
-    // Handle value change in modal
-    const handleEditValueChange = (name, value) => {
-      setEditValues((prev) => ({ ...prev, [name]: Number(value) }));
-    };
-
-    // Cancel edit
-    const handleEditCancel = () => {
-      setEditModalOpen(false);
-      setEditRow({});
-      setEditValues({});
-    };
-
-    // Save edit
-    const handleEditSave = async () => {
-      console.log("Save clicked", editRow);
-      if (!editRow.id) {
-        alert("No ID found for entry. Cannot update.");
-        return;
-      }
-      const updatedDamages = { ...editValues };
-      const total = outlets.reduce((s, name) => s + Number(updatedDamages[name] || 0), 0);
-      try {
-        console.log("PATCH to", `${API_URL}/daily-damage/${editRow.id}`);
-        const response = await fetch(`${API_URL}/daily-damage/${editRow.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ date: editRow.date, damages: updatedDamages, total }),
-        });
-        console.log("PATCH response", response);
-        if (!response.ok) {
-          alert("Failed to update entry: " + response.status);
-          return;
-        }
-        // Refetch damages after update
-        const res = await fetch(`${API_URL}/daily-damage/all`);
-        const data = await res.json();
-        if (Array.isArray(data)) {
-          setDamages(data.map(d => ({
-            id: d.id,
-            date: d.date,
-            ...((d.damages && typeof d.damages === 'object') ? d.damages : {}),
-            total: d.total || 0
-          })));
-        }
-        setEditModalOpen(false);
-        setEditRow({});
-        setEditValues({});
-      } catch (err) {
-        alert("Error updating entry: " + err.message);
-        console.error("PATCH error", err);
-      }
-    };
-  const { damages, setDamages, addDamage, remapDamagesForOutlets } = useDamage();
-    // Fetch damages from backend on mount (after login)
-    useEffect(() => {
-      const fetchDamages = async () => {
-        try {
-          const res = await fetch(`${API_URL}/daily-damage/all`);
-          const data = await res.json();
-          if (Array.isArray(data)) {
-            // Always include id in damages context
-            setDamages(data.map(d => ({
-              id: d.id,
-              date: d.date,
-              ...((d.damages && typeof d.damages === 'object') ? d.damages : {}),
-              total: d.total || 0
-            })));
-          }
-        } catch (err) {
-          // ignore fetch error
-        }
-      };
-      fetchDamages();
-    }, [setDamages]);
   const [isFromCalendarOpen, setIsFromCalendarOpen] = useState(false);
   const [isToCalendarOpen, setIsToCalendarOpen] = useState(false);
+  const [isEntryCalendarOpen, setIsEntryCalendarOpen] = useState(false);
 
   const DEFAULT_OUTLETS = ["AECS Layout", "Bandepalya", "Hosa Road", "Singasandra", "Kudlu Gate"];
   const STORAGE_KEY = "egg_outlets_v1";
@@ -387,6 +300,50 @@ export default function DailyDamages() {
   }, {});
 
   const [form, setForm] = useState(initialForm);
+  const [entryDate, setEntryDate] = useState(new Date().toISOString().split("T")[0]);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [hasEntry, setHasEntry] = useState(false);
+  const [entryTotal, setEntryTotal] = useState(0);
+
+  // Click outside handler
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (fromCalendarRef.current && !fromCalendarRef.current.contains(event.target)) {
+        setIsFromCalendarOpen(false);
+      }
+      if (toCalendarRef.current && !toCalendarRef.current.contains(event.target)) {
+        setIsToCalendarOpen(false);
+      }
+      if (entryCalendarRef.current && !entryCalendarRef.current.contains(event.target)) {
+        setIsEntryCalendarOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Fetch damages from backend on mount
+  useEffect(() => {
+    const fetchDamages = async () => {
+      try {
+        const res = await fetch(`${API_URL}/daily-damage/all`);
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setDamages(data.map(d => ({
+            id: d.id,
+            date: d.date,
+            ...((d.damages && typeof d.damages === 'object') ? d.damages : {}),
+            total: d.total || 0
+          })));
+        }
+      } catch (err) {
+        // ignore fetch error
+      }
+    };
+    fetchDamages();
+  }, [setDamages]);
 
   useEffect(() => {
     setForm(() => {
@@ -422,15 +379,6 @@ export default function DailyDamages() {
       window.removeEventListener('storage', onStorage);
     };
   }, []);
-
-  const [entryDate, setEntryDate] = useState(new Date().toISOString().split("T")[0]);
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
-
-  const [isEntryCalendarOpen, setIsEntryCalendarOpen] = useState(false);
-
-  const [hasEntry, setHasEntry] = useState(false);
-  const [entryTotal, setEntryTotal] = useState(0);
 
   useEffect(() => {
     const existing = damages.find((d) => d.date === entryDate);
@@ -470,6 +418,66 @@ export default function DailyDamages() {
     setIsEntryCalendarOpen(false);
   };
 
+  const handleEditClick = (row) => {
+    const fullRow = { ...row };
+    if (!row.id) {
+      const found = damages.find(d => d.date === row.date);
+      if (found && found.id) fullRow.id = found.id;
+    }
+    setEditRow(fullRow);
+    const vals = {};
+    outlets.forEach((name) => {
+      vals[name] = row[name] ?? 0;
+    });
+    setEditValues(vals);
+    setEditModalOpen(true);
+  };
+
+  const handleEditValueChange = (name, value) => {
+    setEditValues((prev) => ({ ...prev, [name]: Number(value) }));
+  };
+
+  const handleEditCancel = () => {
+    setEditModalOpen(false);
+    setEditRow({});
+    setEditValues({});
+  };
+
+  const handleEditSave = async () => {
+    if (!editRow.id) {
+      alert("No ID found for entry. Cannot update.");
+      return;
+    }
+    const updatedDamages = { ...editValues };
+    const total = outlets.reduce((s, name) => s + Number(updatedDamages[name] || 0), 0);
+    try {
+      const response = await fetch(`${API_URL}/daily-damage/${editRow.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: editRow.date, damages: updatedDamages, total }),
+      });
+      if (!response.ok) {
+        alert("Failed to update entry: " + response.status);
+        return;
+      }
+      const res = await fetch(`${API_URL}/daily-damage/all`);
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setDamages(data.map(d => ({
+          id: d.id,
+          date: d.date,
+          ...((d.damages && typeof d.damages === 'object') ? d.damages : {}),
+          total: d.total || 0
+        })));
+      }
+      setEditModalOpen(false);
+      setEditRow({});
+      setEditValues({});
+    } catch (err) {
+      alert("Error updating entry: " + err.message);
+    }
+  };
+
   const save = async () => {
     const total = outlets.reduce((s, name) => s + Number(form[name] || 0), 0);
     const success = addDamage({
@@ -481,7 +489,6 @@ export default function DailyDamages() {
       alert(`Entry for ${entryDate} already exists and cannot be modified.`);
       return;
     }
-    // Save to backend for persistence
     try {
       await fetch(`${API_URL}/daily-damage/add-daily-damage`, {
         method: "POST",
@@ -489,19 +496,38 @@ export default function DailyDamages() {
         body: JSON.stringify({ date: entryDate, damages: { ...form }, total }),
       });
     } catch (err) {
-      // Ignore backend error for now, since local state is updated
+      // Ignore backend error
     }
     alert(`Saved entry for ${entryDate}`);
     setHasEntry(true);
     setEntryTotal(total);
   };
 
-  // Always show the latest 6 entries, sorted descending by date
-  // Always show the latest 6 entries, sorted ascending by date (past to present), and remove duplicates by date
-  const sortedUnique = Array.from(
-    new Map([...damages].sort((a, b) => new Date(a.date) - new Date(b.date)).map(d => [d.date, d])).values()
-  );
-  const filteredData = sortedUnique.slice(-6);
+  // Filter data based on date range
+  const getFilteredData = () => {
+    const sortedUnique = Array.from(
+      new Map([...damages].sort((a, b) => new Date(a.date) - new Date(b.date)).map(d => [d.date, d])).values()
+    );
+
+    if (!fromDate && !toDate) {
+      // Show last 6 entries if no filter
+      return sortedUnique.slice(-6);
+    }
+
+    let filtered = sortedUnique;
+
+    if (fromDate) {
+      filtered = filtered.filter(d => new Date(d.date) >= new Date(fromDate));
+    }
+
+    if (toDate) {
+      filtered = filtered.filter(d => new Date(d.date) <= new Date(toDate));
+    }
+
+    return filtered;
+  };
+
+  const filteredData = getFilteredData();
 
   const downloadExcel = () => {
     if (filteredData.length === 0) {
@@ -516,292 +542,294 @@ export default function DailyDamages() {
 
   return (
     <div className="min-h-screen bg-eggBg px-4 py-6 md:px-8 flex flex-col">
-      {/* Header */}
       {(isAdmin || isViewer || isDataAgent) && (
         <>
-      <div className="max-w-7xl mx-auto w-full mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-semibold text-gray-900">
-            Daily Damages Report
-          </h1>
-          <p className="mt-1 text-sm md:text-base text-gray-500">
-            Track egg damages per outlet and date.
-          </p>
-        </div>
-      </div>
-
-      {/* Download Report - moved to top */}
-      <div className="bg-white p-6 rounded-xl shadow mb-8">
-        <h2 className="text-xl font-semibold mb-4">Download Report</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
-          <div className="relative">
-            <label className="block text-sm text-gray-600 mb-1">
-              From Date
-            </label>
-            <button
-              type="button"
-              onClick={() => setIsFromCalendarOpen((o) => !o)}
-              className="w-full rounded-lg border border-gray-200 bg-eggBg px-4 py-2 text-left text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
-            >
-              {fromDate ? formatDateDMY(fromDate) : "dd-mm-yyyy"}
-              <CalendarIcon className="h-5 w-5 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" />
-            </button>
-            {isFromCalendarOpen && (
-              <div className="absolute z-10 mt-2">
-                <BaseCalendar
-                  rows={damages}
-                  selectedDate={fromDate}
-                  onSelectDate={(iso) => {
-                    setFromDate(iso);
-                    setIsFromCalendarOpen(false);
-                  }}
-                  showDots={false}
-                />
-              </div>
-            )}
-          </div>
-          <div className="relative">
-            <label className="block text-sm text-gray-600 mb-1">
-              To Date
-            </label>
-            <button
-              type="button"
-              onClick={() => setIsToCalendarOpen((o) => !o)}
-              className="w-full rounded-lg border border-gray-200 bg-eggBg px-4 py-2 text-left text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
-            >
-              {toDate ? formatDateDMY(toDate) : "dd-mm-yyyy"}
-              <CalendarIcon className="h-5 w-5 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" />
-            </button>
-            {isToCalendarOpen && (
-              <div className="absolute z-10 mt-2">
-                <BaseCalendar
-                  rows={damages}
-                  selectedDate={toDate}
-                  onSelectDate={(iso) => {
-                    setToDate(iso);
-                    setIsToCalendarOpen(false);
-                  }}
-                  showDots={false}
-                />
-              </div>
-            )}
-          </div>
-          <button
-            onClick={downloadExcel}
-            className="mt-4 sm:mt-0 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 px-6 rounded-lg shadow"
-          >
-            Download Excel
-          </button>
-        </div>
-      </div>
-
-      {/* Data Table */}
-      <div className="bg-white p-6 rounded-xl shadow overflow-x-auto mb-8">
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="bg-orange-100 text-sm">
-              <th className="p-3 text-left w-40">Date</th>
-              {outlets.map((name) => (
-                <th key={name} className="p-3 text-center">{name}</th>
-              ))}
-              <th className="p-3 text-center font-semibold">Total</th>
-              {isAdmin && <th className="p-3 text-center">Edit</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {filteredData.map((d, i) => {
-              // Calculate total for this row if not present
-              const rowTotal = outlets.reduce((sum, name) => sum + Number(d[name] || 0), 0);
-              return (
-                <tr
-                  key={i}
-                  className="border-t text-sm hover:bg-gray-50 transition"
-                >
-                  <td className="p-3 text-left">{formatDateDisplay(d.date)}</td>
-                  {outlets.map((name) => (
-                    <td key={name} className="p-3 text-center">{d[name] ?? 0}</td>
-                  ))}
-                  <td className="p-3 text-center font-bold text-orange-600">
-                    {typeof d.total === 'number' ? d.total : rowTotal}
-                  </td>
-                  {isAdmin && (
-                    <td className="p-3 text-center">
-                      <button
-                        className="text-blue-600 hover:underline text-xs font-medium"
-                        onClick={() => handleEditClick(d)}
-                      >
-                        Edit
-                      </button>
-                    </td>
-                  )}
-                </tr>
-              );
-            })}
-            {/* Edit Modal */}
-            {editModalOpen && (
-              <tr>
-                <td colSpan={outlets.length + 2}>
-                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
-                    <div className="bg-white rounded-xl shadow-lg p-6 min-w-[320px] max-w-full">
-                      <h2 className="text-lg font-semibold mb-4">Edit Daily Damage ({formatDateDisplay(editRow.date)})</h2>
-                      <div className="space-y-3">
-                        {outlets.map((name) => (
-                          <div key={name} className="flex items-center gap-2">
-                            <label className="w-32 text-xs font-medium text-gray-700">{name}</label>
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={editValues[name] ?? 0}
-                              onChange={e => handleEditValueChange(name, e.target.value)}
-                              className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex justify-end gap-2 mt-6">
-                        <button
-                          onClick={handleEditCancel}
-                          className="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 text-xs font-medium hover:bg-gray-300"
-                        >Cancel</button>
-                        <button
-                          onClick={handleEditSave}
-                          className="px-4 py-2 rounded-lg bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600"
-                        >Save</button>
-                      </div>
-                    </div>
-                  </div>
-                </td>
-              </tr>
-            )}
-            {/* Grand Total Row */}
-            <tr className="bg-orange-50 font-semibold text-orange-700">
-              <td className="p-3 text-left">Grand Total</td>
-              {outlets.map((name) => {
-                const total = filteredData.reduce((sum, d) => sum + Number(d[name] || 0), 0);
-                return (
-                  <td key={name} className="p-3 text-center">{total}</td>
-                );
-              })}
-              <td className="p-3 text-center">{filteredData.reduce((sum, d) => sum + (typeof d.total === 'number' ? d.total : outlets.reduce((s, name) => s + Number(d[name] || 0), 0)), 0)}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      </>
-      )}
-
-      {/* Download Report section removed from center */}
-      {(isAdmin || isDataAgent) && (
-      
-      <div className="mt-8 rounded-2xl bg-eggWhite p-5 shadow-sm md:p-6">
-        <div className="mb-4 flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-100">
-            <DamageEntryIcon className="h-6 w-6" />
-          </div>
-          <div>
-            <h2 className="text-base font-semibold text-gray-900 md:text-lg">
-              Daily Damages Entry
-            </h2>
-            <p className="text-xs text-gray-500 md:text-sm">
-              Add new egg damage amounts for each outlet.
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-5">
-          {/* Select Date */}
-          <div className="grid gap-4 md:grid-cols-[160px,1fr] md:items-center">
-            <label className="text-xs font-medium text-gray-700 md:text-sm">
-              Select Date
-            </label>
-            <div className="relative w-full">
-              <button
-                type="button"
-                onClick={() => setIsEntryCalendarOpen((open) => !open)}
-                className="flex w-full items-center justify-between rounded-xl border border-gray-200 bg-eggBg px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm"
-              >
-                <span>
-                  {entryDate ? formatDateDMY(entryDate) : "dd-mm-yyyy"}
-                </span>
-                <CalendarIcon className="h-4 w-4 text-gray-500" />
-              </button>
-
-              {/* Locked indicator */}
-              {hasEntry && (
-                <div className="mt-2 flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-green-500" />
-                  <div className="text-xs font-medium text-green-700">
-                    Entry ({entryTotal}) • Locked
-                  </div>
-                </div>
-              )}
-
-              {/* Calendar dropdown */}
-              {isEntryCalendarOpen && (
-                <div className="absolute right-0 bottom-full z-30 mb-2">
-                  <BaseCalendar
-                    rows={damages}
-                    selectedDate={entryDate}
-                    onSelectDate={handleEntryDateSelect}
-                    showDots={true}
-                  />
-                </div>
-              )}
+          <div className="max-w-7xl mx-auto w-full mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-semibold text-gray-900">
+                Daily Damages Report
+              </h1>
+              <p className="mt-1 text-sm md:text-base text-gray-500">
+                Track egg damages per outlet and date.
+              </p>
             </div>
           </div>
 
-          {/* Outlet inputs */}
-          <div className="grid gap-3 md:grid-cols-5">
-            {outlets.map((outlet) => (
-              <div key={outlet} className="space-y-1">
-                <p className="text-xs font-medium text-gray-600">
-                  {outlet}
-                </p>
+          {/* Download Report */}
+          <div className="bg-white p-6 rounded-xl shadow mb-8">
+            <h2 className="text-xl font-semibold mb-4">Download Report</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+              <div className="relative z-30" ref={fromCalendarRef}>
+                <label className="block text-sm text-gray-600 mb-1">
+                  From Date
+                </label>
                 <div className="relative">
-                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">
-                  </span>
-                  <input
-                    type="number"
-                    value={form[outlet] ?? 0}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        [outlet]: Number(e.target.value),
-                      }))
-                    }
-                    disabled={hasEntry}
-                    className={`w-full rounded-xl border border-gray-200 bg-eggBg pl-7 pr-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm ${
-                      hasEntry ? "bg-gray-50 cursor-not-allowed" : ""
-                    }`}
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setIsFromCalendarOpen((o) => !o)}
+                    className="w-full rounded-lg border border-gray-200 bg-eggBg px-4 py-2 pr-10 text-left text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  >
+                    {fromDate ? formatDateDMY(fromDate) : "dd-mm-yyyy"}
+                  </button>
+                  <CalendarIcon className="h-5 w-5 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
+                {isFromCalendarOpen && (
+                  <div className="absolute left-0 top-full mt-2 z-50">
+                    <BaseCalendar
+                      rows={damages}
+                      selectedDate={fromDate}
+                      onSelectDate={(iso) => {
+                        setFromDate(iso);
+                        setIsFromCalendarOpen(false);
+                      }}
+                      showDots={false}
+                    />
+                  </div>
+                )}
               </div>
-            ))}
+              
+              <div className="relative z-30" ref={toCalendarRef}>
+                <label className="block text-sm text-gray-600 mb-1">
+                  To Date
+                </label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsToCalendarOpen((o) => !o)}
+                    className="w-full rounded-lg border border-gray-200 bg-eggBg px-4 py-2 pr-10 text-left text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  >
+                    {toDate ? formatDateDMY(toDate) : "dd-mm-yyyy"}
+                  </button>
+                  <CalendarIcon className="h-5 w-5 text-gray-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+                {isToCalendarOpen && (
+                  <div className="absolute left-0 top-full mt-2 z-50">
+                    <BaseCalendar
+                      rows={damages}
+                      selectedDate={toDate}
+                      onSelectDate={(iso) => {
+                        setToDate(iso);
+                        setIsToCalendarOpen(false);
+                      }}
+                      showDots={false}
+                    />
+                  </div>
+                )}
+              </div>
+              
+              <button
+                onClick={downloadExcel}
+                className="mt-4 sm:mt-0 bg-orange-500 hover:bg-orange-600 text-white font-semibold py-2 px-6 rounded-lg shadow"
+              >
+                Download Excel
+              </button>
+            </div>
           </div>
 
-          {/* Save button + note */}
-          <div className="flex flex-col items-center gap-2 pt-4">
-            <button
-              type="button"
-              onClick={save}
-              disabled={hasEntry}
-              className={`inline-flex items-center justify-center rounded-2xl px-6 py-2.5 text-sm font-semibold text-white shadow-md ${
-                hasEntry
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-orange-500 hover:bg-orange-600"
-              }`}
-            >
-              {hasEntry ? "Locked" : "Save Entry"}
-            </button>
-            <p className="text-center text-[11px] text-gray-500 md:text-xs">
-              Values support decimals for exact amounts.
-            </p>
+          {/* Data Table with Horizontal Scroll */}
+          <div className="bg-white p-6 rounded-xl shadow mb-8">
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse min-w-max">
+                <thead>
+                  <tr className="bg-orange-100 text-sm">
+                    <th className="p-3 text-left w-40 sticky left-0 bg-orange-100 z-10">Date</th>
+                    {outlets.map((name) => (
+                      <th key={name} className="p-3 text-center min-w-[120px]">{name}</th>
+                    ))}
+                    <th className="p-3 text-center font-semibold min-w-[100px] sticky right-0 bg-orange-100 z-10">Total</th>
+                    {isAdmin && <th className="p-3 text-center min-w-[80px]">Edit</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredData.map((d, i) => {
+                    const rowTotal = outlets.reduce((sum, name) => sum + Number(d[name] || 0), 0);
+                    return (
+                      <tr
+                        key={i}
+                        className="border-t text-sm hover:bg-gray-50 transition"
+                      >
+                        <td className="p-3 text-left sticky left-0 bg-white z-10">{formatDateDisplay(d.date)}</td>
+                        {outlets.map((name) => (
+                          <td key={name} className="p-3 text-center">{d[name] ?? 0}</td>
+                        ))}
+                        <td className="p-3 text-center font-bold text-orange-600 sticky right-0 bg-white z-10">
+                          {typeof d.total === 'number' ? d.total : rowTotal}
+                        </td>
+                        {isAdmin && (
+                          <td className="p-3 text-center">
+                            <button
+                              className="text-blue-600 hover:underline text-xs font-medium"
+                              onClick={() => handleEditClick(d)}
+                            >
+                              Edit
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                  {/* Grand Total Row */}
+                  <tr className="bg-orange-50 font-semibold text-orange-700">
+                    <td className="p-3 text-left sticky left-0 bg-orange-50 z-10">Grand Total</td>
+                    {outlets.map((name) => {
+                      const total = filteredData.reduce((sum, d) => sum + Number(d[name] || 0), 0);
+                      return (
+                        <td key={name} className="p-3 text-center">{total}</td>
+                      );
+                    })}
+                    <td className="p-3 text-center sticky right-0 bg-orange-50 z-10">
+                      {filteredData.reduce((sum, d) => sum + (typeof d.total === 'number' ? d.total : outlets.reduce((s, name) => s + Number(d[name] || 0), 0)), 0)}
+                    </td>
+                    {isAdmin && <td className="p-3"></td>}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Edit Modal */}
+          {editModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
+              <div className="bg-white rounded-xl shadow-lg p-6 min-w-[320px] max-w-full max-h-[80vh] overflow-y-auto">
+                <h2 className="text-lg font-semibold mb-4">Edit Daily Damage ({formatDateDisplay(editRow.date)})</h2>
+                <div className="space-y-3">
+                  {outlets.map((name) => (
+                    <div key={name} className="flex items-center gap-2">
+                      <label className="w-32 text-xs font-medium text-gray-700">{name}</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={editValues[name] ?? 0}
+                        onChange={e => handleEditValueChange(name, e.target.value)}
+                        className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-end gap-2 mt-6">
+                  <button
+                    onClick={handleEditCancel}
+                    className="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 text-xs font-medium hover:bg-gray-300"
+                  >Cancel</button>
+                  <button
+                    onClick={handleEditSave}
+                    className="px-4 py-2 rounded-lg bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600"
+                  >Save</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Entry Section */}
+      {(isAdmin || isDataAgent) && (
+        <div className="mt-8 rounded-2xl bg-eggWhite p-5 shadow-sm md:p-6">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-100">
+              <DamageEntryIcon className="h-6 w-6" />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold text-gray-900 md:text-lg">
+                Daily Damages Entry
+              </h2>
+              <p className="text-xs text-gray-500 md:text-sm">
+                Add new egg damage amounts for each outlet.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-5">
+            {/* Select Date */}
+            <div className="grid gap-4 md:grid-cols-[160px,1fr] md:items-center">
+              <label className="text-xs font-medium text-gray-700 md:text-sm">
+                Select Date
+              </label>
+              <div className="relative w-full" ref={entryCalendarRef}>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsEntryCalendarOpen((open) => !open)}
+                    className="flex w-full items-center justify-between rounded-xl border border-gray-200 bg-eggBg px-3 py-2 pr-10 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm"
+                  >
+                    <span>
+                      {entryDate ? formatDateDMY(entryDate) : "dd-mm-yyyy"}
+                    </span>
+                  </button>
+                  <CalendarIcon className="h-4 w-4 text-gray-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+
+                {hasEntry && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-green-500" />
+                    <div className="text-xs font-medium text-green-700">
+                      Entry ({entryTotal}) • Locked
+                    </div>
+                  </div>
+                )}
+
+                {isEntryCalendarOpen && (
+                  <div className="absolute right-0 bottom-full z-30 mb-2">
+                    <BaseCalendar
+                      rows={damages}
+                      selectedDate={entryDate}
+                      onSelectDate={handleEntryDateSelect}
+                      showDots={true}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Outlet inputs */}
+            <div className="grid gap-3 md:grid-cols-5">
+              {outlets.map((outlet) => (
+                <div key={outlet} className="space-y-1">
+                  <p className="text-xs font-medium text-gray-600">
+                    {outlet}
+                  </p>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={form[outlet] ?? 0}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          [outlet]: Number(e.target.value),
+                        }))
+                      }
+                      disabled={hasEntry}
+                      className={`w-full rounded-xl border border-gray-200 bg-eggBg px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm ${
+                        hasEntry ? "bg-gray-50 cursor-not-allowed" : ""
+                      }`}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Save button */}
+            <div className="flex flex-col items-center gap-2 pt-4">
+              <button
+                type="button"
+                onClick={save}
+                disabled={hasEntry}
+                className={`inline-flex items-center justify-center rounded-2xl px-6 py-2.5 text-sm font-semibold text-white shadow-md ${
+                  hasEntry
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-orange-500 hover:bg-orange-600"
+                }`}
+              >
+                {hasEntry ? "Locked" : "Save Entry"}
+              </button>
+              <p className="text-center text-[11px] text-gray-500 md:text-xs">
+                Values support decimals for exact amounts.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
       )}
     </div>
-            
   );
 }

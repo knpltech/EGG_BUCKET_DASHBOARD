@@ -713,7 +713,7 @@ const Reports = () => {
                     reportData.totalDifference < 0 ? 'text-red-600' : 
                     reportData.totalDifference > 0 ? 'text-green-600' : 'text-gray-900'
                   }`}>
-                    {reportData.totalDifference > 0 ? '+' : ''} ₹ {Math.abs(reportData.totalDifference || 0).toLocaleString()}
+                    {reportData.totalDifference > 0 ? '' : ''}  {Math.abs(reportData.totalDifference || 0).toLocaleString()}
                   </span>
                 </div>
               </div>
@@ -726,13 +726,13 @@ const Reports = () => {
                   <thead className="bg-gray-50">
                     <tr className="text-left text-xs font-semibold text-gray-500">
                       <th className="min-w-[130px] px-4 py-3">DATE</th>
-                      <th className="px-4 py-3 whitespace-nowrap text-right">SALES QTY</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-right">QUANTITY</th>
                       <th className="px-4 py-3 whitespace-nowrap text-right">NECC RATE</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-right">AMOUNT</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-right">DIGITAL PAYMENT</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-right">CASH PAYMENT</th>
                       <th className="px-4 py-3 whitespace-nowrap text-right">TOTAL AMOUNT</th>
-                      <th className="px-4 py-3 whitespace-nowrap text-right">DIGITAL PAY</th>
-                      <th className="px-4 py-3 whitespace-nowrap text-right">CASH PAY</th>
-                      <th className="px-4 py-3 whitespace-nowrap text-right">TOTAL RECV.</th>
-                      <th className="px-4 py-3 whitespace-nowrap text-right">DIFFERENCE</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-right">CLOSING BALANCE</th>
                     </tr>
                   </thead>
                   <tbody>
