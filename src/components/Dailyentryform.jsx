@@ -342,7 +342,7 @@ const Dailyentryform = ({ addrow, blockeddates, rows, outlets = [] }) => {
   const isOutletActive = (outletName) => {
     if (!Array.isArray(outlets) || outlets.length === 0) return true;
     const outletObj = outlets.find(o => o.area === outletName);
-    return !outletObj || outletObj.status === "Active";
+    return !outletObj || outletObj.status !== "Inactive";
   };
 
   return (
