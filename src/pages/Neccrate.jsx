@@ -1,11 +1,27 @@
 const API_URL = import.meta.env.VITE_API_URL;
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import Entryform from "../components/Entryform";
 import Rateanalytics from "../components/Rateanalytics";
 import Table from "../components/Table";
 import Topbar from "../components/Topbar";
 import { getRoleFlags } from "../utils/role";
+
+/* ---------- helper: clamp future dates to today ---------- */
+const normalizeDate = (dateStr) => {
+  if (!dateStr) return dateStr;
+
+  const d = new Date(dateStr);
+  if (isNaN(d)) return dateStr;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  if (d > today) {
+    return today.toISOString().split("T")[0]; // yyyy-mm-dd
+  }
+  return dateStr;
+};
 
 const Neccrate = () => {
   const { isAdmin, isViewer, isDataAgent } = getRoleFlags();
@@ -16,33 +32,35 @@ const Neccrate = () => {
   const [editValues, setEditValues] = useState({});
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [isLoaded, setIsLoaded] = useState(false);
 
   const blockedDates = rows.map((row) => row.date);
 
-  // Filter data based on date range or show latest 7 entries
-  const getFilteredRows = () => {
-    const sortedRows = [...rows].sort((a, b) => new Date(a.date) - new Date(b.date));
+  /* ================= FILTER TABLE ================= */
 
-    // If both dates are selected, filter by range
+  const getFilteredRows = () => {
+    const sortedRows = [...rows].sort(
+      (a, b) => new Date(a.date) - new Date(b.date)
+    );
+
     if (fromDate && toDate) {
-      return sortedRows.filter(row => {
-        const rowDate = new Date(row.date);
-        return rowDate >= new Date(fromDate) && rowDate <= new Date(toDate);
+      return sortedRows.filter((row) => {
+        const d = new Date(row.date);
+        return d >= new Date(fromDate) && d <= new Date(toDate);
       });
     }
 
-    // If only fromDate is selected
     if (fromDate) {
-      return sortedRows.filter(row => new Date(row.date) >= new Date(fromDate));
+      return sortedRows.filter(
+        (row) => new Date(row.date) >= new Date(fromDate)
+      );
     }
 
-    // If only toDate is selected
     if (toDate) {
-      return sortedRows.filter(row => new Date(row.date) <= new Date(toDate));
+      return sortedRows.filter(
+        (row) => new Date(row.date) <= new Date(toDate)
+      );
     }
 
-    // No filter applied - show all data
     return sortedRows;
   };
 
@@ -55,27 +73,31 @@ const Neccrate = () => {
       try {
         const res = await fetch(`${API_URL}/neccrate/all`);
         const data = await res.json();
-        setRows(Array.isArray(data) ? data.map(d => ({ id: d.id, ...d })) : []);
+
+        setRows(
+          Array.isArray(data)
+            ? data.map((d) => ({
+                id: d.id,
+                date: normalizeDate(d.date),
+                rate: String(d.rate),
+                remarks: d.remarks || "",
+              }))
+            : []
+        );
       } catch {
         setRows([]);
       }
-      setIsLoaded(true);
     };
+
     fetchRates();
   }, []);
 
-  /* ================= EDIT HANDLERS (ADMIN ONLY) ================= */
+  /* ================= EDIT HANDLERS ================= */
 
   const handleEditClick = (row) => {
     if (!isAdmin) return;
 
-    const fullRow = { ...row };
-    if (!row.id) {
-      const found = rows.find(r => r.date === row.date);
-      if (found?.id) fullRow.id = found.id;
-    }
-
-    setEditRow(fullRow);
+    setEditRow(row);
     setEditValues({ rate: row.rate, remarks: row.remarks });
     setEditModalOpen(true);
   };
@@ -91,34 +113,36 @@ const Neccrate = () => {
   };
 
   const handleEditSave = async () => {
-    if (!editRow.id) {
-      alert("No ID found. Cannot update.");
-      return;
-    }
+    if (!editRow.id) return alert("No ID found");
 
     try {
-      const response = await fetch(`${API_URL}/neccrate/${editRow.id}`, {
+      await fetch(`${API_URL}/neccrate/${editRow.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          date: editRow.date,
+          date: normalizeDate(editRow.date),
           rate: editValues.rate,
           remarks: editValues.remarks,
         }),
       });
 
-      if (!response.ok) {
-        alert("Failed to update entry");
-        return;
-      }
-
       const res = await fetch(`${API_URL}/neccrate/all`);
       const data = await res.json();
-      setRows(Array.isArray(data) ? data.map(d => ({ id: d.id, ...d })) : []);
+
+      setRows(
+        Array.isArray(data)
+          ? data.map((d) => ({
+              id: d.id,
+              date: normalizeDate(d.date),
+              rate: String(d.rate),
+              remarks: d.remarks || "",
+            }))
+          : []
+      );
 
       handleEditCancel();
     } catch (err) {
-      alert("Error updating entry: " + err.message);
+      alert(err.message);
     }
   };
 
@@ -126,23 +150,29 @@ const Neccrate = () => {
 
   const addRow = async (newRow) => {
     try {
-      const response = await fetch(`${API_URL}/neccrate/add`, {
+      await fetch(`${API_URL}/neccrate/add`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newRow),
+        body: JSON.stringify({
+          ...newRow,
+          date: normalizeDate(newRow.date),
+        }),
       });
 
-      if (!response.ok) {
-        alert("Failed to add entry");
-        return;
-      }
-
-      // Refetch all data after adding
       const res = await fetch(`${API_URL}/neccrate/all`);
       const data = await res.json();
-      setRows(Array.isArray(data) ? data.map(d => ({ id: d.id, ...d })) : []);
+
+      setRows(
+        Array.isArray(data)
+          ? data.map((d) => ({
+              id: d.id,
+              date: normalizeDate(d.date),
+              rate: String(d.rate),
+              remarks: d.remarks || "",
+            }))
+          : []
+      );
     } catch (err) {
-      console.error("Error adding NECC rate:", err);
       alert("Error adding entry");
     }
   };
@@ -153,20 +183,14 @@ const Neccrate = () => {
     <div className="bg-eggBg min-h-screen p-6">
       <Topbar />
 
-
-      {/* ================= ENTRY FORM (ADMIN + DATA AGENT) ================= */}
       {!isViewer && (
-        <Entryform
-          addRow={addRow}
-          blockedDates={blockedDates}
-          rows={rows}
-        />
+        <Entryform addRow={addRow} blockedDates={blockedDates} rows={rows} />
       )}
 
-      {/* ================= ANALYTICS (ADMIN + VIEWER + DATA AGENT) ================= */}
-      {(isAdmin || isViewer || isDataAgent) && <Rateanalytics rows={rows}/>}
+      {(isAdmin || isViewer || isDataAgent) && (
+        <Rateanalytics rows={rows} />
+      )}
 
-      {/* ================= TABLE (ADMIN + VIEWER + DATA AGENT) ================= */}
       {(isAdmin || isViewer || isDataAgent) && (
         <Table
           rows={filteredRows}
@@ -176,11 +200,10 @@ const Neccrate = () => {
           setToDate={setToDate}
           onEdit={isAdmin ? handleEditClick : null}
           showEditColumn={isAdmin}
-          allRows={rows} // Pass all rows for calendar dots
+          allRows={rows}
         />
       )}
 
-      {/* ================= EDIT MODAL (ADMIN ONLY) ================= */}
       {isAdmin && editModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
           <div className="bg-white rounded-xl shadow-lg p-6 min-w-[320px]">
@@ -189,44 +212,25 @@ const Neccrate = () => {
             </h2>
 
             <div className="space-y-3">
-              <div className="flex gap-2 items-center">
-                <label className="w-24 text-xs font-medium">Rate</label>
-                <input
-                  type="text"
-                  value={editValues.rate || ""}
-                  onChange={(e) =>
-                    handleEditValueChange("rate", e.target.value)
-                  }
-                  className="flex-1 border rounded-lg px-3 py-2 text-xs"
-                />
-              </div>
-
-              <div className="flex gap-2 items-center">
-                <label className="w-24 text-xs font-medium">Remarks</label>
-                <input
-                  type="text"
-                  value={editValues.remarks || ""}
-                  onChange={(e) =>
-                    handleEditValueChange("remarks", e.target.value)
-                  }
-                  className="flex-1 border rounded-lg px-3 py-2 text-xs"
-                />
-              </div>
+              <input
+                value={editValues.rate || ""}
+                onChange={(e) =>
+                  handleEditValueChange("rate", e.target.value)
+                }
+                className="w-full border px-3 py-2 rounded"
+              />
+              <input
+                value={editValues.remarks || ""}
+                onChange={(e) =>
+                  handleEditValueChange("remarks", e.target.value)
+                }
+                className="w-full border px-3 py-2 rounded"
+              />
             </div>
 
             <div className="flex justify-end gap-2 mt-6">
-              <button
-                onClick={handleEditCancel}
-                className="px-4 py-2 bg-gray-200 rounded-lg text-xs hover:bg-gray-300"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleEditSave}
-                className="px-4 py-2 bg-orange-500 text-white rounded-lg text-xs hover:bg-orange-600"
-              >
-                Save
-              </button>
+              <button onClick={handleEditCancel}>Cancel</button>
+              <button onClick={handleEditSave}>Save</button>
             </div>
           </div>
         </div>
