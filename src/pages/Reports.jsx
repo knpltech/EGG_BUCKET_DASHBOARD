@@ -86,12 +86,16 @@ const Reports = () => {
 
         const data = await fetchReportsData(selectedOutlet, filters);
         
-        // If no filters applied, ensure we show at least 7 entries
-        if (!dateRange.from && !dateRange.to && data && data.transactions) {
-          const sorted = [...data.transactions].sort((a, b) => 
+        // Sort transactions in ascending order by date
+        if (data && data.transactions) {
+          data.transactions = [...data.transactions].sort((a, b) => 
             new Date(a.date) - new Date(b.date)
           );
-          data.transactions = sorted.slice(-7);
+          
+          // If no filters applied, ensure we show at least 7 entries (last 7)
+          if (!dateRange.from && !dateRange.to) {
+            data.transactions = data.transactions.slice(-7);
+          }
         }
         
         setReportData(data);
@@ -232,6 +236,36 @@ const Reports = () => {
     if (!reportData?.transactions || reportData.transactions.length === 0) return 0;
     const sum = reportData.transactions.reduce((total, t) => total + t.difference, 0);
     return Math.round(sum / reportData.transactions.length);
+  }, [reportData?.transactions]);
+
+  // Calculate column totals
+  const columnTotals = useMemo(() => {
+    if (!reportData?.transactions || reportData.transactions.length === 0) {
+      return {
+        quantity: 0,
+        amount: 0,
+        digitalPay: 0,
+        cashPay: 0,
+        totalRecv: 0,
+        closingBalance: 0
+      };
+    }
+
+    return reportData.transactions.reduce((totals, transaction) => ({
+      quantity: totals.quantity + (transaction.salesQty || 0),
+      amount: totals.amount + (transaction.totalAmount || 0),
+      digitalPay: totals.digitalPay + (transaction.digitalPay || 0),
+      cashPay: totals.cashPay + (transaction.cashPay || 0),
+      totalRecv: totals.totalRecv + (transaction.totalRecv || 0),
+      closingBalance: totals.closingBalance + (transaction.difference || 0)
+    }), {
+      quantity: 0,
+      amount: 0,
+      digitalPay: 0,
+      cashPay: 0,
+      totalRecv: 0,
+      closingBalance: 0
+    });
   }, [reportData?.transactions]);
 
   const COLORS = ['#ff7518', '#ffa866'];
@@ -463,59 +497,7 @@ const Reports = () => {
         {/* Content */}
         {!loading && reportData && (
           <>
-            {/* Transactions Table */}
-            <div className="overflow-hidden rounded-2xl bg-eggWhite shadow-sm mb-6">
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr className="text-left text-xs font-semibold text-gray-500">
-                      <th className="min-w-[130px] px-4 py-3">DATE</th>
-                      <th className="px-4 py-3 whitespace-nowrap text-right">QUANTITY</th>
-                      <th className="px-4 py-3 whitespace-nowrap text-right">NECC RATE</th>
-                      <th className="px-4 py-3 whitespace-nowrap text-right">AMOUNT</th>
-                      <th className="px-4 py-3 whitespace-nowrap text-right">DIGITAL PAYMENT</th>
-                      <th className="px-4 py-3 whitespace-nowrap text-right">CASH PAYMENT</th>
-                      <th className="px-4 py-3 whitespace-nowrap text-right">TOTAL AMOUNT</th>
-                      <th className="px-4 py-3 whitespace-nowrap text-right">CLOSING BALANCE</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {reportData.transactions?.length > 0 ? (
-                      reportData.transactions.map((transaction, index) => (
-                        <tr
-                          key={index}
-                          className={`text-xs text-gray-700 md:text-sm ${
-                            index % 2 === 0 ? "bg-white" : "bg-gray-50/60"
-                          }`}
-                        >
-                          <td className="whitespace-nowrap px-4 py-3">{transaction.date}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right">{transaction.salesQty}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right">₹{transaction.neccRate.toFixed(2)}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">₹{transaction.totalAmount.toLocaleString()}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right">₹{transaction.digitalPay.toLocaleString()}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right">₹{transaction.cashPay.toLocaleString()}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">₹{transaction.totalRecv.toLocaleString()}</td>
-                          <td className={`whitespace-nowrap px-4 py-3 text-right font-semibold ${
-                            transaction.difference < 0 ? 'text-red-600' : 
-                            transaction.difference > 0 ? 'text-green-600' : 'text-gray-700'
-                          }`}>
-                            {transaction.difference > 0 ? '+ ' : transaction.difference < 0 ? '- ' : ''}₹{Math.abs(transaction.difference).toLocaleString()}
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan="8" className="py-8 text-center text-gray-500 text-sm bg-white">
-                          No transactions found for the selected period
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Summary Cards */}
+            {/* Summary Cards - Now Above Table */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
               <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
                 <div className="flex items-center gap-3 mb-3">
@@ -569,6 +551,76 @@ const Reports = () => {
                 <div className="flex items-baseline gap-2">
                   <span className="text-3xl font-bold text-gray-900">₹ {averageClosingBalance.toLocaleString()}</span>
                 </div>
+              </div>
+            </div>
+
+            {/* Transactions Table with Totals */}
+            <div className="overflow-hidden rounded-2xl bg-eggWhite shadow-sm mb-6">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr className="text-left text-xs font-semibold text-gray-500">
+                      <th className="min-w-[130px] px-4 py-3">DATE</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-right">QUANTITY</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-right">NECC RATE</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-right">AMOUNT</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-right">DIGITAL PAYMENT</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-right">CASH PAYMENT</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-right">TOTAL AMOUNT</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-right">CLOSING BALANCE</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reportData.transactions?.length > 0 ? (
+                      <>
+                        {reportData.transactions.map((transaction, index) => (
+                          <tr
+                            key={index}
+                            className={`text-xs text-gray-700 md:text-sm ${
+                              index % 2 === 0 ? "bg-white" : "bg-gray-50/60"
+                            }`}
+                          >
+                            <td className="whitespace-nowrap px-4 py-3">{transaction.date}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right">{transaction.salesQty}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right">₹{transaction.neccRate.toFixed(2)}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">₹{transaction.totalAmount.toLocaleString()}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right">₹{transaction.digitalPay.toLocaleString()}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right">₹{transaction.cashPay.toLocaleString()}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">₹{transaction.totalRecv.toLocaleString()}</td>
+                            <td className={`whitespace-nowrap px-4 py-3 text-right font-semibold ${
+                              transaction.difference < 0 ? 'text-red-600' : 
+                              transaction.difference > 0 ? 'text-green-600' : 'text-gray-700'
+                            }`}>
+                              {transaction.difference > 0 ? '+ ' : transaction.difference < 0 ? '- ' : ''}₹{Math.abs(transaction.difference).toLocaleString()}
+                            </td>
+                          </tr>
+                        ))}
+                        {/* Grand Total Row */}
+                        <tr className="bg-orange-50 font-semibold text-orange-700 border-t-2 border-orange-200">
+                          <td className="whitespace-nowrap px-4 py-3">GRAND TOTAL</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right">{columnTotals.quantity}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right">-</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right">₹{columnTotals.amount.toLocaleString()}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right">₹{columnTotals.digitalPay.toLocaleString()}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right">₹{columnTotals.cashPay.toLocaleString()}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right">₹{columnTotals.totalRecv.toLocaleString()}</td>
+                          <td className={`whitespace-nowrap px-4 py-3 text-right ${
+                            columnTotals.closingBalance < 0 ? 'text-red-600' : 
+                            columnTotals.closingBalance > 0 ? 'text-green-600' : 'text-orange-700'
+                          }`}>
+                            {columnTotals.closingBalance > 0 ? '+ ' : columnTotals.closingBalance < 0 ? '- ' : ''}₹{Math.abs(columnTotals.closingBalance).toLocaleString()}
+                          </td>
+                        </tr>
+                      </>
+                    ) : (
+                      <tr>
+                        <td colSpan="8" className="py-8 text-center text-gray-500 text-sm bg-white">
+                          No transactions found for the selected period
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
 
