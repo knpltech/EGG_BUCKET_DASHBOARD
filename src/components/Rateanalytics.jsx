@@ -96,7 +96,7 @@ export default function Rateanalytics({ rows = [] }) {
         className="grid gap-6 ml-4"
         style={{ gridTemplateColumns: "1.3fr 0.5fr 0.5fr" }}
       >
-        {/* 📈 LINE GRAPH */}
+        {/* 📈 LINE GRAPH for last 15 days*/}
         <div className="bg-white shadow rounded-xl p-6">
           <h2 className="font-semibold mb-4">
             Last 15 Days NECC Rate Trend
