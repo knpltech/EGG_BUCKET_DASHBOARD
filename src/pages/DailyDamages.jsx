@@ -286,16 +286,15 @@ export default function DailyDamages() {
     if (!saved) return DEFAULT_OUTLETS;
     try {
       const parsed = JSON.parse(saved);
-      const areas = parsed.map((o) => o.area);
-      const hasAll = DEFAULT_OUTLETS.every((d) => areas.includes(d));
-      return areas.length > 0 ? (hasAll ? areas : DEFAULT_OUTLETS) : DEFAULT_OUTLETS;
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_OUTLETS;
     } catch {
       return DEFAULT_OUTLETS;
     }
   });
 
-  const initialForm = outlets.reduce((acc, name) => {
-    acc[name] = 0;
+  const initialForm = outlets.reduce((acc, outlet) => {
+    const area = typeof outlet === 'string' ? outlet : outlet.area;
+    acc[area] = 0;
     return acc;
   }, {});
 
@@ -345,10 +344,26 @@ export default function DailyDamages() {
     fetchDamages();
   }, [setDamages]);
 
+  // Load outlets from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setOutlets(Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_OUTLETS);
+      } catch {
+        setOutlets(DEFAULT_OUTLETS);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     setForm(() => {
       const f = {};
-      outlets.forEach((o) => (f[o] = 0));
+      outlets.forEach((outlet) => {
+        const area = typeof outlet === 'string' ? outlet : outlet.area;
+        f[area] = 0;
+      });
       return f;
     });
   }, [outlets]);
@@ -363,8 +378,7 @@ export default function DailyDamages() {
         if (saved) {
           try {
             const parsed = JSON.parse(saved);
-            const areasFromStorage = parsed.map((o) => o.area);
-            setOutlets(areasFromStorage);
+            setOutlets(Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_OUTLETS);
           } catch {}
         }
       }
@@ -384,8 +398,9 @@ export default function DailyDamages() {
     const existing = damages.find((d) => d.date === entryDate);
     if (existing) {
       const loaded = {};
-      outlets.forEach((name) => {
-        loaded[name] = existing[name] ?? 0;
+      outlets.forEach((outlet) => {
+        const area = typeof outlet === 'string' ? outlet : outlet.area;
+        loaded[area] = existing[area] ?? 0;
       });
       setForm(loaded);
       setHasEntry(true);
@@ -402,15 +417,19 @@ export default function DailyDamages() {
     const existingEntry = damages.find((d) => d.date === iso);
     if (existingEntry) {
       const loaded = {};
-      outlets.forEach((name) => {
-        loaded[name] = existingEntry[name] ?? 0;
+      outlets.forEach((outlet) => {
+        const area = typeof outlet === 'string' ? outlet : outlet.area;
+        loaded[area] = existingEntry[area] ?? 0;
       });
       setForm(loaded);
       setHasEntry(true);
       setEntryTotal(existingEntry.total ?? 0);
     } else {
       const reset = {};
-      outlets.forEach((o) => (reset[o] = 0));
+      outlets.forEach((outlet) => {
+        const area = typeof outlet === 'string' ? outlet : outlet.area;
+        reset[area] = 0;
+      });
       setForm(reset);
       setHasEntry(false);
       setEntryTotal(0);
@@ -426,8 +445,9 @@ export default function DailyDamages() {
     }
     setEditRow(fullRow);
     const vals = {};
-    outlets.forEach((name) => {
-      vals[name] = row[name] ?? 0;
+    outlets.forEach((outlet) => {
+      const area = typeof outlet === 'string' ? outlet : outlet.area;
+      vals[area] = row[area] ?? 0;
     });
     setEditValues(vals);
     setEditModalOpen(true);
@@ -449,7 +469,10 @@ export default function DailyDamages() {
       return;
     }
     const updatedDamages = { ...editValues };
-    const total = outlets.reduce((s, name) => s + Number(updatedDamages[name] || 0), 0);
+    const total = outlets.reduce((s, outlet) => {
+      const area = typeof outlet === 'string' ? outlet : outlet.area;
+      return s + Number(updatedDamages[area] || 0);
+    }, 0);
     try {
       const response = await fetch(`${API_URL}/daily-damage/${editRow.id}`, {
         method: "PATCH",
@@ -479,7 +502,10 @@ export default function DailyDamages() {
   };
 
   const save = async () => {
-    const total = outlets.reduce((s, name) => s + Number(form[name] || 0), 0);
+    const total = outlets.reduce((s, outlet) => {
+      const area = typeof outlet === 'string' ? outlet : outlet.area;
+      return s + Number(form[area] || 0);
+    }, 0);
     const success = addDamage({
       date: entryDate,
       ...form,
@@ -634,29 +660,34 @@ export default function DailyDamages() {
                 </div>
                 {/* Outlet inputs */}
                 <div className="grid gap-3 md:grid-cols-5">
-                  {outlets.map((outlet) => (
-                    <div key={outlet} className="space-y-1">
-                      <p className="text-xs font-medium text-gray-600">
-                        {outlet}
-                      </p>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          value={form[outlet] ?? 0}
-                          onChange={(e) =>
-                            setForm((prev) => ({
-                              ...prev,
-                              [outlet]: Number(e.target.value),
-                            }))
-                          }
-                          disabled={hasEntry}
-                          className={`w-full rounded-xl border border-gray-200 bg-eggBg px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm ${
-                            hasEntry ? "bg-gray-50 cursor-not-allowed" : ""
-                          }`}
-                        />
+                  {outlets.map((outlet) => {
+                    const area = typeof outlet === 'string' ? outlet : outlet.area;
+                    const isActive = typeof outlet === 'string' || !outlet.status || outlet.status === "Active";
+                    return (
+                      <div key={area} className="space-y-1">
+                        <p className="text-xs font-medium text-gray-600">
+                          {area}
+                          {!isActive && <span className="text-red-500 ml-1">(Inactive)</span>}
+                        </p>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            value={form[area] ?? 0}
+                            onChange={(e) =>
+                              setForm((prev) => ({
+                                ...prev,
+                                [area]: Number(e.target.value),
+                              }))
+                            }
+                            disabled={hasEntry || !isActive}
+                            className={`w-full rounded-xl border border-gray-200 bg-eggBg px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm ${
+                              (hasEntry || !isActive) ? "bg-gray-50 cursor-not-allowed" : ""
+                            }`}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
                 {/* Save button */}
                 <div className="flex flex-col items-center gap-2 pt-4">
@@ -767,25 +798,38 @@ export default function DailyDamages() {
                 <thead>
                   <tr className="bg-orange-100 text-sm">
                     <th className="p-3 text-left w-40 sticky left-0 bg-orange-100 z-10">Date</th>
-                    {outlets.map((name) => (
-                      <th key={name} className="p-3 text-center min-w-[120px]">{name}</th>
-                    ))}
+                    {outlets.map((outlet) => {
+                      const area = typeof outlet === 'string' ? outlet : outlet.area;
+                      const isActive = typeof outlet === 'string' || !outlet.status || outlet.status === "Active";
+                      return (
+                        <th key={area} className="p-3 text-center min-w-[120px]">
+                          {area}
+                          {!isActive && <span className="text-red-500 text-[10px] block">(Inactive)</span>}
+                        </th>
+                      );
+                    })}
                     <th className="p-3 text-center font-semibold min-w-[100px] sticky right-0 bg-orange-100 z-10">Total</th>
                     {isAdmin && <th className="p-3 text-center min-w-[80px]">Edit</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {filteredData.map((d, i) => {
-                    const rowTotal = outlets.reduce((sum, name) => sum + Number(d[name] || 0), 0);
+                    const rowTotal = outlets.reduce((sum, outlet) => {
+                      const area = typeof outlet === 'string' ? outlet : outlet.area;
+                      return sum + Number(d[area] || 0);
+                    }, 0);
                     return (
                       <tr
                         key={i}
                         className="border-t text-sm hover:bg-gray-50 transition"
                       >
                         <td className="p-3 text-left sticky left-0 bg-white z-10">{formatDateDisplay(d.date)}</td>
-                        {outlets.map((name) => (
-                          <td key={name} className="p-3 text-center">{d[name] ?? 0}</td>
-                        ))}
+                        {outlets.map((outlet) => {
+                          const area = typeof outlet === 'string' ? outlet : outlet.area;
+                          return (
+                            <td key={area} className="p-3 text-center">{d[area] ?? 0}</td>
+                          );
+                        })}
                         <td className="p-3 text-center font-bold text-orange-600 sticky right-0 bg-white z-10">
                           {typeof d.total === 'number' ? d.total : rowTotal}
                         </td>
@@ -805,14 +849,21 @@ export default function DailyDamages() {
                   {/* Grand Total Row */}
                   <tr className="bg-orange-50 font-semibold text-orange-700">
                     <td className="p-3 text-left sticky left-0 bg-orange-50 z-10">Grand Total</td>
-                    {outlets.map((name) => {
-                      const total = filteredData.reduce((sum, d) => sum + Number(d[name] || 0), 0);
+                    {outlets.map((outlet) => {
+                      const area = typeof outlet === 'string' ? outlet : outlet.area;
+                      const total = filteredData.reduce((sum, d) => sum + Number(d[area] || 0), 0);
                       return (
-                        <td key={name} className="p-3 text-center">{total}</td>
+                        <td key={area} className="p-3 text-center">{total}</td>
                       );
                     })}
                     <td className="p-3 text-center sticky right-0 bg-orange-50 z-10">
-                      {filteredData.reduce((sum, d) => sum + (typeof d.total === 'number' ? d.total : outlets.reduce((s, name) => s + Number(d[name] || 0), 0)), 0)}
+                      {filteredData.reduce((sum, d) => {
+                        const rowTotal = outlets.reduce((s, outlet) => {
+                          const area = typeof outlet === 'string' ? outlet : outlet.area;
+                          return s + Number(d[area] || 0);
+                        }, 0);
+                        return sum + (typeof d.total === 'number' ? d.total : rowTotal);
+                      }, 0)}
                     </td>
                     {isAdmin && <td className="p-3"></td>}
                   </tr>
@@ -826,19 +877,22 @@ export default function DailyDamages() {
               <div className="bg-white rounded-xl shadow-lg p-6 min-w-[320px] max-w-full max-h-[80vh] overflow-y-auto">
                 <h2 className="text-lg font-semibold mb-4">Edit Daily Damage ({formatDateDisplay(editRow.date)})</h2>
                 <div className="space-y-3">
-                  {outlets.map((name) => (
-                    <div key={name} className="flex items-center gap-2">
-                      <label className="w-32 text-xs font-medium text-gray-700">{name}</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={editValues[name] ?? 0}
-                        onChange={e => handleEditValueChange(name, e.target.value)}
-                        className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400"
-                      />
-                    </div>
-                  ))}
+                  {outlets.map((outlet) => {
+                    const area = typeof outlet === 'string' ? outlet : outlet.area;
+                    return (
+                      <div key={area} className="flex items-center gap-2">
+                        <label className="w-32 text-xs font-medium text-gray-700">{area}</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={editValues[area] ?? 0}
+                          onChange={e => handleEditValueChange(area, e.target.value)}
+                          className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
                 <div className="flex justify-end gap-2 mt-6">
                   <button
