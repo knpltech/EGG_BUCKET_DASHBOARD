@@ -600,14 +600,20 @@ const handleDeleteOutlet = async (id) => {
                         data-action-toggle
                         onClick={() => setOpenActionId((id) => (id === outlet.id ? null : outlet.id))}
                         aria-expanded={openActionId === outlet.id}
-                        className="inline-flex items-center justify-center rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                        className={`inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs font-medium text-gray-700 ${
+                          openActionId === outlet.id 
+                            ? "border-gray-200 bg-white ring-2 ring-orange-200" 
+                            : "border-gray-200 bg-white hover:bg-gray-50"
+                        }`}
                       >
                         ⋮
                       </button>
 
                       {openActionId === outlet.id && (
-                        <div data-action-menu className="absolute right-0 mt-2 w-36 rounded-lg border bg-white shadow-lg z-30 text-xs">
-
+                        <div 
+                          data-action-menu 
+                          className="absolute right-0 mt-2 w-36 rounded-lg border border-gray-200 bg-white shadow-lg z-30 text-xs"
+                        >
                           <button
                             type="button"
                             onClick={async () => {
@@ -627,7 +633,7 @@ const handleDeleteOutlet = async (id) => {
                               }
                               setOpenActionId(null);
                             }}
-                            className="block w-full text-left px-3 py-2 hover:bg-gray-100"
+                            className="block w-full text-left px-3 py-2 hover:bg-gray-100 rounded-t-lg"
                           >
                             Active
                           </button>
@@ -650,7 +656,7 @@ const handleDeleteOutlet = async (id) => {
                               }
                               setOpenActionId(null);
                             }}
-                            className="block w-full text-left px-3 py-2 text-red-600 hover:bg-gray-100"
+                            className="block w-full text-left px-3 py-2 text-red-600 hover:bg-gray-100 rounded-b-lg"
                           >
                             Inactive
                           </button>
