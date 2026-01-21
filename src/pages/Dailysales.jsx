@@ -1,6 +1,6 @@
 const API_URL = import.meta.env.VITE_API_URL;
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { getRoleFlags } from "../utils/role";
 import * as XLSX from "xlsx";
 
@@ -9,14 +9,6 @@ import Dailyheader from "../components/Dailyheader";
 import DailyTable from "../components/DailyTable";
 import Dailyentryform from "../components/Dailyentryform";
 import Weeklytrend from "../components/Weeklytrend";
-
-const DEFAULT_OUTLETS = [
-  "AECS Layout",
-  "Bandepalya",
-  "Hosa Road",
-  "Singasandra",
-  "Kudlu Gate",
-];
 
 const SAMPLE_OUTLETS = [
   { area: "AECS Layout" },
@@ -32,16 +24,17 @@ const Dailysales = () => {
   const { isAdmin, isViewer, isDataAgent } = getRoleFlags();
 
   const [rows, setRows] = useState([]);
-  const [outlets, setOutlets] = useState(DEFAULT_OUTLETS);
+  const [outlets, setOutlets] = useState([]);
+  
   // Filtered outlets for Data Agent: only show active
-  // Robust filter: Data Agent sees only active outlets (object with status 'Active' or string)
   const filteredOutlets = isDataAgent && Array.isArray(outlets)
     ? outlets.filter(o => {
-        if (typeof o === 'string') return true; // fallback: all strings are active
+        if (typeof o === 'string') return true;
         if (typeof o === 'object' && o.status) return o.status === 'Active';
         return true;
       })
     : outlets;
+    
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
@@ -65,17 +58,6 @@ const Dailysales = () => {
         }
       } catch (err) {
         console.error("Error fetching sales:", err);
-        {/* ================= ENTRY FORM (ADMIN + DATA AGENT) ================= */}
-        {!isViewer && (
-          <div className="mt-10">
-            <Dailyentryform
-              addrow={addrow}
-              blockeddates={rows.filter((r) => r.locked).map((r) => r.date)}
-              rows={rows}
-              outlets={outlets}
-            />
-          </div>
-        )}
         setRows([]);
       }
     };
@@ -83,29 +65,81 @@ const Dailysales = () => {
   }, []);
 
   /* ================= OUTLETS ================= */
-  useEffect(() => {
-    const loadOutlets = () => {
+  const loadOutlets = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/outlets/all`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setOutlets(data);
+          localStorage.setItem(OUTLETS_KEY, JSON.stringify(data));
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching outlets:", err);
+      // Fallback to localStorage if fetch fails
       const saved = localStorage.getItem(OUTLETS_KEY);
       if (saved) {
         try {
-          setOutlets(JSON.parse(saved));
-        } catch {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setOutlets(parsed);
+          } else {
+            setOutlets(SAMPLE_OUTLETS);
+          }
+        } catch (parseErr) {
+          console.error("Error parsing saved outlets:", parseErr);
           setOutlets(SAMPLE_OUTLETS);
         }
       } else {
         setOutlets(SAMPLE_OUTLETS);
       }
+    }
+  }, []);
+
+  useEffect(() => {
+    loadOutlets();
+  }, [loadOutlets]);
+
+  useEffect(() => {
+    const handleOutletsUpdated = (event) => {
+      if (event.detail && Array.isArray(event.detail)) {
+        // Immediately update outlets from the event
+        setOutlets(event.detail);
+        localStorage.setItem(OUTLETS_KEY, JSON.stringify(event.detail));
+      }
     };
 
-    loadOutlets();
-    window.addEventListener("egg:outlets-updated", loadOutlets);
-    window.addEventListener("storage", loadOutlets);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadOutlets();
+      }
+    };
+
+    // Also listen for storage events from other tabs
+    const handleStorageChange = (e) => {
+      if (e.key === OUTLETS_KEY && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setOutlets(parsed);
+          }
+        } catch (err) {
+          console.error("Error parsing storage event:", err);
+        }
+      }
+    };
+
+    window.addEventListener('egg:outlets-updated', handleOutletsUpdated);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('storage', handleStorageChange);
 
     return () => {
-      window.removeEventListener("egg:outlets-updated", loadOutlets);
-      window.removeEventListener("storage", loadOutlets);
+      window.removeEventListener('egg:outlets-updated', handleOutletsUpdated);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('storage', handleStorageChange);
     };
-  }, []);
+  }, [loadOutlets]);
 
   /* ================= FILTER LOGIC ================= */
   const getFilteredRows = () => {

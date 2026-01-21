@@ -1,5 +1,5 @@
 const API_URL = import.meta.env.VITE_API_URL;
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useDamage } from "../context/DamageContext";
 import * as XLSX from "xlsx";
 import { getRoleFlags } from "../utils/role";
@@ -278,19 +278,9 @@ export default function DailyDamages() {
   const [isToCalendarOpen, setIsToCalendarOpen] = useState(false);
   const [isEntryCalendarOpen, setIsEntryCalendarOpen] = useState(false);
 
-  const DEFAULT_OUTLETS = ["AECS Layout", "Bandepalya", "Hosa Road", "Singasandra", "Kudlu Gate"];
   const STORAGE_KEY = "egg_outlets_v1";
 
-  const [outlets, setOutlets] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return DEFAULT_OUTLETS;
-    try {
-      const parsed = JSON.parse(saved);
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_OUTLETS;
-    } catch {
-      return DEFAULT_OUTLETS;
-    }
-  });
+  const [outlets, setOutlets] = useState([]);
 
   const initialForm = outlets.reduce((acc, outlet) => {
     const area = typeof outlet === 'string' ? outlet : outlet.area;
@@ -344,18 +334,81 @@ export default function DailyDamages() {
     fetchDamages();
   }, [setDamages]);
 
-  // Load outlets from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setOutlets(Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_OUTLETS);
-      } catch {
-        setOutlets(DEFAULT_OUTLETS);
+  // Load outlets from backend
+  const loadOutlets = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/outlets/all`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setOutlets(data);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching outlets:", err);
+      // Fallback to localStorage if fetch fails
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setOutlets(parsed);
+          }
+        } catch (parseErr) {
+          console.error("Error parsing saved outlets:", parseErr);
+          setOutlets([]);
+        }
+      } else {
+        setOutlets([]);
       }
     }
   }, []);
+
+  useEffect(() => {
+    loadOutlets();
+  }, [loadOutlets]);
+
+  // Listen for outlet updates from other pages
+  useEffect(() => {
+    const handleOutletsUpdated = (event) => {
+      if (event.detail && Array.isArray(event.detail)) {
+        // Immediately update outlets from the event
+        setOutlets(event.detail);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(event.detail));
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadOutlets();
+      }
+    };
+
+    // Also listen for storage events from other tabs
+    const handleStorageChange = (e) => {
+      if (e.key === STORAGE_KEY && e.newValue) {
+        try {
+          const parsed = JSON.parse(e.newValue);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setOutlets(parsed);
+          }
+        } catch (err) {
+          console.error("Error parsing storage event:", err);
+        }
+      }
+    };
+
+    window.addEventListener('egg:outlets-updated', handleOutletsUpdated);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('egg:outlets-updated', handleOutletsUpdated);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [loadOutlets]);
 
   useEffect(() => {
     setForm(() => {
@@ -369,32 +422,6 @@ export default function DailyDamages() {
   }, [outlets]);
 
   useEffect(() => {
-    const handler = (e) => {
-      const areas = (e && e.detail) || null;
-      if (Array.isArray(areas)) {
-        setOutlets(areas);
-      } else {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved);
-            setOutlets(Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_OUTLETS);
-          } catch {}
-        }
-      }
-    };
-    window.addEventListener('egg:outlets-updated', handler);
-    const onStorage = (evt) => {
-      if (evt.key === STORAGE_KEY) handler();
-    };
-    window.addEventListener('storage', onStorage);
-    return () => {
-      window.removeEventListener('egg:outlets-updated', handler);
-      window.removeEventListener('storage', onStorage);
-    };
-  }, []);
-
-  useEffect(() => {
     const existing = damages.find((d) => d.date === entryDate);
     if (existing) {
       const loaded = {};
@@ -406,7 +433,12 @@ export default function DailyDamages() {
       setHasEntry(true);
       setEntryTotal(existing.total ?? 0);
     } else {
-      setForm(initialForm);
+      const reset = {};
+      outlets.forEach((outlet) => {
+        const area = typeof outlet === 'string' ? outlet : outlet.area;
+        reset[area] = 0;
+      });
+      setForm(reset);
       setHasEntry(false);
       setEntryTotal(0);
     }

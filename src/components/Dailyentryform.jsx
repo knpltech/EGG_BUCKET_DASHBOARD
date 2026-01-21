@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 
 const MONTHS = [
   "January","February","March","April","May","June",
@@ -237,28 +237,42 @@ const Dailyentryform = ({ addrow, blockeddates, rows, outlets = [] }) => {
     }
   }, [openCal]);
 
-  // Build outlet names from objects, filtering active only for entry
+  // Build outlet names from objects
   const outletNames = useMemo(() => {
-    return Array.isArray(outlets) && outlets.length > 0
-      ? outlets.map(o => o.area || o)
-      : ["AECS Layout", "Bandepalya", "Hosa Road", "Singasandra", "Kudlu Gate"];
+    if (!Array.isArray(outlets) || outlets.length === 0) {
+      return ["AECS Layout", "Bandepalya", "Hosa Road", "Singasandra", "Kudlu Gate"];
+    }
+    return outlets.map(o => {
+      if (typeof o === 'string') return o;
+      return o.area || o.name || 'Unknown';
+    });
   }, [outlets]);
 
-  const [entryValues, setEntryValues] = useState(() => {
+  // Initialize entry values with proper structure
+  const initializeEntryValues = useCallback(() => {
     const initial = {};
     outletNames.forEach((o) => (initial[o] = ""));
     return initial;
-  });
+  }, [outletNames]);
 
+  const [entryValues, setEntryValues] = useState(initializeEntryValues);
   const [hasEntry, setHasEntry] = useState(false);
   const [entryTotal, setEntryTotal] = useState(0);
 
+  // Reset entry values when outlets change
+  useEffect(() => {
+    setEntryValues(initializeEntryValues());
+  }, [initializeEntryValues]);
+
+  // Update entry state when date or rows change
   useEffect(() => {
     if (!date) {
       setHasEntry(false);
       setEntryTotal(0);
+      setEntryValues(initializeEntryValues());
       return;
     }
+    
     const found = Array.isArray(rows) ? rows.find(r => r.date === date) : null;
     if (found) {
       setHasEntry(true);
@@ -274,48 +288,47 @@ const Dailyentryform = ({ addrow, blockeddates, rows, outlets = [] }) => {
     } else {
       setHasEntry(false);
       setEntryTotal(0);
-      // Reset entry values
-      setEntryValues(() => {
-        const vals = {};
-        outletNames.forEach(o => { vals[o] = ""; });
-        return vals;
-      });
+      setEntryValues(initializeEntryValues());
     }
-  }, [date, rows, outletNames]);
+  }, [date, rows, outletNames, initializeEntryValues]);
 
-  // Reset entry values when outlets change
-  useEffect(() => {
-    if (!date) return;
-
-    const reset = {};
-    outletNames.forEach(o => (reset[o] = ""));
-    setEntryValues(reset);
-  }, [outletNames]);
-
-  const handleEntryChange = (outlet, value) => {
+  const handleEntryChange = useCallback((outlet, value) => {
     setEntryValues((prev) => ({
       ...prev,
       [outlet]: value,
     }));
-  };
+  }, []);
 
-  const handleSubmit = () => {
+  const handleSubmit = useCallback(() => {
     if (!date) return alert("Date is required");
-    if (hasEntry)
-      return alert("Entry for this date already exists");
+    if (hasEntry) return alert("Entry for this date already exists");
 
-    // Check if all active outlets are filled
-    const outletObjects = Array.isArray(outlets) && outlets.length > 0 ? outlets : [];
-    const activeOutlets = outletObjects.length > 0 
-      ? outletObjects.filter(o => o.status === "Active").map(o => o.area)
-      : outletNames;
+    // Get active outlets
+    const activeOutlets = outletNames.filter((outletName) => {
+      if (!Array.isArray(outlets) || outlets.length === 0) return true;
+      const outletObj = outlets.find(o => {
+        const area = typeof o === 'string' ? o : (o.area || o.name);
+        return area === outletName;
+      });
+      if (!outletObj) return true; // If outlet object not found, consider it active
+      if (typeof outletObj === 'string') return true;
+      return !outletObj.status || outletObj.status === "Active";
+    });
     
-    const allActiveFilled = activeOutlets.every((outlet) => entryValues[outlet] && entryValues[outlet] !== "");
-    if (!allActiveFilled)
+    // Check if all active outlets are filled
+    const allActiveFilled = activeOutlets.every((outlet) => {
+      const value = entryValues[outlet];
+      return value !== "" && value !== null && value !== undefined;
+    });
+    
+    if (!allActiveFilled) {
       return alert("All active outlets must have values");
+    }
 
     // Calculate total from active outlets only
-    const total = activeOutlets.reduce((sum, outlet) => sum + (Number(entryValues[outlet]) || 0), 0);
+    const total = activeOutlets.reduce((sum, outlet) => {
+      return sum + (Number(entryValues[outlet]) || 0);
+    }, 0);
 
     // Store all outlets, with inactive ones as 0
     const finalValues = {};
@@ -329,21 +342,26 @@ const Dailyentryform = ({ addrow, blockeddates, rows, outlets = [] }) => {
       total,
     });
 
+    // Reset form
     setDate("");
-    setEntryValues(() => {
-      const reset = {};
-      outletNames.forEach((o) => (reset[o] = ""));
-      return reset;
-    });
+    setEntryValues(initializeEntryValues());
     setOpenCal(false);
-  };
+  }, [date, hasEntry, outletNames, outlets, entryValues, addrow, initializeEntryValues]);
 
   // Check if outlet is active
-  const isOutletActive = (outletName) => {
+  const isOutletActive = useCallback((outletName) => {
     if (!Array.isArray(outlets) || outlets.length === 0) return true;
-    const outletObj = outlets.find(o => o.area === outletName);
-    return !outletObj || outletObj.status !== "Inactive";
-  };
+    
+    const outletObj = outlets.find(o => {
+      const area = typeof o === 'string' ? o : (o.area || o.name);
+      return area === outletName;
+    });
+    
+    if (!outletObj) return true;
+    if (typeof outletObj === 'string') return true;
+    
+    return !outletObj.status || outletObj.status === "Active";
+  }, [outlets]);
 
   return (
     <div className="bg-white shadow rounded-xl p-6 m-6">
@@ -389,41 +407,47 @@ const Dailyentryform = ({ addrow, blockeddates, rows, outlets = [] }) => {
       </div>
 
       {/* Outlet Inputs - Dynamic based on outlets */}
-      <div className="grid gap-4 md:grid-cols-5 mb-6">
-        {outletNames.map((outlet) => {
-          const isActive = isOutletActive(outlet);
-          return (
-            <div key={outlet} className="space-y-1">
-              <p className="text-xs font-medium text-gray-600">
-                {outlet}
-                {!isActive && <span className="text-red-500 ml-1">(Inactive)</span>}
-              </p>
-              <div className="relative">
-                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">₹</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={entryValues[outlet]}
-                  onChange={(e) => handleEntryChange(outlet, e.target.value)}
-                  disabled={hasEntry || !isActive}
-                  placeholder="0.00"
-                  className={`w-full rounded-xl border border-gray-200 bg-eggBg pl-8 pr-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-400 transition ${(hasEntry || !isActive) ? "bg-gray-50 cursor-not-allowed" : ""}`}
-                />
+      {outletNames.length > 0 ? (
+        <div className="grid gap-4 md:grid-cols-5 mb-6">
+          {outletNames.map((outlet) => {
+            const isActive = isOutletActive(outlet);
+            return (
+              <div key={outlet} className="space-y-1">
+                <p className="text-xs font-medium text-gray-600">
+                  {outlet}
+                  {!isActive && <span className="text-red-500 ml-1">(Inactive)</span>}
+                </p>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400">₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={entryValues[outlet] || ""}
+                    onChange={(e) => handleEntryChange(outlet, e.target.value)}
+                    disabled={hasEntry || !isActive}
+                    placeholder="0.00"
+                    className={`w-full rounded-xl border border-gray-200 bg-eggBg pl-8 pr-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-400 transition ${(hasEntry || !isActive) ? "bg-gray-50 cursor-not-allowed" : ""}`}
+                  />
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
+          <p className="text-sm text-yellow-800">No outlets available. Please add outlets first.</p>
+        </div>
+      )}
 
       {/* Save Button */}
       <div className="flex justify-center">
         <button
           onClick={handleSubmit}
-          disabled={hasEntry}
-          className={`inline-flex items-center justify-center rounded-2xl px-8 py-3 text-base font-semibold text-white shadow-lg transition-all ${hasEntry ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600 active:scale-95'}`}
+          disabled={hasEntry || outletNames.length === 0}
+          className={`inline-flex items-center justify-center rounded-2xl px-8 py-3 text-base font-semibold text-white shadow-lg transition-all ${(hasEntry || outletNames.length === 0) ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600 active:scale-95'}`}
         >
-          {hasEntry ? 'Locked' : 'Save Entry'}
+          {hasEntry ? 'Locked' : outletNames.length === 0 ? 'No Outlets' : 'Save Entry'}
         </button>
       </div>
     </div>
