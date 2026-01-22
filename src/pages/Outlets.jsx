@@ -96,21 +96,39 @@ export default function Outlets() {
       const res = await fetch(`${API_URL}/outlets/all`);
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data)) {
+        if (Array.isArray(data) && data.length > 0) {
           console.log('Outlets loaded from backend:', data.length);
           setOutlets(data);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
           setError(null);
         } else {
-          throw new Error('Invalid outlets response');
+          throw new Error('Empty outlets response');
         }
       } else {
         throw new Error(`Backend error: ${res.status}`);
       }
     } catch (err) {
       console.error("Error fetching outlets:", err);
+      
+      // Try localStorage as fallback
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            console.log('Using cached outlets from localStorage');
+            setOutlets(parsed);
+            setError(null);
+            return;
+          }
+        } catch (parseErr) {
+          console.error("Error parsing saved outlets:", parseErr);
+        }
+      }
+      
+      // No data available at all
       setOutlets([]);
-      setError('Failed to load outlets from backend.');
+      setError('Failed to load outlets. Please refresh the page.');
     }
   }, []);
 
@@ -132,7 +150,51 @@ export default function Outlets() {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [fetchOutlets]);
 
-  // Removed auto-add logic for required areas
+  // Ensure required areas exist
+  useEffect(() => {
+    if (outlets.length === 0) return;
+
+    setOutlets((prev) => {
+      const areas = new Set(prev.map((o) => o.area));
+      const missing = REQUIRED_AREAS.filter((r) => !areas.has(r));
+      
+      if (missing.length === 0) return prev;
+
+      console.log('Adding missing outlets:', missing);
+      
+      const existingIds = new Set(prev.map((o) => o.id));
+      let nextNum = 1;
+      const getNextId = () => {
+        while (existingIds.has(`OUT-${String(nextNum).padStart(3, "0")}`)) {
+          nextNum++;
+        }
+        const id = `OUT-${String(nextNum).padStart(3, "0")}`;
+        existingIds.add(id);
+        return id;
+      };
+
+      const added = missing.map((area) => ({
+        id: getNextId(),
+        name: `${area} Outlet`,
+        area,
+        contact: "-",
+        phone: "-",
+        status: "Active",
+        reviewStatus: "ok",
+      }));
+
+      // Sync missing outlets to backend
+      added.forEach((outlet) => {
+        fetch(`${API_URL}/outlets/add`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(outlet),
+        }).catch(err => console.error('Failed to sync outlet to backend:', err));
+      });
+
+      return [...added, ...prev];
+    });
+  }, []);
 
   // Persist to localStorage and dispatch event when outlets change
   useEffect(() => {
@@ -226,18 +288,27 @@ export default function Outlets() {
     setOpenActionId(null);
   };
 
-  const handleDeleteOutlet = async (id) => {
-    if (!confirm("Are you sure you want to delete this outlet?")) return;
+  const handleSetStatus = async (id, newStatus) => {
     try {
-      const res = await fetch(`${API_URL}/outlets/delete/${id}`, { method: "DELETE" });
+      const outlet = outlets.find(o => o.id === id);
+      if (!outlet) return;
+
+      const updated = { ...outlet, status: newStatus };
+
+      const res = await fetch(`${API_URL}/outlets/add`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updated),
+      });
+
       if (res.ok) {
-        setOutlets((prev) => prev.filter((o) => o.id !== id));
+        setOutlets(prev => prev.map(o => o.id === id ? updated : o));
       } else {
-        alert("Failed to delete outlet from backend.");
+        alert("Failed to update status in backend.");
       }
     } catch (err) {
-      console.error('Delete error:', err);
-      alert("Failed to delete outlet.");
+      console.error('Status update error:', err);
+      alert("Failed to update status.");
     }
     setOpenActionId(null);
   };
@@ -508,10 +579,17 @@ export default function Outlets() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleDeleteOutlet(outlet.id)}
-                            className="block w-full text-left px-3 py-2 text-white bg-red-600 hover:bg-red-700 rounded-b-lg"
+                            onClick={() => handleSetStatus(outlet.id, 'Active')}
+                            className="block w-full text-left px-3 py-2 hover:bg-gray-100"
                           >
-                            Delete
+                            Active
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSetStatus(outlet.id, 'Inactive')}
+                            className="block w-full text-left px-3 py-2 hover:bg-gray-100 rounded-b-lg"
+                          >
+                            Inactive
                           </button>
                         </div>
                       )}
