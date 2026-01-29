@@ -45,10 +45,11 @@ export default function Sidebar() {
 
   return (
     <div
-      className={`h-screen sticky top-0 bg-orange-50 shadow-md p-4 transition-all duration-300 ${
+      className={`h-screen sticky top-0 bg-orange-50 shadow-md p-4 transition-all duration-300 overflow-y-auto ${
         open ? "w-64" : "w-20"
       }`}
     >
+
       {/* Logo */}
       <div className="mb-8 flex items-center gap-2 justify-center">
         <div className={`inline-block bg-orange-50 rounded ${open ? 'p-2' : 'p-1'}`}>
