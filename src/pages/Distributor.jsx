@@ -1,6 +1,7 @@
 import React from "react";
 import Topbar from "../components/Topbar";
 import Distributorcomp from "../components/Distributorcomp";
+import Supervisor from "../components/Supervisor";
 
 const Distributor = () => {
   return (
@@ -9,6 +10,7 @@ const Distributor = () => {
       <div className="flex-1 p-4 pt-0 overflow-x-hidden">
         <Topbar />
         <Distributorcomp />
+        <Supervisor/>
       </div>
     </div>
   );

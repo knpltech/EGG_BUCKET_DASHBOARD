@@ -99,7 +99,7 @@ export default function Sidebar() {
             </Link>
             <Link to="/admin/distribution" className={linkClass("/admin/distribution")}> 
               <FontAwesomeIcon icon={faUsers} />
-              {open && "Add Data Agent"}
+              {open && "Add Data Agent & Supervisor"}
             </Link>
             <Link to="/admin/outlets" className={linkClass("/admin/outlets")}> 
               <FontAwesomeIcon icon={faStore} />
@@ -199,7 +199,7 @@ export default function Sidebar() {
             {(dataAgentRoles.includes("distribution")) && (
               <Link to="/admin/distribution" className={linkClass("/admin/distribution")}> 
                 <FontAwesomeIcon icon={faUsers} />
-                {open && "Add Data Agent"}
+                {open && "Add Data Agent & Supervisor"}
               </Link>
             )}
             {/* Removed duplicate Outlets link for data agents */}

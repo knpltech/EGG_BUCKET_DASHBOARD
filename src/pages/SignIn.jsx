@@ -6,17 +6,48 @@ import egg from "../assets/egg.png";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
+/* =========================
+   LOCAL STORAGE HELPERS
+========================= */
+const getSupervisors = () => {
+  try {
+    return JSON.parse(localStorage.getItem("supervisors")) || [];
+  } catch {
+    return [];
+  }
+};
+
+const getDataAgentZones = () => {
+  try {
+    return JSON.parse(localStorage.getItem("dataAgentZones")) || [];
+  } catch {
+    return [];
+  }
+};
+
 export default function SignIn() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("admin");
+  const [zone, setZone] = useState("null");
   const [loading, setLoading] = useState(false);
 
   const navigate = useNavigate();
 
+  const zones = ["Zone 1", "Zone 2", "Zone 3"];
+
+  /* =========================
+     LOGIN HANDLER
+  ========================= */
   const handleSignin = async () => {
     if (!username || !password) {
       alert("Enter username & password");
+      return;
+    }
+
+    // Zone required for these roles
+    if (["dataagent", "viewer", "supervisor"].includes(role) && !zone) {
+      alert("Please select your zone");
       return;
     }
 
@@ -25,9 +56,7 @@ export default function SignIn() {
     try {
       const res = await fetch(`${API_URL}/auth/signin`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           username,
           password,
@@ -35,20 +64,7 @@ export default function SignIn() {
         }),
       });
 
-      const contentType = res.headers.get("content-type");
-      let data;
-
-      if (contentType && contentType.includes("application/json")) {
-        data = await res.json();
-        console.log("Login response:", data); // Debug log
-      } else {
-        const text = await res.text();
-        console.error("Non-JSON response from server:", text);
-        setLoading(false);
-        alert(`Server error: Non-JSON response (${res.status}):\n` + text);
-        return;
-      }
-
+      const data = await res.json();
       setLoading(false);
 
       if (!res.ok || !data.success) {
@@ -56,41 +72,84 @@ export default function SignIn() {
         return;
       }
 
-      // Save session
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
+      /* =========================
+         ZONE VALIDATION (FRONTEND)
+      ========================= */
 
-      // Redirect
+      // Supervisor validation
+      if (role === "supervisor") {
+        const supervisors = getSupervisors();
+        const match = supervisors.find(
+          (s) => s.username === username && s.zoneId === zone
+        );
+        if (!match) {
+          alert("Invalid zone for supervisor");
+          return;
+        }
+      }
+
+      // Data Agent / Viewer validation
+      if (role === "dataagent" || role === "viewer") {
+        const mappings = getDataAgentZones();
+        const match = mappings.find(
+          (m) => m.username === username && m.zoneId === zone
+        );
+        if (!match) {
+          alert("You are not assigned to this zone");
+          return;
+        }
+      }
+
+      /* =========================
+         SAVE SESSION
+      ========================= */
+      localStorage.setItem("token", data.token);
+      localStorage.setItem(
+        "user",
+        JSON.stringify({
+          ...data.user,
+          zoneId: zone || null,
+        })
+      );
+
+      /* =========================
+         REDIRECT
+      ========================= */
       if (data.user.role === "Admin") {
         navigate("/admin/dashboard");
       } else if (data.user.role === "Viewer") {
         navigate("/viewer/data");
+      } else if (data.user.role === "Supervisor") {
+        navigate("/supervisor/dashboard");
       } else {
-        // DataAgent: redirect to first allowed feature
-        const roles = Array.isArray(data.user.roles) ? data.user.roles : (data.user.role ? [data.user.role] : []);
-        // Map roles to paths in order of preference
+        const rolesArr = Array.isArray(data.user.roles)
+          ? data.user.roles
+          : [];
+
         const roleToPath = {
           daily_damages: "/admin/damages",
           cash_payments: "/admin/cash-payments",
           daily_sales: "/admin/dailysales",
           digital_payments: "/admin/digital-payments",
           outlets: "/admin/outlets",
-          neccrate: "/admin/neccrate"
+          neccrate: "/admin/neccrate",
         };
+
         let firstPath = null;
         for (const r of Object.keys(roleToPath)) {
-          if (roles.includes(r)) {
+          if (rolesArr.includes(r)) {
             firstPath = roleToPath[r];
             break;
           }
         }
+
         navigate(firstPath || "/dashboard");
       }
 
     } catch (err) {
       console.error("Login error:", err);
       setLoading(false);
-      alert("Server error: " + err.message);
+      alert("Server error");
     }
   };
 
@@ -113,23 +172,13 @@ export default function SignIn() {
         />
       ))}
 
-      {/* Card */}
-      <div className="bg-eggWhite w-full max-w-sm p-8 rounded-2xl shadow-xl relative z-10">
+      <div className="bg-eggWhite w-full max-w-sm p-8 rounded-2xl shadow-xl z-10">
 
         <div className="flex flex-col items-center mb-4">
-          <div className="inline-block bg-eggWhite p-0 rounded-md">
-            <img
-              src={logo}
-              alt="Egg Bucket Logo"
-              className="w-24 sm:w-28 md:w-32 h-auto object-contain mix-blend-multiply"
-            />
-          </div>
-
-          <div className="mt-2">
-            <span className="text-sm sm:text-base md:text-lg font-semibold text-[#2C1A0C] opacity-95">
-              KACKLEWALLS NUTRITION PVT LTD
-            </span>
-          </div>
+          <img src={logo} alt="Logo" className="w-28 mix-blend-multiply" />
+          <span className="mt-2 text-sm font-semibold">
+            KACKLEWALLS NUTRITION PVT LTD
+          </span>
         </div>
 
         <h2 className="text-center text-2xl font-semibold mb-6">Sign In</h2>
@@ -137,11 +186,10 @@ export default function SignIn() {
         <div className="space-y-4">
 
           <input
-            type="text"
-            placeholder="Username (phone number)"
+            placeholder="Username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="w-full p-3 rounded-xl bg-eggInput outline-none shadow"
+            className="w-full p-3 rounded-xl bg-eggInput"
           />
 
           <input
@@ -149,23 +197,41 @@ export default function SignIn() {
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full p-3 rounded-xl bg-eggInput outline-none shadow"
+            className="w-full p-3 rounded-xl bg-eggInput"
           />
 
           <select
             value={role}
-            onChange={(e) => setRole(e.target.value)}
-            className="w-full p-3 rounded-xl bg-eggInput outline-none shadow"
+            onChange={(e) => {
+              setRole(e.target.value);
+              setZone("");
+            }}
+            className="w-full p-3 rounded-xl bg-eggInput"
           >
-              <option value="admin">Admin</option>
-              <option value="viewer">Viewer</option>
-              <option value="dataagent">DataAgent</option>
+            <option value="admin">Admin</option>
+            <option value="supervisor">Supervisor</option>
+            <option value="dataagent">Data Agent</option>
+            <option value="viewer">Viewer</option>
           </select>
+
+          {/* ZONE (Conditional) */}
+          {["dataagent", "viewer", "supervisor"].includes(role) && (
+            <select
+              value={zone}
+              onChange={(e) => setZone(e.target.value)}
+              className="w-full p-3 rounded-xl bg-eggInput"
+            >
+              <option value="">Select Zone</option>
+              {zones.map((z) => (
+                <option key={z} value={z}>{z}</option>
+              ))}
+            </select>
+          )}
 
           <button
             onClick={handleSignin}
             disabled={loading}
-            className="w-full bg-eggOrange text-white py-3 rounded-full mt-2 hover:opacity-90 shadow-md disabled:opacity-40"
+            className="w-full bg-eggOrange text-white py-3 rounded-full mt-2"
           >
             {loading ? "Signing in..." : "Sign In"}
           </button>

@@ -2,12 +2,30 @@ const API_URL = import.meta.env.VITE_API_URL;
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import Topbar from "../components/Topbar";
 import Sidebar from "../components/Sidebar";
+import SupervisorList from "../components/SupervisorList";
 
 const escapeRegExp = (s = "") => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const Users = () => {
     const [editModalOpen, setEditModalOpen] = useState(false);
     const [editUser, setEditUser] = useState(null);
+
+    const getDataAgentZones = () => {
+      try {
+        return JSON.parse(localStorage.getItem("dataAgentZones")) || [];
+      } catch {
+        return [];
+      }
+    };
+
+        // 🔹 username -> zoneId map
+    const dataAgentZoneMap = useMemo(() => {
+      const map = {};
+      getDataAgentZones().forEach((d) => {
+        map[d.username] = d.zoneId;
+      });
+      return map;
+    }, []);
 
     // Delete user handler
     const handleDeleteUser = async (id, username, roles) => {
@@ -37,6 +55,8 @@ const Users = () => {
       setEditUser(user);
       setEditModalOpen(true);
     };
+
+    
 
     // Save edited user
     const handleSaveEdit = (updatedUser) => {
@@ -281,6 +301,7 @@ const Users = () => {
           </div></div>
 
           {/* Results */}
+          <SupervisorList/>
           {users.length === 0 ? (
             <div className="bg-white shadow rounded-xl p-6 text-center text-gray-500">No users found.</div>
           ) : filtered.length === 0 ? (
@@ -301,19 +322,22 @@ const Users = () => {
                       <span className="font-medium">Phone:</span>{" "}
                       {highlight(u.phone || "", debounced)}
                     </p>
+
                     <p>
                       <span className="font-medium">Role:</span>{" "}
-                      {Array.isArray(u.roles) ? (
-                        u.roles.map((r, i) => (
-                          <span key={r + i} className="inline-block mr-1">
-                            {highlight(r || "", debounced)}
-                            {i < u.roles.length - 1 ? ", " : ""}
-                          </span>
-                        ))
-                      ) : (
-                        highlight(u.role || "", debounced)
-                      )}
+                      {Array.isArray(u.roles)
+                        ? u.roles.join(", ")
+                        : u.role}
                     </p>
+
+                    {/* 👇 ADD THIS */}
+                    {Array.isArray(u.roles) &&
+                      u.roles.includes("dataagent") &&
+                      dataAgentZoneMap[u.username] && (
+                        <p className="text-blue-600 font-medium">
+                          Zone: {dataAgentZoneMap[u.username]}
+                        </p>
+                    )}
                   </div>
 
                   <div className="mt-4 flex gap-2">
@@ -386,7 +410,13 @@ const Users = () => {
           )}
         </div>
       </div>
+      
+      <div>
+        
+      </div>
     </div>
+
+    
   );
 };
 

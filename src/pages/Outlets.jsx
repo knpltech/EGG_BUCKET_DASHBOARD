@@ -66,6 +66,11 @@ function FilterIcon({ className = "" }) {
   );
 }
 
+const user = JSON.parse(localStorage.getItem("user"));
+const userRole = user?.role;       // "Admin" | "Supervisor"
+const userZone = user?.zoneId;     // null | "Zone 1" | "Zone 2"
+
+
 export default function Outlets() {
   const [outlets, setOutlets] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -230,25 +235,28 @@ export default function Outlets() {
 
   /* ================= FILTERING ================= */
   const filteredOutlets = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    let list = outlets;
+  const query = search.trim().toLowerCase();
 
-    if (query) {
-      list = list.filter((o) => {
-        return (
-          o.name.toLowerCase().includes(query) ||
-          o.area.toLowerCase().includes(query) ||
-          o.phone.toLowerCase().includes(query)
-        );
-      });
-    }
+  let list =
+    userRole === "Supervisor"
+      ? outlets.filter(o => o.zoneId === userZone)
+      : outlets;
 
-    if (statusFilter !== "All") {
-      list = list.filter((o) => o.status === statusFilter);
-    }
+  if (query) {
+    list = list.filter((o) =>
+      o.name.toLowerCase().includes(query) ||
+      o.area.toLowerCase().includes(query) ||
+      o.phone.toLowerCase().includes(query)
+    );
+  }
 
-    return list;
-  }, [outlets, search, statusFilter]);
+  if (statusFilter !== "All") {
+    list = list.filter((o) => o.status === statusFilter);
+  }
+
+  return list;
+}, [outlets, search, statusFilter, userRole, userZone]);
+
 
   const totalPages = Math.max(1, Math.ceil(filteredOutlets.length / pageSize));
 
@@ -281,6 +289,7 @@ export default function Outlets() {
       contact: outlet.contact === "-" ? "" : outlet.contact,
       phone: outlet.phone === "-" ? "" : outlet.phone,
       status: outlet.status,
+      zoneId: outlet.zoneId   // preserve zone
     });
     setIsEditMode(true);
     setEditingId(outlet.id);
@@ -360,6 +369,10 @@ export default function Outlets() {
           phone: newOutlet.phone || "-",
           status: "Active",
           reviewStatus: "ok",
+          zoneId:
+            userRole === "Supervisor"
+              ? userZone
+              : newOutlet.zoneId || null
         };
 
         const res = await fetch(`${API_URL}/outlets/add`, {
@@ -702,17 +715,42 @@ export default function Outlets() {
                 </div>
               </div>
 
+
+
+              {/* ZONE SELECT — ADMIN ONLY */}
+              {userRole === "Admin" && (
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-gray-700">Zone</label>
+                  <select
+                    value={newOutlet.zoneId || ""}
+                    onChange={(e) =>
+                      setNewOutlet(prev => ({ ...prev, zoneId: e.target.value }))
+                    }
+                    className="w-full rounded-xl border border-gray-200 bg-eggBg px-3 py-2 text-xs md:text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                  >
+                    <option value="">Select Zone</option>
+                    <option value="Zone 1">Zone 1</option>
+                    <option value="Zone 2">Zone 2</option>
+                    <option value="Zone 3">Zone 3</option>
+                  </select>
+                </div>
+              )}
+
+              {/* STATUS */}
               <div className="space-y-1">
                 <label className="text-xs font-medium text-gray-700">Status</label>
                 <select
                   value={newOutlet.status}
-                  onChange={(e) => setNewOutlet((prev) => ({ ...prev, status: e.target.value }))}
+                  onChange={(e) =>
+                    setNewOutlet((prev) => ({ ...prev, status: e.target.value }))
+                  }
                   className="w-full rounded-xl border border-gray-200 bg-eggBg px-3 py-2 text-xs md:text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400"
                 >
                   <option value="Active">Active</option>
                   <option value="Inactive">Inactive</option>
                 </select>
               </div>
+
 
               <div className="mt-3 flex flex-col gap-2 md:flex-row md:justify-end">
                 <button

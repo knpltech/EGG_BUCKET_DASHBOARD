@@ -9,10 +9,25 @@ import {
   faStore,
   faMoneyBill,
   faWallet,
+  faLayerGroup,
   faIndianRupeeSign,
   faArrowsSplitUpAndLeft,
 } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+
+
+const getDataAgentZones = () => {
+  try {
+    return JSON.parse(localStorage.getItem("dataAgentZones")) || [];
+  } catch {
+    return [];
+  }
+};
+
+const setDataAgentZones = (data) => {
+  localStorage.setItem("dataAgentZones", JSON.stringify(data));
+};
+
 
 const Distributorcomp = () => {
   const location = useLocation();
@@ -24,7 +39,10 @@ const Distributorcomp = () => {
     password: "",
     confirmPassword: "",
     roles: user?.roles || [],
+    zone:","
   });
+
+   const zones = ["Zone 1", "Zone 2", "Zone 3"];
 
   const roles = [
     {
@@ -73,7 +91,7 @@ const Distributorcomp = () => {
   ];
   const handleSubmit = async () => {
     // Basic validation
-    if (!form.fullName || !form.username) {
+    if (!form.fullName || !form.username || !form.zone) {
       return;
     }
 
@@ -105,6 +123,16 @@ const Distributorcomp = () => {
       });
 
       const data = await res.json();
+
+       const existing = getDataAgentZones();
+      const updated = [
+        ...existing.filter((d) => d.username !== form.username),
+        {
+          username: form.username.trim(),
+          zoneId: form.zone,
+        },
+      ];
+      setDataAgentZones(updated);
       
       if (res.ok) {
         setForm({
@@ -270,6 +298,24 @@ const Distributorcomp = () => {
                 </div>
               );
             })}
+          </div>
+
+          {/* SECTION 3: ZONE */}
+          <div className="p-6">
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              <FontAwesomeIcon icon={faLayerGroup} /> Zone Assignment
+            </h2>
+
+            <select
+              className="border rounded-lg w-full p-2 mt-3"
+              value={form.zone}
+              onChange={(e) => setForm({ ...form, zone: e.target.value })}
+            >
+              <option value="">Select Zone</option>
+              {zones.map((z) => (
+                <option key={z} value={z}>{z}</option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
