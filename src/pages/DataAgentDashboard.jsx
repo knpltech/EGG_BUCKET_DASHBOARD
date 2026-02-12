@@ -29,27 +29,28 @@ export default function DataAgentDashboard() {
   const [digitalPaymentsToday, setDigitalPaymentsToday] = useState(0);
   const [cashPaymentsToday, setCashPaymentsToday] = useState(0);
 
+  // Get user zone
+  const userZone = user?.zoneId || user?.zone || null;
+
   useEffect(() => {
     const API_URL = import.meta.env.VITE_API_URL;
-    // Outlets
-    const data = localStorage.getItem("egg_outlets_v1");
-    let outlets = [];
-    if (data) {
-      outlets = JSON.parse(data);
-    }
-    if (!Array.isArray(outlets) || outlets.length === 0) {
-      fetch(`${API_URL}/outlets/all`)
-        .then(res => res.json())
-        .then(list => {
-          const activeOutlets = Array.isArray(list)
-            ? list.filter(o => o.status === "Active").length
-            : 0;
-          setTotalOutlets(activeOutlets);
-        });
-    } else {
-      const activeOutlets = outlets.filter(o => o.status === "Active").length;
-      setTotalOutlets(activeOutlets);
-    }
+    // Outlets - fetch zone-specific if user has a zone
+    const fetchOutlets = async () => {
+      try {
+        const url = userZone 
+          ? `${API_URL}/outlets/zone/${userZone}`
+          : `${API_URL}/outlets/all`;
+        const res = await fetch(url);
+        const list = await res.json();
+        const activeOutlets = Array.isArray(list)
+          ? list.filter(o => o.status === "Active").length
+          : 0;
+        setTotalOutlets(activeOutlets);
+      } catch {
+        setTotalOutlets(0);
+      }
+    };
+    fetchOutlets();
     // Eggs distributed today
     const fetchEggsToday = async () => {
       try {

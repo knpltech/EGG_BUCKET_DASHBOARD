@@ -42,7 +42,7 @@ const Distributorcomp = () => {
     zone:","
   });
 
-   const zones = ["Zone 1", "Zone 2", "Zone 3"];
+  const zones = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"];
 
   const roles = [
     {
@@ -118,7 +118,8 @@ const Distributorcomp = () => {
           username: form.username.trim(),
           password: form.password,
           fromDistributorPage: true,
-          roles: rolesArr
+          roles: rolesArr,
+          zone: form.zone
         }),
       });
 

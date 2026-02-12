@@ -16,10 +16,13 @@ import Reports from "./pages/Reports";
 import { Navigate } from "react-router-dom";
 
 import DataAgentDashboard from "./pages/DataAgentDashboard";
+import SupervisorDashboard from "./pages/SupervisorDashboard";
+import SupervisorOutlet from "./pages/SupervisorOutlet";
 import { DamageProvider } from "./context/DamageContext";
 import { PanelProvider } from "./context/PanelContext";
 import AdminLayoutWithPanel from "./layouts/AdminLayoutWithPanel";
 import ViewerData from "./pages/ViewerData";
+import SupervisorLayout from "./layouts/SupervisorLayout";
 
 function ProtectedRoute({ element, requiredRole }) {
   let user = null;
@@ -28,8 +31,15 @@ function ProtectedRoute({ element, requiredRole }) {
   } catch {}
   const isAdmin = user && (user.role === "Admin" || (Array.isArray(user.roles) && user.roles.includes("admin")));
   const isViewer = user && (user.role === "Viewer" || (Array.isArray(user.roles) && user.roles.includes("viewer")));
+  const isSupervisor = user && (user.role === "Supervisor" || user.role === "supervisor");
   const dataAgentRoles = Array.isArray(user?.roles) ? user.roles : (user?.role ? [user.role] : []);
-  if (isAdmin || !requiredRole || dataAgentRoles.includes(requiredRole) || isViewer) {
+  if (
+    isAdmin ||
+    !requiredRole ||
+    dataAgentRoles.includes(requiredRole) ||
+    isViewer ||
+    (requiredRole === "supervisor" && isSupervisor)
+  ) {
     return element;
   }
   // Not allowed: redirect to data agent dashboard
@@ -88,8 +98,21 @@ function App() {
               element={<ProtectedRoute element={<AdminLayoutWithPanel><Reports /></AdminLayoutWithPanel>} requiredRole={null} />}
             />
 
-            {/* DATA AGENT */}
+            {/* SUPERVISOR ROUTES */}
+            <Route path="/supervisor/dashboard" element={<ProtectedRoute element={<SupervisorDashboard />} requiredRole="supervisor" />} />
+            <Route path="/supervisor/damages" element={<ProtectedRoute element={<SupervisorLayout><DailyDamages supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
+            <Route path="/supervisor/neccrate" element={<ProtectedRoute element={<SupervisorLayout><Neccrate supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
+            <Route path="/supervisor/dailysales" element={<ProtectedRoute element={<SupervisorLayout><Dailysales supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
+            <Route path="/supervisor/digital-payments" element={<ProtectedRoute element={<SupervisorLayout><DigitalPayments supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
+            <Route path="/supervisor/cash-payments" element={<ProtectedRoute element={<SupervisorLayout><CashPayments supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
+            <Route path="/supervisor/reports" element={<ProtectedRoute element={<SupervisorLayout><Reports supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
+
+            {/* DATA AGENT ROUTES */}
+            <Route path="/dataagent/dashboard" element={<ProtectedRoute element={<DataAgentDashboard />} requiredRole="dataagent" />} />
             <Route path="/dashboard" element={<DataAgentDashboard />} />
+            
+            {/* VIEWER ROUTES */}
+            <Route path="/viewer/dashboard" element={<ViewerData/>}/>
             <Route path="/viewer/data" element={<ViewerData/>}/>
 
             

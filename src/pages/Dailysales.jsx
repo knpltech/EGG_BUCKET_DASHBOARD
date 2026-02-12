@@ -1,7 +1,7 @@
 const API_URL = import.meta.env.VITE_API_URL;
 
-import React, { useState, useEffect, useCallback } from "react";
-import { getRoleFlags } from "../utils/role";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { getRoleFlags, zonesMatch } from "../utils/role";
 import * as XLSX from "xlsx";
 
 import Topbar from "../components/Topbar";
@@ -13,20 +13,31 @@ import Weeklytrend from "../components/Weeklytrend";
 const OUTLETS_KEY = "egg_outlets_v1";
 
 const Dailysales = () => {
-  const { isAdmin, isViewer, isDataAgent } = getRoleFlags();
+  const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
+  // For supervisor, treat as data agent for form visibility
+  const showForms = isAdmin || isDataAgent || isSupervisor;
 
   const [rows, setRows] = useState([]);
   const [outlets, setOutlets] = useState([]);
   const [outletLoading, setOutletLoading] = useState(true);
   
-  // Filtered outlets for Data Agent: only show active
-  const filteredOutlets = isDataAgent && Array.isArray(outlets) && outlets.length > 0
-    ? outlets.filter(o => {
+  // formOutlets: zone-filtered for data entry, filter active only for data agent
+  const formOutlets = useMemo(() => {
+    let list = outlets;
+    // Filter by zone for any user with zone
+    if (zone && Array.isArray(list)) {
+      list = list.filter(o => typeof o === 'object' && zonesMatch(o.zoneId, zone));
+    }
+    // Filter active only for data agent
+    if (isDataAgent && Array.isArray(list) && list.length > 0) {
+      list = list.filter(o => {
         if (typeof o === 'string') return true;
         if (typeof o === 'object' && o.status) return o.status === 'Active';
         return true;
-      })
-    : outlets;
+      });
+    }
+    return list;
+  }, [outlets, isDataAgent, zone]);
     
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -68,7 +79,10 @@ const Dailysales = () => {
     setOutletLoading(true);
     try {
       console.log('Loading outlets...');
-      const res = await fetch(`${API_URL}/outlets/all`);
+      // Always load all outlets for display
+      const url = `${API_URL}/outlets/all`;
+      console.log('Dailysales loadOutlets URL:', url);
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
@@ -109,7 +123,8 @@ const Dailysales = () => {
   // Load outlets only on component mount
   useEffect(() => {
     loadOutlets();
-  }, [loadOutlets]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* ================= OUTLET SYNC - LISTEN FOR UPDATES ================= */
   useEffect(() => {
@@ -295,27 +310,27 @@ const Dailysales = () => {
       <div className="bg-eggBg min-h-screen p-6 w-full">
         <Topbar />
 
-        {/* ================= ENTRY FORM (ADMIN + DATA AGENT) ================= */}
-        {!isViewer && outlets.length > 0 && (
+        {/* ================= ENTRY FORM (ADMIN + DATA AGENT + SUPERVISOR) ================= */}
+        {showForms && outlets.length > 0 && (
           <div className="mt-4 mb-8">
             <Dailyentryform
               addrow={addrow}
               blockeddates={rows.filter((r) => r.locked).map((r) => r.date)}
               rows={rows}
-              outlets={filteredOutlets}
+              outlets={formOutlets}
             />
           </div>
         )}
 
         {/* No outlets warning */}
-        {!isViewer && outlets.length === 0 && (
+        {showForms && outlets.length === 0 && (
           <div className="mt-4 mb-8 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
             <p className="text-sm text-yellow-800">No outlets available. Please add outlets first.</p>
           </div>
         )}
 
         {/* ================= HEADER ================= */}
-        {(isAdmin || isViewer || isDataAgent) && outlets.length > 0 && (
+        {(isAdmin || isViewer || isDataAgent || isSupervisor) && outlets.length > 0 && (
           <Dailyheader 
             dailySalesData={filteredRows}
             fromDate={fromDate}
@@ -327,10 +342,10 @@ const Dailysales = () => {
         )}
 
         {/* ================= TABLE (ADMIN + VIEWER + DATA AGENT) ================= */}
-        {(isAdmin || isViewer || isDataAgent) && outlets.length > 0 && (
+        {(isAdmin || isViewer || isDataAgent || isSupervisor) && outlets.length > 0 && (
           <DailyTable
             rows={filteredRows}
-            outlets={filteredOutlets}
+            outlets={outlets}
             onEdit={isAdmin ? handleEditClick : null}
           />
         )}

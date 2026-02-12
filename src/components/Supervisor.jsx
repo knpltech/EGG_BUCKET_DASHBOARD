@@ -28,7 +28,7 @@ const Supervisor = () => {
     zone: "",
   });
 
-  const zones = ["Zone 1", "Zone 2", "Zone 3"];
+  const zones = ["Zone 1", "Zone 2", "Zone 3","Zone 4","Zone 5"];
   const [existingSupervisors, setExistingSupervisors] = useState([]);
 
   /* =========================
@@ -59,32 +59,38 @@ const Supervisor = () => {
       return;
     }
 
-    if (occupiedZones.includes(form.zone)) {
-      alert(`Supervisor already exists for ${form.zone}`);
-      return;
-    }
+    // Convert zone string (e.g. 'Zone 2') to number 2 for storage
+    const zoneNum = parseInt(form.zone.replace(/[^0-9]/g, ""), 10);
 
-    const newSupervisor = {
-      id: `sup_${Date.now()}`,
-      fullName: `${form.zone} Supervisor`,
-      username: form.username.trim(),
-      phone: "",
-      role: "supervisor",
-      zoneId: form.zone,
-    };
-
-    const updated = [...existingSupervisors, newSupervisor];
-    setStoredSupervisors(updated);
-    setExistingSupervisors(updated);
-
-    alert("Supervisor created successfully");
-
-    setForm({
-      username: "",
-      password: "",
-      confirmPassword: "",
-      zone: "",
-    });
+    // POST to backend
+    fetch("/api/supervisor/add", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: form.username.trim(),
+        password: form.password,
+        zone: zoneNum
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          // Store supervisor in localStorage with numeric zone
+          const supervisors = getStoredSupervisors();
+          supervisors.push({ username: form.username.trim(), zone: zoneNum });
+          setStoredSupervisors(supervisors);
+          alert("Supervisor created successfully");
+          setForm({
+            username: "",
+            password: "",
+            confirmPassword: "",
+            zone: "",
+          });
+        } else {
+          alert(data.error || "Failed to create supervisor");
+        }
+      })
+      .catch(() => alert("Failed to create supervisor"));
   };
 
   return (

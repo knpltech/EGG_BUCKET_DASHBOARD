@@ -58,6 +58,29 @@ export const getAllUsers = async (req, res) => {
 import { db } from "../config/firebase.js";
 import bcrypt from "bcryptjs";
 
+// Add supervisor to Firestore
+export const addSupervisor = async (req, res) => {
+  try {
+    const { username, password, zone } = req.body;
+    if (!username || !password || !zone) {
+      return res.status(400).json({ success: false, error: "Missing fields" });
+    }
+    const hashed = await bcrypt.hash(password, 10);
+    // Store zone as numeric type
+    const zoneType = typeof zone === "number" ? zone : parseInt(zone.replace(/[^0-9]/g, ""), 10);
+    const supervisorData = {
+      username,
+      password: hashed,
+      zone: zoneType,
+      createdAt: new Date()
+    };
+    await db.collection("supervisors").doc(username).set(supervisorData);
+    return res.json({ success: true, message: "Supervisor created successfully" });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
 export const addUser = async (req, res) => {
   try {
     const { username, password, fullName, phone, roles, fromDistributorPage } = req.body;
@@ -91,6 +114,7 @@ export const addUser = async (req, res) => {
           phone: phone || "",
           role: "DataAgent",
           roles: Array.isArray(roles) && roles.length > 0 ? roles : ["dataagent"],
+          zone: req.body.zone || null,
           createdAt: new Date()
         };
         console.log('Creating data agent from distributor page:', { username, roles: dataAgentData.roles });

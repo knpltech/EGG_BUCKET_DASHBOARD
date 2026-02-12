@@ -7,14 +7,22 @@ import bcrypt from "bcryptjs";
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) throw new Error("JWT_SECRET is not set");
 
+
 export const loginUser = async (req, res) => {
   try {
-    const { username, password, role } = req.body;
+    let { username, password, role } = req.body;
 
     if (!username || !password || !role)
       return res.status(400).json({ success: false, error: "Missing credentials" });
 
-    const collection = role === "admin" ? "admin" : role === "dataagent" ? "dataagents" : role === "viewer" ? "viewers" : null;
+    // Normalize role value
+    role = String(role).trim().toLowerCase();
+
+    let collection = null;
+    if (role === "admin") collection = "admin";
+    else if (role === "dataagent") collection = "dataagents";
+    else if (role === "viewer") collection = "viewers";
+    else if (role === "supervisor") collection = "supervisors";
     if (!collection)
       return res.status(400).json({ success: false, error: "Invalid role" });
 
@@ -45,6 +53,7 @@ export const loginUser = async (req, res) => {
     ) {
       return res.status(401).json({ success: false, error: "Viewer access denied" });
     }
+
 
     // Password validation (SECURE)
     const valid = await bcrypt.compare(password, user.password);

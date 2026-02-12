@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import logo from "../assets/Logo.png";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faUserPlus } from "@fortawesome/free-solid-svg-icons";
@@ -18,7 +18,7 @@ import {
   faExclamationTriangle,
 } from "@fortawesome/free-solid-svg-icons";
 
-export default function Sidebar() {
+export default function Sidebar({ supervisor }) {
   // Get user from localStorage
   let user = null;
   try {
@@ -26,10 +26,20 @@ export default function Sidebar() {
   } catch {}
   const isAdmin = user && (user.role === "Admin" || (Array.isArray(user.roles) && user.roles.includes("admin")));
   const isViewer = user && (user.role === "Viewer" || (Array.isArray(user.roles) && user.roles.includes("viewer")));
+  const isSupervisor = user && (user.role === "Supervisor" || user.role === "supervisor");
   const dataAgentRoles = Array.isArray(user?.roles) ? user.roles : (user?.role ? [user.role] : []);
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(true);
+
+  // Persist sidebar open state across navigation and reloads
+  useEffect(() => {
+    const saved = localStorage.getItem('sidebarOpen');
+    if (saved !== null) setOpen(saved === 'true');
+  }, []);
+  useEffect(() => {
+    localStorage.setItem('sidebarOpen', open);
+  }, [open]);
 
   const linkClass = (path) =>
     `flex items-center gap-3 px-4 py-2 rounded-lg font-medium transition ${
@@ -70,6 +80,38 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="space-y-2">
+        {isSupervisor && (
+          <>
+            <Link to="/supervisor/dashboard" className={linkClass("/supervisor/dashboard")}> 
+              <FontAwesomeIcon icon={faTableCells} />
+              {open && "Dashboard"}
+            </Link>
+            <Link to="/supervisor/damages" className={linkClass("/supervisor/damages")}> 
+              <FontAwesomeIcon icon={faExclamationTriangle} />
+              {open && "Daily Damages"}
+            </Link>
+            <Link to="/supervisor/neccrate" className={linkClass("/supervisor/neccrate")}> 
+              <FontAwesomeIcon icon={faEgg} />
+              {open && "NECC Rate"}
+            </Link>
+            <Link to="/supervisor/dailysales" className={linkClass("/supervisor/dailysales")}> 
+              <FontAwesomeIcon icon={faIndianRupeeSign} />
+              {open && "Daily Sales"}
+            </Link>
+            <Link to="/supervisor/digital-payments" className={linkClass("/supervisor/digital-payments")}> 
+              <FontAwesomeIcon icon={faWallet} />
+              {open && "Digital Payments"}
+            </Link>
+            <Link to="/supervisor/cash-payments" className={linkClass("/supervisor/cash-payments")}> 
+              <FontAwesomeIcon icon={faMoneyBillWave} />
+              {open && "Cash Payments"}
+            </Link>
+            <Link to="/supervisor/reports" className={linkClass("/supervisor/reports")}> 
+              <FontAwesomeIcon icon={faChartLine} />
+              {open && "Reports"}
+            </Link>
+          </>
+        )}
         {/* Admin: show all links. Data Agent: show only allowed links. Viewer: show only data pages. */}
         {isAdmin && (
           <>

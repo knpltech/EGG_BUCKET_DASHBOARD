@@ -14,12 +14,25 @@ export function DamageProvider({ children }) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(damages));
   }, [damages]);
 
-  // Add damage by date only if not present (no updates allowed)
+  // Add damage by date - merge with existing entry if present
   const addDamage = (damage) => {
-    const exists = damages.some((d) => d.date === damage.date);
-    if (exists) {
-      // do not update existing entries
-      return false;
+    const existingIndex = damages.findIndex((d) => d.date === damage.date);
+    if (existingIndex >= 0) {
+      // Merge with existing entry
+      setDamages((prev) => {
+        const updated = [...prev];
+        const existing = updated[existingIndex];
+        // Merge all outlet values from both entries
+        const merged = { ...existing, ...damage };
+        // Recalculate total from all outlet values (exclude 'date', 'total', 'id', etc.)
+        const excludeKeys = ['date', 'total', 'id', 'createdAt', 'updatedAt'];
+        merged.total = Object.entries(merged)
+          .filter(([key]) => !excludeKeys.includes(key))
+          .reduce((sum, [, val]) => sum + (Number(val) || 0), 0);
+        updated[existingIndex] = merged;
+        return updated;
+      });
+      return true; // Return true since we merged successfully
     }
     setDamages((prev) => [...prev, damage]);
     return true;

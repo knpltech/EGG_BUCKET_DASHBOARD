@@ -2,35 +2,32 @@ const API_URL = import.meta.env.VITE_API_URL;
 
 import { useEffect, useState } from "react";
 import { useDamage } from "../context/DamageContext";
+import { getRoleFlags } from "../utils/role";
 
 
 export default function AdminDashboard() {
   const { damages } = useDamage();
+  const { isAdmin, zone } = getRoleFlags();
   const [totalOutlets, setTotalOutlets] = useState(0);
   const [eggsToday, setEggsToday] = useState(0);
   const [neccRate, setNeccRate] = useState('₹0.00');
   const [damagesThisWeek, setDamagesThisWeek] = useState(0);
 
   useEffect(() => {
-    const updateOutlets = () => {
-      const data = localStorage.getItem("egg_outlets_v1");
-      let outlets = [];
-      if (data) {
-        outlets = JSON.parse(data);
-      }
-      // If no outlets in localStorage, fetch from backend
-      if (!Array.isArray(outlets) || outlets.length === 0) {
-        fetch(`${API_URL}/outlets/all`)
-          .then(res => res.json())
-          .then(list => {
-            const activeOutlets = Array.isArray(list)
-              ? list.filter(o => o.status === "Active").length
-              : 0;
-            setTotalOutlets(activeOutlets);
-          });
-      } else {
-        const activeOutlets = outlets.filter(o => o.status === "Active").length;
+    const updateOutlets = async () => {
+      try {
+        // Admin sees all outlets, others filter by zone
+        const url = isAdmin
+          ? `${API_URL}/outlets/all`
+          : (zone ? `${API_URL}/outlets/zone/${zone}` : `${API_URL}/outlets/all`);
+        const res = await fetch(url);
+        const list = await res.json();
+        const activeOutlets = Array.isArray(list)
+          ? list.filter(o => o.status === "Active").length
+          : 0;
         setTotalOutlets(activeOutlets);
+      } catch {
+        setTotalOutlets(0);
       }
     };
     updateOutlets();
@@ -88,7 +85,7 @@ export default function AdminDashboard() {
     return () => {
       window.removeEventListener('egg:outlets-updated', handleOutletsUpdated);
     };
-  }, [damages]);
+  }, [damages, zone]);
 
   return (
     <div className="min-h-screen bg-eggBg px-4 py-6 md:px-8 flex flex-col">

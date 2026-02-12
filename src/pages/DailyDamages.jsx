@@ -1,8 +1,8 @@
 const API_URL = import.meta.env.VITE_API_URL;
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useDamage } from "../context/DamageContext";
 import * as XLSX from "xlsx";
-import { getRoleFlags } from "../utils/role";
+import { getRoleFlags, zonesMatch } from "../utils/role";
 
 const MONTHS = [
   "January",
@@ -261,7 +261,13 @@ function BaseCalendar({ rows, selectedDate, onSelectDate, showDots }) {
 }
 
 export default function DailyDamages() {
-  const {isAdmin, isViewer, isDataAgent}= getRoleFlags();
+  const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
+  // Debug: log role flags
+  console.log('DailyDamages - isSupervisor:', isSupervisor, '| zone:', zone);
+  
+  // For supervisor, treat as data agent for form visibility
+  const showForms = isAdmin || isDataAgent || isSupervisor;
+
   const { damages, setDamages, addDamage } = useDamage();
 
   // Edit modal state
@@ -334,15 +340,20 @@ export default function DailyDamages() {
     fetchDamages();
   }, [setDamages]);
 
-  // Load outlets from backend
+  // Load outlets from backend - always load ALL outlets for display
   const loadOutlets = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/outlets/all`);
+      // Always load all outlets for data display
+      const url = `${API_URL}/outlets/all`;
+      console.log('DailyDamages loadOutlets URL:', url);
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
           setOutlets(data);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        } else {
+          setOutlets([]);
         }
       }
     } catch (err) {
@@ -368,6 +379,20 @@ export default function DailyDamages() {
   useEffect(() => {
     loadOutlets();
   }, [loadOutlets]);
+
+  // formOutlets - zone-filtered for data entry forms
+  const formOutlets = useMemo(() => {
+    if (zone) {
+      return outlets.filter((outlet) => {
+        const outletZone = typeof outlet === 'string' ? null : outlet.zoneId;
+        return zonesMatch(outletZone, zone);
+      });
+    }
+    return outlets;
+  }, [outlets, zone]);
+  
+  // Debug: log outlets and filtering
+  console.log('DailyDamages - outlets count:', outlets.length, '| formOutlets count:', formOutlets.length);
 
   // Listen for outlet updates from other pages
   useEffect(() => {
@@ -413,28 +438,37 @@ export default function DailyDamages() {
   useEffect(() => {
     setForm(() => {
       const f = {};
-      outlets.forEach((outlet) => {
+      formOutlets.forEach((outlet) => {
         const area = typeof outlet === 'string' ? outlet : outlet.area;
         f[area] = 0;
       });
       return f;
     });
-  }, [outlets]);
+  }, [formOutlets]);
 
   useEffect(() => {
     const existing = damages.find((d) => d.date === entryDate);
     if (existing) {
       const loaded = {};
-      outlets.forEach((outlet) => {
+      let hasDataForMyOutlets = false;
+      formOutlets.forEach((outlet) => {
         const area = typeof outlet === 'string' ? outlet : outlet.area;
-        loaded[area] = existing[area] ?? 0;
+        const value = existing[area] ?? 0;
+        loaded[area] = value;
+        if (value > 0) hasDataForMyOutlets = true;
       });
       setForm(loaded);
-      setHasEntry(true);
-      setEntryTotal(existing.total ?? 0);
+      // Only lock if user's outlets already have data
+      setHasEntry(hasDataForMyOutlets);
+      // Calculate total only for user's outlets
+      const myTotal = formOutlets.reduce((sum, outlet) => {
+        const area = typeof outlet === 'string' ? outlet : outlet.area;
+        return sum + Number(existing[area] || 0);
+      }, 0);
+      setEntryTotal(myTotal);
     } else {
       const reset = {};
-      outlets.forEach((outlet) => {
+      formOutlets.forEach((outlet) => {
         const area = typeof outlet === 'string' ? outlet : outlet.area;
         reset[area] = 0;
       });
@@ -442,23 +476,32 @@ export default function DailyDamages() {
       setHasEntry(false);
       setEntryTotal(0);
     }
-  }, [entryDate, damages, outlets]);
+  }, [entryDate, damages, formOutlets]);
 
   const handleEntryDateSelect = (iso) => {
     setEntryDate(iso);
     const existingEntry = damages.find((d) => d.date === iso);
     if (existingEntry) {
       const loaded = {};
-      outlets.forEach((outlet) => {
+      let hasDataForMyOutlets = false;
+      formOutlets.forEach((outlet) => {
         const area = typeof outlet === 'string' ? outlet : outlet.area;
-        loaded[area] = existingEntry[area] ?? 0;
+        const value = existingEntry[area] ?? 0;
+        loaded[area] = value;
+        if (value > 0) hasDataForMyOutlets = true;
       });
       setForm(loaded);
-      setHasEntry(true);
-      setEntryTotal(existingEntry.total ?? 0);
+      // Only lock if user's outlets already have data
+      setHasEntry(hasDataForMyOutlets);
+      // Calculate total only for user's outlets
+      const myTotal = formOutlets.reduce((sum, outlet) => {
+        const area = typeof outlet === 'string' ? outlet : outlet.area;
+        return sum + Number(existingEntry[area] || 0);
+      }, 0);
+      setEntryTotal(myTotal);
     } else {
       const reset = {};
-      outlets.forEach((outlet) => {
+      formOutlets.forEach((outlet) => {
         const area = typeof outlet === 'string' ? outlet : outlet.area;
         reset[area] = 0;
       });
@@ -534,19 +577,20 @@ export default function DailyDamages() {
   };
 
   const save = async () => {
-    const total = outlets.reduce((s, outlet) => {
+    // Calculate total only for user's outlets (formOutlets)
+    const total = formOutlets.reduce((s, outlet) => {
       const area = typeof outlet === 'string' ? outlet : outlet.area;
       return s + Number(form[area] || 0);
     }, 0);
-    const success = addDamage({
+    
+    // Add/merge damage locally
+    addDamage({
       date: entryDate,
       ...form,
       total,
     });
-    if (!success) {
-      alert(`Entry for ${entryDate} already exists and cannot be modified.`);
-      return;
-    }
+    
+    // Save to backend (backend will merge with existing entry if present)
     try {
       await fetch(`${API_URL}/daily-damage/add-daily-damage`, {
         method: "POST",
@@ -615,9 +659,8 @@ export default function DailyDamages() {
   };
 
   return (
-    
     <div className="min-h-screen bg-eggBg px-4 py-6 md:px-8 flex flex-col">
-      {(isAdmin || isViewer || isDataAgent) && (
+      {(isAdmin || isViewer || isDataAgent || isSupervisor) && (
         <>
           <div className="max-w-7xl mx-auto w-full mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div>
@@ -636,8 +679,8 @@ export default function DailyDamages() {
             </button>
           </div>
           {/* Entry Section - moved to top */}
-          {(isAdmin || isDataAgent) && (
-            <div className="mb-8 rounded-2xl bg-eggWhite p-5 shadow-sm md:p-6">
+          {showForms && outlets.length > 0 && (
+            <div className="mt-4 mb-8">
               <div className="mb-4 flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-100">
                   <DamageEntryIcon className="h-6 w-6" />
@@ -692,7 +735,7 @@ export default function DailyDamages() {
                 </div>
                 {/* Outlet inputs */}
                 <div className="grid gap-3 md:grid-cols-5">
-                  {outlets.map((outlet) => {
+                  {formOutlets.map((outlet) => {
                     const area = typeof outlet === 'string' ? outlet : outlet.area;
                     const isActive = typeof outlet === 'string' || !outlet.status || outlet.status === "Active";
                     return (
@@ -742,6 +785,14 @@ export default function DailyDamages() {
               </div>
             </div>
           )}
+
+          {/* No outlets warning */}
+          {showForms && outlets.length === 0 && (
+            <div className="mt-4 mb-8 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
+              <p className="text-sm text-yellow-800">No outlets available. Please add outlets first.</p>
+            </div>
+          )}
+
           {/* ...existing code... (Report, Table, Modal) */}
           <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <div className="flex flex-wrap gap-3">

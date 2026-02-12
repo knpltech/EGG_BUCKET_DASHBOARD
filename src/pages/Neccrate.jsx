@@ -1,23 +1,76 @@
 const API_URL = import.meta.env.VITE_API_URL;
 
-import { useState, useEffect, useRef } from "react";
-import Entryform from "../components/Entryform";
+import { useState, useEffect, useRef, useMemo } from "react";
+import Entryform from "../components/Entryform";;
 import Rateanalytics from "../components/Rateanalytics";
 import Table from "../components/Table";
 import Topbar from "../components/Topbar";
-import { getRoleFlags } from "../utils/role";
+import { getRoleFlags, zonesMatch } from "../utils/role";
 
 const Neccrate = () => {
   // all the props are mentioned here
-  const { isAdmin, isViewer, isDataAgent } = getRoleFlags();
+  const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
+  // For supervisor, treat as data agent for form visibility
+  const showForms = isAdmin || isDataAgent || isSupervisor;
 
   const [rows, setRows] = useState([]);
+  const [outlets, setOutlets] = useState([]);
+
+  // formOutlets: zone-filtered for data entry
+  const formOutlets = useMemo(() => {
+    if (zone && Array.isArray(outlets)) {
+      return outlets.filter(o => typeof o === 'object' && zonesMatch(o.zoneId, zone));
+    }
+    return outlets;
+  }, [outlets, zone]);
+
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editRow, setEditRow] = useState({});
   const [editValues, setEditValues] = useState({});
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [isLoaded, setIsLoaded] = useState(false);
+
+  // Load outlets from backend (zone-specific for any user with zone)
+  useEffect(() => {
+    const loadOutlets = async () => {
+      try {
+        // Always load all outlets for display
+        const url = `${API_URL}/outlets/all`;
+        console.log('Neccrate loadOutlets URL:', url);
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setOutlets(data);
+            localStorage.setItem("egg_outlets_v1", JSON.stringify(data));
+          } else {
+            setOutlets([]);
+          }
+        } else {
+          setOutlets([]);
+        }
+      } catch (err) {
+        // fallback to localStorage
+        const saved = localStorage.getItem("egg_outlets_v1");
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setOutlets(parsed);
+            } else {
+              setOutlets([]);
+            }
+          } catch {
+            setOutlets([]);
+          }
+        } else {
+          setOutlets([]);
+        }
+      }
+    };
+    loadOutlets();
+  }, []);
 
   const blockedDates = rows.map((row) => row.date);
 
@@ -155,81 +208,92 @@ const Neccrate = () => {
       <Topbar />
 
 
-      {/* ================= ENTRY FORM (ADMIN + DATA AGENT) ================= */}
-      {!isViewer && (
-        <Entryform
-          addRow={addRow}
-          blockedDates={blockedDates}
-          rows={rows}
-        />
-      )}
+      {/* ================= ENTRY FORM (ADMIN + DATA AGENT + SUPERVISOR) ================= */}
+      {showForms && formOutlets.length > 0 && (
+        <div className="mt-4 mb-8">
+          {!isViewer && (
+            <Entryform
+              addRow={addRow}
+              blockedDates={blockedDates}
+              rows={rows}
+            />
+          )}
 
-      {/* ================= ANALYTICS (ADMIN + VIEWER + DATA AGENT) ================= */}
-      {(isAdmin || isViewer || isDataAgent) && <Rateanalytics rows={rows}/>}
+          {/* ================= ANALYTICS (ADMIN + VIEWER + DATA AGENT + SUPERVISOR) ================= */}
+          {(isAdmin || isViewer || isDataAgent || isSupervisor) && <Rateanalytics rows={rows}/>}
 
-      {/* ================= TABLE (ADMIN + VIEWER + DATA AGENT) ================= */}
-      {(isAdmin || isViewer || isDataAgent) && (
-        <Table
-          rows={filteredRows}
-          fromDate={fromDate}
-          toDate={toDate}
-          setFromDate={setFromDate}
-          setToDate={setToDate}
-          onEdit={isAdmin ? handleEditClick : null}
-          showEditColumn={isAdmin}
-          allRows={rows} // Pass all rows for calendar dots
-        />
-      )}
+          {/* ================= TABLE (ADMIN + VIEWER + DATA AGENT) ================= */}
+          {(isAdmin || isViewer || isDataAgent) && (
+            <Table
+              rows={filteredRows}
+              fromDate={fromDate}
+              toDate={toDate}
+              setFromDate={setFromDate}
+              setToDate={setToDate}
+              onEdit={isAdmin ? handleEditClick : null}
+              showEditColumn={isAdmin}
+              allRows={rows} // Pass all rows for calendar dots
+            />
+          )}
 
-      {/* ================= EDIT MODAL (ADMIN ONLY) ================= */}
-      {isAdmin && editModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
-          <div className="bg-white rounded-xl shadow-lg p-6 min-w-[320px]">
-            <h2 className="text-lg font-semibold mb-4">
-              Edit NECC Rate ({editRow.date})
-            </h2>
+          {/* ================= EDIT MODAL (ADMIN ONLY) ================= */}
+          {isAdmin && editModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
+              <div className="bg-white rounded-xl shadow-lg p-6 min-w-[320px]">
+                <h2 className="text-lg font-semibold mb-4">
+                  Edit NECC Rate ({editRow.date})
+                </h2>
 
-            <div className="space-y-3">
-              <div className="flex gap-2 items-center">
-                <label className="w-24 text-xs font-medium">Rate</label>
-                <input
-                  type="text"
-                  value={editValues.rate || ""}
-                  onChange={(e) =>
-                    handleEditValueChange("rate", e.target.value)
-                  }
-                  className="flex-1 border rounded-lg px-3 py-2 text-xs"
-                />
-              </div>
+                <div className="space-y-3">
+                  <div className="flex gap-2 items-center">
+                    <label className="w-24 text-xs font-medium">Rate</label>
+                    <input
+                      type="text"
+                      value={editValues.rate || ""}
+                      onChange={(e) =>
+                        handleEditValueChange("rate", e.target.value)
+                      }
+                      className="flex-1 border rounded-lg px-3 py-2 text-xs"
+                    />
+                  </div>
 
-              <div className="flex gap-2 items-center">
-                <label className="w-24 text-xs font-medium">Remarks</label>
-                <input
-                  type="text"
-                  value={editValues.remarks || ""}
-                  onChange={(e) =>
-                    handleEditValueChange("remarks", e.target.value)
-                  }
-                  className="flex-1 border rounded-lg px-3 py-2 text-xs"
-                />
+                  <div className="flex gap-2 items-center">
+                    <label className="w-24 text-xs font-medium">Remarks</label>
+                    <input
+                      type="text"
+                      value={editValues.remarks || ""}
+                      onChange={(e) =>
+                        handleEditValueChange("remarks", e.target.value)
+                      }
+                      className="flex-1 border rounded-lg px-3 py-2 text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 mt-6">
+                  <button
+                    onClick={handleEditCancel}
+                    className="px-4 py-2 bg-gray-200 rounded-lg text-xs hover:bg-gray-300"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleEditSave}
+                    className="px-4 py-2 bg-orange-500 text-white rounded-lg text-xs hover:bg-orange-600"
+                  >
+                    Save
+                  </button>
+                </div>
               </div>
             </div>
+          )}
+        </div>
+      )}
 
-            <div className="flex justify-end gap-2 mt-6">
-              <button
-                onClick={handleEditCancel}
-                className="px-4 py-2 bg-gray-200 rounded-lg text-xs hover:bg-gray-300"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleEditSave}
-                className="px-4 py-2 bg-orange-500 text-white rounded-lg text-xs hover:bg-orange-600"
-              >
-                Save
-              </button>
-            </div>
-          </div>
+      {/* No outlets warning */}
+      {showForms && formOutlets.length === 0 && (
+        <div className="mt-4 mb-8 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
+          <p className="text-sm text-yellow-800">No outlets available. Please add outlets first.</p>
         </div>
       )}
     </div>

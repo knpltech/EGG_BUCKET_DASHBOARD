@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
-import { getRoleFlags } from "../utils/role";
+import { getRoleFlags, zonesMatch } from "../utils/role";
 import * as XLSX from "xlsx";
 import DailyTable from "../components/DailyTable";
 
@@ -171,7 +171,9 @@ const CashCalendar = ({ rows, selectedDate, onSelectDate, showDots = true }) => 
 };
 
 export default function CashPayments() {
-  const { isAdmin, isViewer, isDataAgent } = getRoleFlags();
+  const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
+  // For supervisor, treat as data agent for form visibility
+  const showForms = isAdmin || isDataAgent || isSupervisor;
 
   // Refs
   const calendarRef = useRef(null);
@@ -184,6 +186,14 @@ export default function CashPayments() {
   const [editValues, setEditValues] = useState({});
   const [outlets, setOutlets] = useState([]);
   const [rows, setRows] = useState([]);
+
+  // formOutlets: zone-filtered for data entry
+  const formOutlets = useMemo(() => {
+    if (zone && Array.isArray(outlets)) {
+      return outlets.filter(o => typeof o === 'object' && zonesMatch(o.zoneId, zone));
+    }
+    return outlets;
+  }, [outlets, zone]);
   const [rangeType, setRangeType] = useState("thisMonth");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -206,15 +216,20 @@ export default function CashPayments() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Fetch outlets from backend for consistent naming
+  // Fetch outlets from backend for consistent naming (zone-specific for any user with zone)
   const loadOutlets = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/outlets/all`);
+      // Always load all outlets for display
+      const url = `${API_URL}/outlets/all`;
+      console.log('CashPayments loadOutlets URL:', url);
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
           setOutlets(data);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        } else {
+          setOutlets([]);
         }
       }
     } catch (err) {
@@ -239,7 +254,8 @@ export default function CashPayments() {
 
   useEffect(() => {
     loadOutlets();
-  }, [loadOutlets]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Listen for outlet updates from other pages
   useEffect(() => {
@@ -297,11 +313,17 @@ export default function CashPayments() {
     fetchPayments();
   }, []);
 
-  // Check if entry exists
-  const hasEntry = useMemo(() => 
-    entryDate && rows.some((r) => r.date === entryDate),
-    [entryDate, rows]
-  );
+  // Check if entry exists for user's outlets (formOutlets)
+  const hasEntry = useMemo(() => {
+    if (!entryDate) return false;
+    const existing = rows.find((r) => r.date === entryDate);
+    if (!existing) return false;
+    // Check if any of user's outlets have data > 0
+    return formOutlets.some((outlet) => {
+      const area = outlet.area || outlet;
+      return Number(existing.outlets?.[area] || 0) > 0;
+    });
+  }, [entryDate, rows, formOutlets]);
 
   const entryTotal = useMemo(() => {
     if (!entryDate) return 0;
@@ -309,24 +331,30 @@ export default function CashPayments() {
     return existing?.totalAmount || Object.values(entryValues || {}).reduce((sum, v) => sum + (Number(v) || 0), 0);
   }, [entryDate, rows, entryValues]);
 
-  // Load entry values when date changes
+  // Load entry values when date changes (only for user's outlets)
   useEffect(() => {
     if (!entryDate) {
       const reset = {};
-      outlets.forEach((o) => { reset[o.area || o] = ""; });
+      formOutlets.forEach((o) => { reset[o.area || o] = ""; });
       setEntryValues(reset);
       return;
     }
 
     const existing = rows.find((r) => r.date === entryDate);
     if (existing) {
-      setEntryValues({ ...existing.outlets });
+      // Load only user's outlet values
+      const vals = {};
+      formOutlets.forEach((o) => {
+        const area = o.area || o;
+        vals[area] = existing.outlets?.[area] ?? "";
+      });
+      setEntryValues(vals);
     } else {
       const reset = {};
-      outlets.forEach((o) => { reset[o.area || o] = ""; });
+      formOutlets.forEach((o) => { reset[o.area || o] = ""; });
       setEntryValues(reset);
     }
-  }, [entryDate, rows, outlets]);
+  }, [entryDate, rows, formOutlets]);
 
   // Filtered rows with memoization
   const filteredRows = useMemo(() => {
@@ -384,10 +412,15 @@ export default function CashPayments() {
     // Prevent double submission
     if (isSaving) return;
     
-    if (!entryDate || rows.some((r) => r.date === entryDate)) return;
+    // Check if user's outlets already have data (hasEntry already does this check)
+    if (!entryDate || hasEntry) {
+      if (hasEntry) alert("You have already entered data for your outlets on this date");
+      return;
+    }
 
+    // Only save data for user's outlets (formOutlets)
     const outletAmounts = {};
-    outlets.forEach((o) => {
+    formOutlets.forEach((o) => {
       const area = o.area || o;
       outletAmounts[area] = Number(entryValues[area]) || 0;
     });
@@ -410,17 +443,15 @@ export default function CashPayments() {
       const data = await res.json();
       setRows(Array.isArray(data) ? data.map(d => ({ id: d.id || d._id, ...d })) : []);
 
-      setEntryDate("");
-      const reset = {};
-      outlets.forEach((o) => { reset[o.area || o] = ""; });
-      setEntryValues(reset);
+      // Show saved message and lock the form (like DailyDamages)
+      alert(`Saved entry for ${entryDate}`);
     } catch (err) {
       console.error('Error adding payment:', err);
       alert('Error adding payment');
     } finally {
       setIsSaving(false);
     }
-  }, [entryDate, entryValues, outlets, rows, isSaving]);
+  }, [entryDate, entryValues, formOutlets, hasEntry, isSaving]);
 
   const handleEditClick = useCallback((row) => {
     const fullRow = { ...row };
@@ -496,7 +527,7 @@ export default function CashPayments() {
 
   return (
     <div className="min-h-screen bg-eggBg px-4 py-6 md:px-8">
-      {(isAdmin || isViewer || isDataAgent) && (
+      {showForms && formOutlets.length > 0 && (
         <>
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -508,7 +539,7 @@ export default function CashPayments() {
             </button>
           </div>
 
-          {(isAdmin || isDataAgent) && (
+          {showForms && (
             <div className="mb-6 rounded-2xl bg-eggWhite p-4 shadow-sm sm:p-6">
               <div className="mb-4 flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-100 text-lg text-orange-500">₹</div>
@@ -543,7 +574,7 @@ export default function CashPayments() {
                 </div>
 
                 <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                  {outlets.map((outlet) => {
+                  {formOutlets.map((outlet) => {
                     const area = outlet.area || outlet;
                     const isActive = !outlet.status || outlet.status === "Active";
                     return (

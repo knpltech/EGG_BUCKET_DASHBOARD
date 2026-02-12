@@ -279,16 +279,24 @@ const Dailyentryform = ({ addrow, blockeddates, rows, outlets = [] }) => {
     
     const found = Array.isArray(rows) ? rows.find(r => r.date === date) : null;
     if (found) {
-      setHasEntry(true);
-      setEntryTotal(found.total || 0);
-      // Set entry values to the found row's values
+      // Check if user's outlets have data > 0
+      let hasDataForMyOutlets = false;
       const vals = {};
       outletNames.forEach(o => {
-        vals[o] = found.outlets && found.outlets[o] !== undefined 
+        const value = found.outlets && found.outlets[o] !== undefined 
           ? found.outlets[o] 
           : "";
+        vals[o] = value;
+        if (Number(value) > 0) hasDataForMyOutlets = true;
       });
       setEntryValues(vals);
+      // Only lock if user's outlets already have data
+      setHasEntry(hasDataForMyOutlets);
+      // Calculate total only for user's outlets
+      const myTotal = outletNames.reduce((sum, o) => {
+        return sum + (Number(found.outlets?.[o]) || 0);
+      }, 0);
+      setEntryTotal(myTotal);
     } else {
       setHasEntry(false);
       setEntryTotal(0);
@@ -322,7 +330,7 @@ const Dailyentryform = ({ addrow, blockeddates, rows, outlets = [] }) => {
 
   const handleSubmit = useCallback(async () => {
     if (!date) return alert("Date is required");
-    if (hasEntry) return alert("Entry for this date already exists");
+    if (hasEntry) return alert("You have already entered data for your outlets on this date");
 
     if (outletNames.length === 0) {
       return alert("No outlets available");
@@ -360,10 +368,10 @@ const Dailyentryform = ({ addrow, blockeddates, rows, outlets = [] }) => {
         total,
       });
 
-      // Reset form after successful submission
-      setDate("");
-      setEntryValues(initializeEntryValues());
-      setOpenCal(false);
+      // Lock the form after successful submission (like DailyDamages)
+      alert(`Saved entry for ${date}`);
+      setHasEntry(true);
+      setEntryTotal(total);
     } catch (err) {
       console.error('Error submitting entry:', err);
     } finally {
