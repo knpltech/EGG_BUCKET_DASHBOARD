@@ -222,8 +222,8 @@ const Neccrate = () => {
           {/* ================= ANALYTICS (ADMIN + VIEWER + DATA AGENT + SUPERVISOR) ================= */}
           {(isAdmin || isViewer || isDataAgent || isSupervisor) && <Rateanalytics rows={rows}/>}
 
-          {/* ================= TABLE (ADMIN + VIEWER + DATA AGENT) ================= */}
-          {(isAdmin || isViewer || isDataAgent) && (
+          {/* ================= TABLE (ADMIN + VIEWER + DATA AGENT + SUPERVISOR) ================= */}
+          {(isAdmin || isViewer || isDataAgent || isSupervisor) && (
             <Table
               rows={filteredRows}
               fromDate={fromDate}

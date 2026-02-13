@@ -117,9 +117,10 @@ export default function Outlets() {
   const fetchOutlets = useCallback(async () => {
     try {
       console.log('Fetching outlets from backend...');
-      console.log('User info - userZone:', userZone);
-      // Admin sees all outlets, others filter by zone
-      const url = isAdmin
+      console.log('User info - userZone:', userZone, '| isUserAdmin:', isUserAdmin);
+      // Outlets management page shows all outlets for admins and data agents
+      // Only supervisors/viewers see zone-filtered outlets
+      const url = (isUserAdmin || isUserDataAgent)
         ? `${API_URL}/outlets/all`
         : (userZone ? `${API_URL}/outlets/zone/${userZone}` : `${API_URL}/outlets/all`);
       console.log('Fetching from URL:', url);
@@ -159,7 +160,7 @@ export default function Outlets() {
       setOutlets([]);
       setError('Failed to load outlets. Please refresh the page.');
     }
-  }, [userRole, userZone, userId]);
+  }, [userRole, userZone, userId, isUserAdmin, isUserDataAgent]);
 
   // Load outlets on component mount
   useEffect(() => {
@@ -263,8 +264,8 @@ export default function Outlets() {
 
   let list = outlets;
 
-  // Filter by zone for any user with a zone
-  if (userZone) {
+  // Filter by zone only for supervisors/viewers, NOT for admins/data agents
+  if (userZone && !isUserAdmin && !isUserDataAgent) {
     list = list.filter(o => zonesMatch(o.zoneId, userZone));
   }
 
@@ -281,7 +282,7 @@ export default function Outlets() {
   }
 
   return list;
-}, [outlets, search, statusFilter, userZone]);
+}, [outlets, search, statusFilter, userZone, isUserAdmin, isUserDataAgent]);
 
 
   const totalPages = Math.max(1, Math.ceil(filteredOutlets.length / pageSize));

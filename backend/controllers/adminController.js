@@ -12,6 +12,20 @@ export const getAllDataAgents = async (req, res) => {
     res.status(500).json({ message: "Error fetching data agents", error: error.message });
   }
 };
+// Get all supervisors from Firestore
+export const getAllSupervisors = async (req, res) => {
+  try {
+    const snapshot = await db.collection("supervisors").get();
+    const supervisors = snapshot.docs.map(doc => {
+      const data = doc.data();
+      delete data.password;
+      return { id: doc.id, ...data };
+    });
+    res.status(200).json(supervisors);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching supervisors", error: error.message });
+  }
+};
 // Get all distributors from Firestore
 export const getAllDistributors = async (req, res) => {
   try {

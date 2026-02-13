@@ -10,7 +10,7 @@ if (!JWT_SECRET) throw new Error("JWT_SECRET is not set");
 
 export const loginUser = async (req, res) => {
   try {
-    let { username, password, role } = req.body;
+    let { username, password, role, zone } = req.body;
 
     if (!username || !password || !role)
       return res.status(400).json({ success: false, error: "Missing credentials" });
@@ -31,6 +31,31 @@ export const loginUser = async (req, res) => {
       return res.status(404).json({ success: false, error: "User not found" });
 
     const user = userSnap.data();
+
+    // For supervisors, validate that selected zone matches their assigned zone
+    if (role === "supervisor") {
+      const userZone = user.zoneId || user.zone;
+      // Normalize zone comparison (handle "Zone 1" vs "zone 1" vs "1")
+      const normalizeZone = (z) => z ? String(z).toLowerCase().replace('zone', '').trim() : null;
+      if (zone && userZone && normalizeZone(zone) !== normalizeZone(userZone)) {
+        return res.status(401).json({ 
+          success: false, 
+          error: `Zone mismatch. You are assigned to ${userZone}, not ${zone}` 
+        });
+      }
+    }
+
+    // For dataagents with assigned zone, validate selected zone matches
+    if (role === "dataagent") {
+      const userZone = user.zoneId || user.zone;
+      const normalizeZone = (z) => z ? String(z).toLowerCase().replace('zone', '').trim() : null;
+      if (zone && userZone && normalizeZone(zone) !== normalizeZone(userZone)) {
+        return res.status(401).json({ 
+          success: false, 
+          error: `Zone mismatch. You are assigned to ${userZone}, not ${zone}` 
+        });
+      }
+    }
 
     // Role validation
     if (

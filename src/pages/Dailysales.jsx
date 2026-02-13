@@ -400,8 +400,8 @@ const Dailysales = () => {
           </div>
         )}
 
-        {/* ================= WEEKLY TREND (ADMIN ONLY) ================= */}
-        {isAdmin && outlets.length > 0 && (
+        {/* ================= WEEKLY TREND (ADMIN + SUPERVISOR) ================= */}
+        {(isAdmin || isSupervisor) && outlets.length > 0 && (
           <div className="mt-10">
             <Weeklytrend rows={rows} />
           </div>

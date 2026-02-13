@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 
+const API_URL = import.meta.env.VITE_API_URL;
+
 /* =========================
    LOCAL STORAGE HELPERS
 ========================= */
@@ -19,21 +21,52 @@ const SupervisorList = () => {
   const [supervisors, setSupervisors] = useState([]);
 
   /* =========================
-     LOAD SUPERVISORS
+     LOAD SUPERVISORS FROM API
   ========================= */
   useEffect(() => {
-    setSupervisors(getStoredSupervisors());
+    const fetchSupervisors = async () => {
+      try {
+        const res = await fetch(`${API_URL}/admin/all-supervisors`);
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            setSupervisors(data);
+            setStoredSupervisors(data);
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching supervisors:", err);
+      }
+      // Fallback to localStorage
+      setSupervisors(getStoredSupervisors());
+    };
+    fetchSupervisors();
   }, []);
 
   /* =========================
      DELETE SUPERVISOR
   ========================= */
-  const handleDelete = (id) => {
+  const handleDelete = async (id, username) => {
     if (!window.confirm("Delete this supervisor?")) return;
 
-    const updated = supervisors.filter((s) => s.id !== id);
-    setStoredSupervisors(updated);
-    setSupervisors(updated);
+    try {
+      const res = await fetch(`${API_URL}/admin/delete-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, collection: 'supervisors' }),
+      });
+      
+      if (res.ok) {
+        const updated = supervisors.filter((s) => s.id !== id);
+        setStoredSupervisors(updated);
+        setSupervisors(updated);
+      } else {
+        console.error('Failed to delete supervisor');
+      }
+    } catch (err) {
+      console.error('Error deleting supervisor:', err);
+    }
   };
 
   if (supervisors.length === 0) {
@@ -66,22 +99,28 @@ const SupervisorList = () => {
 
             <div className="text-sm text-gray-700 space-y-1">
               <p>
-                <span className="font-medium">Role:</span>{" "}
-                <span className="text-blue-600 font-medium">
-                  Supervisor
-                </span>
+                <span className="font-medium">Phone:</span>{" "}
+                <span>{s.phone || "-"}</span>
               </p>
               <p>
-                <span className="font-medium">Zone:</span>{" "}
-                <span className="text-blue-700">
-                  {s.zoneId}
+                <span className="font-medium">Role:</span>{" "}
+                <span className="text-blue-600 font-medium">
+                  {s.role || "Supervisor"}
                 </span>
               </p>
+              {(s.zoneId || s.zone) && (
+                <p>
+                  <span className="font-medium">Zone:</span>{" "}
+                  <span className="text-blue-700">
+                    {s.zoneId || s.zone}
+                  </span>
+                </p>
+              )}
             </div>
 
             <div className="mt-4 flex gap-2">
               <button
-                onClick={() => handleDelete(s.id)}
+                onClick={() => handleDelete(s.id, s.username)}
                 className="text-xs px-3 py-1 rounded-lg border border-red-200 bg-red-50 text-red-700 hover:opacity-90 transition"
               >
                 Delete

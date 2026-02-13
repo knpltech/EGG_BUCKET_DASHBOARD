@@ -102,20 +102,23 @@ const Users = () => {
     };
   }, [overflowOpen]);
 
-  // Fetch users (dataagents + viewers) from backend
+  // Fetch users (dataagents + viewers + supervisors) from backend
   useEffect(() => {
     const fetchUsers = async () => {
       try {
-        const [dataagentsRes, viewersRes] = await Promise.all([
+        const [dataagentsRes, viewersRes, supervisorsRes] = await Promise.all([
           fetch(`${API_URL}/admin/all-dataagents`),
-          fetch(`${API_URL}/admin/all-viewers`)
+          fetch(`${API_URL}/admin/all-viewers`),
+          fetch(`${API_URL}/admin/all-supervisors`)
         ]);
         const dataagents = await dataagentsRes.json();
         const viewers = await viewersRes.json();
+        const supervisors = await supervisorsRes.json();
         // Merge and deduplicate by username (if needed)
         const allUsers = [
           ...(Array.isArray(dataagents) ? dataagents : []),
-          ...(Array.isArray(viewers) ? viewers : [])
+          ...(Array.isArray(viewers) ? viewers : []),
+          ...(Array.isArray(supervisors) ? supervisors : [])
         ];
         setUsers(allUsers);
       } catch {
@@ -330,13 +333,11 @@ const Users = () => {
                         : u.role}
                     </p>
 
-                    {/* 👇 ADD THIS */}
-                    {Array.isArray(u.roles) &&
-                      u.roles.includes("dataagent") &&
-                      dataAgentZoneMap[u.username] && (
-                        <p className="text-blue-600 font-medium">
-                          Zone: {dataAgentZoneMap[u.username]}
-                        </p>
+                    {/* Zone display - check user data directly */}
+                    {(u.zone || u.zoneId) && (
+                      <p className="text-blue-600 font-medium">
+                        Zone: {u.zone || u.zoneId}
+                      </p>
                     )}
                   </div>
 
