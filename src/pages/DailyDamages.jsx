@@ -679,8 +679,8 @@ export default function DailyDamages() {
             </button>
           </div>
           {/* Entry Section - moved to top */}
-          {showForms && outlets.length > 0 && (
-            <div className="mt-4 mb-8">
+          {showForms && formOutlets.length > 0 && (
+            <div className="bg-white shadow rounded-xl p-6 m-6">
               <div className="mb-4 flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-100">
                   <DamageEntryIcon className="h-6 w-6" />
@@ -790,6 +790,13 @@ export default function DailyDamages() {
           {showForms && outlets.length === 0 && (
             <div className="mt-4 mb-8 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
               <p className="text-sm text-yellow-800">No outlets available. Please add outlets first.</p>
+            </div>
+          )}
+
+          {/* No outlets warning for zone filter */}
+          {showForms && outlets.length > 0 && formOutlets.length === 0 && (
+            <div className="mt-4 mb-8 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
+              <p className="text-sm text-yellow-800">No outlets available for your zone. Please contact an administrator.</p>
             </div>
           )}
 
