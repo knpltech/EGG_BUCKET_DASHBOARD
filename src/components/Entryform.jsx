@@ -218,10 +218,11 @@ function BaseCalendar({ rows, selectedDate, onSelectDate, showDots }) {
 
 /* ---------------- ENTRY FORM ---------------- */
 
-const Entryform = ({ addRow, blockedDates, rows }) => {
+const Entryform = ({ addRow, blockedDates, rows, outlets }) => {
   const [date, setDate] = useState("");
   const [rate, setRate] = useState("");
   const [remarks, setRemarks] = useState("");
+  const [outletId, setOutletId] = useState("");
   const [open, setOpen] = useState(false);
   const [isLocked, setIsLocked] = useState(false);
   const calendarRef = useRef(null);
@@ -249,8 +250,8 @@ const Entryform = ({ addRow, blockedDates, rows }) => {
   }, [date, blockedDates]);
 
   const handleSubmit = () => {
-    if (!date || !rate) {
-      alert("Date and Rate are required");
+    if (!date || !rate || !outletId) {
+      alert("Date, Rate, and Outlet are required");
       return;
     }
     if (isLocked) {
@@ -259,12 +260,14 @@ const Entryform = ({ addRow, blockedDates, rows }) => {
     }
     addRow({
       date,
+      outletId,
       rate: `₹${rate}`,
       remarks: remarks || "—",
     });
     setDate("");
     setRate("");
     setRemarks("");
+    setOutletId("");
     setOpen(false);
   };
 
@@ -273,7 +276,21 @@ const Entryform = ({ addRow, blockedDates, rows }) => {
       <h1 className="text-2xl font-bold mb-6">NECC Rate Entry Form</h1>
 
       <div className="bg-white shadow rounded-xl p-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-center">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 items-center">
+                    {/* OUTLET SELECT */}
+                    <div>
+                      <p className="mb-2 text-xs font-medium text-gray-700">Outlet</p>
+                      <select
+                        value={outletId}
+                        onChange={e => setOutletId(e.target.value)}
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-orange-400"
+                      >
+                        <option value="">Select outlet</option>
+                        {Array.isArray(outlets) && outlets.map(o => (
+                          <option key={o.id} value={o.id}>{o.name}</option>
+                        ))}
+                      </select>
+                    </div>
           {/* DATE (CUSTOM CALENDAR) */}
           <div className="relative z-30" ref={calendarRef}>
             <p className="mb-2 text-xs font-medium text-gray-700">Date</p>

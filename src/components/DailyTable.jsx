@@ -12,7 +12,8 @@ function formatDisplayDate(iso) {
 
 export default function DailyTable({rows, outlets = [], onEdit, showRupee = false}) {
 
-  // Build outlet names from objects or use defaults
+
+  // Build outlet names and a normalized map for case-insensitive lookup
   const outletNames = Array.isArray(outlets) && outlets.length > 0 
     ? outlets.map(o => {
         let name = typeof o === 'string' ? o : o.area || o.name || o.id || JSON.stringify(o);
@@ -20,10 +21,20 @@ export default function DailyTable({rows, outlets = [], onEdit, showRupee = fals
       })
     : ["AECS Layout", "Bandepalya", "Hosa Road", "Singasandra", "Kudlu Gate"];
 
+  // Helper: get value from row.outlets by case-insensitive key
+  function getOutletValue(outletsObj, outletName) {
+    if (!outletsObj) return 0;
+    // Try direct match first
+    if (outletsObj[outletName] !== undefined) return outletsObj[outletName];
+    // Try case-insensitive match
+    const key = Object.keys(outletsObj).find(k => k.trim().toLowerCase() === outletName.trim().toLowerCase());
+    return key ? outletsObj[key] : 0;
+  }
+
   // Calculate totals dynamically based on outlets
   const totals = {};
   outletNames.forEach((outlet) => {
-    totals[outlet] = rows.reduce((s, r) => s + (r.outlets && r.outlets[outlet] ? Number(r.outlets[outlet]) : 0), 0);
+    totals[outlet] = rows.reduce((s, r) => s + (r.outlets ? Number(getOutletValue(r.outlets, outlet)) : 0), 0);
   });
 
   const grandTotal = Object.values(totals).reduce((s, v) => s + v, 0);
@@ -94,7 +105,7 @@ export default function DailyTable({rows, outlets = [], onEdit, showRupee = fals
                   <td key={String(outlet) + '-' + j} className="whitespace-nowrap px-4 py-3">
                     {formatCurrencyNoDecimals(
                       row.outlets
-                        ? row.outlets[outlet] ?? 0
+                        ? getOutletValue(row.outlets, outlet)
                         : row[outlet] ?? 0
                     )}
                   </td>

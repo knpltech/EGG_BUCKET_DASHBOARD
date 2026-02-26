@@ -23,6 +23,7 @@ import { PanelProvider } from "./context/PanelContext";
 import AdminLayoutWithPanel from "./layouts/AdminLayoutWithPanel";
 import ViewerData from "./pages/ViewerData";
 import SupervisorLayout from "./layouts/SupervisorLayout";
+import DataEntry from "./pages/DataEntry";
 
 function ProtectedRoute({ element, requiredRole }) {
   let user = null;
@@ -97,6 +98,10 @@ function App() {
               path="/admin/reports"
               element={<ProtectedRoute element={<AdminLayoutWithPanel><Reports /></AdminLayoutWithPanel>} requiredRole={null} />}
             />
+            <Route
+              path="/admin/data-entry"
+              element={<ProtectedRoute element={<AdminLayoutWithPanel><DataEntry /></AdminLayoutWithPanel>} requiredRole={null} />}
+            />
 
             {/* SUPERVISOR ROUTES */}
             <Route path="/supervisor/dashboard" element={<ProtectedRoute element={<SupervisorDashboard />} requiredRole="supervisor" />} />
@@ -106,6 +111,7 @@ function App() {
             <Route path="/supervisor/digital-payments" element={<ProtectedRoute element={<SupervisorLayout><DigitalPayments supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
             <Route path="/supervisor/cash-payments" element={<ProtectedRoute element={<SupervisorLayout><CashPayments supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
             <Route path="/supervisor/reports" element={<ProtectedRoute element={<SupervisorLayout><Reports supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
+            <Route path="/supervisor/data-entry" element={<ProtectedRoute element={<SupervisorLayout><DataEntry supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
 
             {/* DATA AGENT ROUTES */}
             <Route path="/dataagent/dashboard" element={<ProtectedRoute element={<DataAgentDashboard />} requiredRole="dataagent" />} />

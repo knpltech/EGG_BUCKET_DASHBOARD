@@ -2,7 +2,11 @@
 export const updateNeccRate = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const { date, outletId, rate, remarks } = req.body;
+    if (!date || !outletId || !rate) {
+      return res.status(400).json({ message: "Missing required field: date, outletId, or rate" });
+    }
+    const updateData = { date, outletId, rate, remarks: remarks || "—" };
     const docRef = db.collection("neccRates").doc(id);
     await docRef.update(updateData);
     const updatedDoc = await docRef.get();
@@ -16,13 +20,15 @@ import { db } from "../config/firebase.js";
 // Add a new NECC rate entry to Firestore
 export const addNeccRate = async (req, res) => {
   try {
-    const { date, ...rest } = req.body;
-    if (!date) {
-      return res.status(400).json({ message: "Missing required field: date" });
+    const { date, outletId, rate, remarks } = req.body;
+    if (!date || !outletId || !rate) {
+      return res.status(400).json({ message: "Missing required field: date, outletId, or rate" });
     }
     const docRef = await db.collection("neccRates").add({
       date,
-      ...rest,
+      outletId,
+      rate,
+      remarks: remarks || "—",
       createdAt: new Date(),
     });
     res.status(201).json({ id: docRef.id, message: "NECC rate recorded" });

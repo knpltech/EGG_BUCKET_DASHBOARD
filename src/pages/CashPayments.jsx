@@ -194,7 +194,7 @@ export default function CashPayments() {
     }
     return outlets;
   }, [outlets, zone]);
-  const [rangeType, setRangeType] = useState("thisMonth");
+  const [rangeType, setRangeType] = useState("");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [entryDate, setEntryDate] = useState("");
@@ -299,19 +299,21 @@ export default function CashPayments() {
   }, [loadOutlets]);
 
   // Fetch payments
-  useEffect(() => {
-    const fetchPayments = async () => {
-      try {
-        const res = await fetch(`${API_URL}/cash-payments/all`);
-        const data = await res.json();
-        setRows(Array.isArray(data) ? data.map(d => ({ id: d.id || d._id, ...d })) : []);
-      } catch (err) {
-        console.error("Error fetching payments:", err);
-        setRows([]);
-      }
-    };
-    fetchPayments();
+  // Fetch payments (exposed for manual refresh)
+  const fetchPayments = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/cash-payments/all`);
+      const data = await res.json();
+      setRows(Array.isArray(data) ? data.map(d => ({ id: d.id || d._id, ...d })) : []);
+    } catch (err) {
+      console.error("Error fetching payments:", err);
+      setRows([]);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchPayments();
+  }, [fetchPayments]);
 
   // Check if entry exists for user's outlets (formOutlets)
   const hasEntry = useMemo(() => {
@@ -362,24 +364,43 @@ export default function CashPayments() {
     let from = null;
     let to = null;
 
-    if (rangeType === "thisMonth") {
-      from = new Date(now.getFullYear(), now.getMonth(), 1);
-      to = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-    } else if (rangeType === "lastMonth") {
+
+    // Helper to format date as YYYY-MM-DD in local time
+    const toLocalIso = (d) => {
+      if (!d) return null;
+      if (typeof d === 'string' && d.match(/^\d{4}-\d{2}-\d{2}$/)) return d;
+      const dateObj = new Date(d);
+      if (Number.isNaN(dateObj.getTime())) return null;
+      // Use local time, not UTC
+      const year = dateObj.getFullYear();
+      const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const day = String(dateObj.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    };
+
+    if (rangeType === "lastMonth") {
       const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      from = lastMonth;
-      to = new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0);
+      from = toLocalIso(lastMonth);
+      to = toLocalIso(new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0));
     } else if (rangeType === "custom" && customFrom && customTo) {
-      from = new Date(customFrom);
-      to = new Date(customTo);
+      from = toLocalIso(customFrom);
+      to = toLocalIso(customTo);
     }
 
+    // DEBUG: Log all row.date values and filter range
+    // console.log('Filter range:', from, 'to', to);
+    // rows.forEach(r => console.log('Row date:', r.date, 'ISO:', toLocalIso(r.date)));
+
     const filtered = (!from || !to) ? rows : rows.filter((row) => {
-      const d = new Date(row.date);
-      return d >= from && d <= to;
+      const d = toLocalIso(row.date);
+      return d && d >= from && d <= to;
     });
 
-    return filtered.sort((a, b) => new Date(a.date) - new Date(b.date));
+    return filtered.sort((a, b) => {
+      const da = toLocalIso(a.date);
+      const db = toLocalIso(b.date);
+      return da < db ? -1 : da > db ? 1 : 0;
+    });
   }, [rows, rangeType, customFrom, customTo]);
 
   // Totals with memoization
@@ -534,9 +555,14 @@ export default function CashPayments() {
               <h1 className="text-2xl md:text-3xl font-semibold text-gray-900">Cash Payments</h1>
               <p className="mt-1 text-sm md:text-base text-gray-500">Manage and record daily cash collections across outlets.</p>
             </div>
-            <button onClick={downloadExcel} className="inline-flex items-center rounded-full bg-[#ff7518] px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90">
-              Export Report
-            </button>
+            <div className="flex gap-2">
+              <button onClick={fetchPayments} className="inline-flex items-center rounded-full bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-300">
+                Refresh
+              </button>
+              <button onClick={downloadExcel} className="inline-flex items-center rounded-full bg-[#ff7518] px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90">
+                Export Report
+              </button>
+            </div>
           </div>
 
           {showForms && (

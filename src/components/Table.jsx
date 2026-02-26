@@ -235,7 +235,8 @@ export default function NeccTableSection({
   setFromDate,
   setToDate,
   onEdit,
-  showEditColumn
+  showEditColumn,
+  outlets = []
 }) {
   const fromCalendarRef = useRef(null);
   const toCalendarRef = useRef(null);
@@ -383,6 +384,7 @@ export default function NeccTableSection({
           <thead>
             <tr className="bg-gray-100 text-left text-gray-700">
               <th className="py-3 px-4 sticky left-0 bg-gray-100 z-10 min-w-[120px]">Date</th>
+              <th className="py-3 px-4 min-w-[150px]">Outlet</th>
               <th className="py-3 px-4 min-w-[150px]">NECC Rate</th>
               <th className="py-3 px-4 min-w-[200px]">Remarks</th>
               {showEditColumn && <th className="py-3 px-4 sticky right-0 bg-gray-100 z-10 min-w-[80px]">Edit</th>}
@@ -391,23 +393,27 @@ export default function NeccTableSection({
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={showEditColumn ? 4 : 3} className="text-center py-6 text-gray-500">
+                <td colSpan={showEditColumn ? 5 : 4} className="text-center py-6 text-gray-500">
                   No data available
                 </td>
               </tr>
             ) : (
-              rows.map((row, i) => (
-                <tr key={i} className="border-b hover:bg-gray-50 transition">
-                  <td className="py-3 px-4 sticky left-0 bg-white z-10">{formatDateDisplay(row.date)}</td>
-                  <td className="py-3 px-4">{row.rate}</td>
-                  <td className="py-3 px-4">{row.remarks}</td>
-                  {showEditColumn && typeof onEdit === 'function' && (
-                    <td className="py-3 px-4 sticky right-0 bg-white z-10">
-                      <button className="text-blue-600 hover:underline text-xs font-medium" onClick={() => onEdit(row)}>Edit</button>
-                    </td>
-                  )}
-                </tr>
-              ))
+              rows.map((row, i) => {
+                const outlet = outlets.find(o => o.id === row.outletId);
+                return (
+                  <tr key={i} className="border-b hover:bg-gray-50 transition">
+                    <td className="py-3 px-4 sticky left-0 bg-white z-10">{formatDateDisplay(row.date)}</td>
+                    <td className="py-3 px-4">{outlet ? outlet.name : row.outletId || '-'}</td>
+                    <td className="py-3 px-4">{row.rate}</td>
+                    <td className="py-3 px-4">{row.remarks}</td>
+                    {showEditColumn && typeof onEdit === 'function' && (
+                      <td className="py-3 px-4 sticky right-0 bg-white z-10">
+                        <button className="text-blue-600 hover:underline text-xs font-medium" onClick={() => onEdit(row)}>Edit</button>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

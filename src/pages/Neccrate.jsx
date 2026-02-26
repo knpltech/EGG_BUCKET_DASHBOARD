@@ -1,3 +1,65 @@
+import React from "react";
+
+function NeccMatrixTable({ rows, outlets }) {
+  // Only show dates that have at least one NECC rate entry
+  const dateSet = new Set();
+  rows.forEach(r => {
+    if (r.rate || r.rateValue) dateSet.add(r.date);
+  });
+  const allDates = Array.from(dateSet).sort((a, b) => new Date(a) - new Date(b));
+  const outletList = Array.isArray(outlets) ? outlets : [];
+
+  // Build a lookup: {date: {outletId: rate}}
+  const matrix = {};
+  // Debug: log all rows
+  console.log('NECC rows:', rows);
+  rows.forEach(r => {
+    if (!r.date || !r.outletId) return; // skip invalid entries or missing outletId
+    if (!matrix[r.date]) matrix[r.date] = {};
+    // Prefer numeric rateValue if present
+    let value = r.rateValue;
+    if (value === undefined || value === null || value === "") {
+      // Try to extract number from r.rate string (e.g., '₹9.49 per egg')
+      if (typeof r.rate === 'string') {
+        const match = r.rate.match(/([0-9]+(\.[0-9]+)?)/);
+        value = match ? match[1] : r.rate;
+      } else {
+        value = r.rate;
+      }
+    }
+    matrix[r.date][r.outletId] = value;
+  });
+
+  return (
+    <div className="overflow-x-auto rounded-2xl bg-eggWhite shadow-sm">
+      <table className="min-w-full text-sm">
+        <thead className="bg-gray-50">
+          <tr className="text-left text-xs font-semibold text-gray-500">
+            <th className="min-w-[130px] px-4 py-3">Date</th>
+            {outletList.map((outlet, i) => (
+              <th key={outlet.id || i} className="px-4 py-3 whitespace-nowrap">{String(outlet.name).toUpperCase()}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {allDates.map(date => (
+            <tr key={date} className="text-xs text-gray-700">
+              <td className="whitespace-nowrap px-4 py-3">{new Date(date).toLocaleDateString("en-IN", { month: "short", day: "2-digit", year: "numeric" })}</td>
+              {outletList.map((outlet, j) => {
+                let value = matrix[date] && matrix[date][outlet.id] ? matrix[date][outlet.id] : "";
+                return (
+                  <td key={outlet.id || j} className="whitespace-nowrap px-4 py-3 text-center">
+                    {value !== "" ? value : "-"}
+                  </td>
+                );
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 const API_URL = import.meta.env.VITE_API_URL;
 
 import { useState, useEffect, useRef, useMemo } from "react";
@@ -8,6 +70,8 @@ import Topbar from "../components/Topbar";
 import { getRoleFlags, zonesMatch } from "../utils/role";
 
 const Neccrate = () => {
+  // Add state for selected outlet tab
+  const [selectedOutletId, setSelectedOutletId] = useState("");
   // all the props are mentioned here
   const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
   // For supervisor, treat as data agent for form visibility
@@ -216,6 +280,7 @@ const Neccrate = () => {
               addRow={addRow}
               blockedDates={blockedDates}
               rows={rows}
+              outlets={formOutlets}
             />
           )}
 
@@ -223,17 +288,10 @@ const Neccrate = () => {
           {(isAdmin || isViewer || isDataAgent || isSupervisor) && <Rateanalytics rows={rows}/>}
 
           {/* ================= TABLE (ADMIN + VIEWER + DATA AGENT + SUPERVISOR) ================= */}
-          {(isAdmin || isViewer || isDataAgent || isSupervisor) && (
-            <Table
-              rows={filteredRows}
-              fromDate={fromDate}
-              toDate={toDate}
-              setFromDate={setFromDate}
-              setToDate={setToDate}
-              onEdit={isAdmin ? handleEditClick : null}
-              showEditColumn={isAdmin}
-              allRows={rows} // Pass all rows for calendar dots
-            />
+          {(isAdmin || isViewer || isDataAgent || isSupervisor) && outlets.length > 0 && (
+            <div className="mt-8">
+              <NeccMatrixTable rows={filteredRows} outlets={outlets} />
+            </div>
           )}
 
           {/* ================= EDIT MODAL (ADMIN ONLY) ================= */}
@@ -245,6 +303,19 @@ const Neccrate = () => {
                 </h2>
 
                 <div className="space-y-3">
+                  <div className="flex gap-2 items-center">
+                    <label className="w-24 text-xs font-medium">Outlet</label>
+                    <select
+                      value={editValues.outletId || ""}
+                      onChange={e => handleEditValueChange("outletId", e.target.value)}
+                      className="flex-1 border rounded-lg px-3 py-2 text-xs"
+                    >
+                      <option value="">Select outlet</option>
+                      {formOutlets.map(o => (
+                        <option key={o.id} value={o.id}>{o.name}</option>
+                      ))}
+                    </select>
+                  </div>
                   <div className="flex gap-2 items-center">
                     <label className="w-24 text-xs font-medium">Rate</label>
                     <input
