@@ -61,7 +61,34 @@ export const getZoneOutlets = async (req, res) => {
     if (!zoneId) {
       return res.status(400).json({ success: false, error: "Missing zoneId" });
     }
-    
+    // If Authorization header is present, verify token and ensure a supervisor cannot request other zones
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      try {
+        const jwt = await import('jsonwebtoken');
+        const token = authHeader.split(' ')[1];
+        const secret = process.env.JWT_SECRET;
+        if (!secret) throw new Error('JWT_SECRET not set');
+        const decoded = jwt.verify(token, secret);
+        const requester = decoded?.username;
+        if (requester) {
+          // If requester exists in supervisors collection, enforce zone match
+          const supSnap = await db.collection('supervisors').doc(requester).get();
+          if (supSnap.exists) {
+            const sup = supSnap.data();
+            const userZone = sup.zone || sup.zoneId || sup.zoneNumber || null;
+            const normalizeZone = (z) => z ? String(z).toLowerCase().replace('zone', '').trim() : null;
+            if (userZone && normalizeZone(userZone) !== normalizeZone(zoneId)) {
+              return res.status(403).json({ success: false, error: 'Forbidden: not allowed to access outlets for this zone' });
+            }
+          }
+        }
+      } catch (err) {
+        // If token invalid, proceed without enforcement (anonymous access still allowed)
+        console.warn('Zone access token verification failed:', err.message);
+      }
+    }
+
     // Get all outlets and filter by normalized zone (handles "2" vs "Zone 2" mismatch)
     const snapshot = await db.collection("outlets").get();
     let outlets = snapshot.docs.map(doc => doc.data());

@@ -42,7 +42,7 @@ const Supervisor = () => {
      OCCUPIED ZONES
   ========================= */
   const occupiedZones = useMemo(() => {
-    return existingSupervisors.map((s) => s.zoneId);
+    return existingSupervisors.map((s) => s.zone || s.zoneId);
   }, [existingSupervisors]);
 
   /* =========================
@@ -75,9 +75,9 @@ const Supervisor = () => {
       .then(res => res.json())
       .then(data => {
         if (data.success) {
-          // Store supervisor in localStorage with numeric zone
+          // Store supervisor in localStorage with numeric zone and zoneId for compatibility
           const supervisors = getStoredSupervisors();
-          supervisors.push({ username: form.username.trim(), zone: zoneNum });
+          supervisors.push({ username: form.username.trim(), zone: zoneNum, zoneId: zoneNum });
           setStoredSupervisors(supervisors);
           alert("Supervisor created successfully");
           setForm({

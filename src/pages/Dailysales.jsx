@@ -14,8 +14,8 @@ const OUTLETS_KEY = "egg_outlets_v1";
 
 const Dailysales = () => {
   const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
-  // For supervisor, treat as data agent for form visibility
-  const showForms = isAdmin || isDataAgent || isSupervisor;
+  // Supervisors can view but not enter data here
+  const showForms = isAdmin || isDataAgent;
 
   const [rows, setRows] = useState([]);
   const [outlets, setOutlets] = useState([]);
@@ -341,11 +341,11 @@ const Dailysales = () => {
           />
         )}
 
-        {/* ================= TABLE (ADMIN + VIEWER + DATA AGENT) ================= */}
+        {/* ================= TABLE (ADMIN + VIEWER + DATA AGENT + SUPERVISOR) ================= */}
         {(isAdmin || isViewer || isDataAgent || isSupervisor) && outlets.length > 0 && (
           <DailyTable
             rows={filteredRows}
-            outlets={outlets}
+            outlets={isSupervisor ? formOutlets : outlets}
             onEdit={isAdmin ? handleEditClick : null}
           />
         )}

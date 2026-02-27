@@ -124,7 +124,10 @@ export default function Outlets() {
         ? `${API_URL}/outlets/all`
         : (userZone ? `${API_URL}/outlets/zone/${userZone}` : `${API_URL}/outlets/all`);
       console.log('Fetching from URL:', url);
-      const res = await fetch(url);
+      const token = localStorage.getItem('token');
+      const res = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
@@ -332,9 +335,10 @@ export default function Outlets() {
 
       const updated = { ...outlet, status: newStatus };
 
+      const token = localStorage.getItem('token');
       const res = await fetch(`${API_URL}/outlets/add`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: Object.assign({ "Content-Type": "application/json" }, token ? { Authorization: `Bearer ${token}` } : {}),
         body: JSON.stringify(updated),
       });
 
@@ -374,12 +378,13 @@ export default function Outlets() {
           phone: newOutlet.phone || "-",
           status: newOutlet.status,
           reviewStatus: original.reviewStatus || "ok",
-          zoneId: original.zoneId,
+          zoneId: newOutlet.zoneId || original.zoneId,
           createdBy: original.createdBy || userId
         };
+        const token = localStorage.getItem('token');
         const res = await fetch(`${API_URL}/outlets/add`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: Object.assign({ "Content-Type": "application/json" }, token ? { Authorization: `Bearer ${token}` } : {}),
           body: JSON.stringify(updatedOutlet),
         });
         if (res.ok) {
