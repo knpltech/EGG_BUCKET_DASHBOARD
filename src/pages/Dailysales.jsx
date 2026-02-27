@@ -345,7 +345,8 @@ const Dailysales = () => {
         {(isAdmin || isViewer || isDataAgent || isSupervisor) && outlets.length > 0 && (
           <DailyTable
             rows={filteredRows}
-            outlets={isSupervisor ? formOutlets : outlets}
+            outlets={(isSupervisor ? formOutlets : outlets).map(o => typeof o === 'string' ? o : o.id)}
+            allOutlets={outlets}
             onEdit={isAdmin ? handleEditClick : null}
           />
         )}

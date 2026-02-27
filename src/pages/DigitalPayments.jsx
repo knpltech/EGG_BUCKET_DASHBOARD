@@ -204,7 +204,7 @@ export default function DigitalPayments() {
   }, [outlets, zone]);
 
   // For display, supervisors should only see their zone's outlets
-  const displayedOutlets = isSupervisor ? formOutlets : outlets;
+  const displayedOutlets = (isSupervisor ? formOutlets : outlets).map(o => typeof o === 'string' ? o : o.id);
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
   const [entryDate, setEntryDate] = useState("");
@@ -679,11 +679,12 @@ export default function DigitalPayments() {
                   <tr className="text-left text-xs font-semibold text-gray-500">
                     <th className="sticky left-0 bg-gray-50 z-10 min-w-[120px] px-4 py-3">Date</th>
                     {outlets.map((outlet) => {
-                      const area = outlet.area || outlet;
+                      const outletId = typeof outlet === 'string' ? outlet : outlet.id;
+                      const name = typeof outlet === 'string' ? outlet : outlet.area || outletId;
                       const isActive = !outlet.status || outlet.status === "Active";
                       return (
-                        <th key={area} className="min-w-[100px] px-4 py-3 whitespace-nowrap">
-                          {area.toUpperCase()}
+                        <th key={outletId} className="min-w-[100px] px-4 py-3 whitespace-nowrap">
+                          {name.toUpperCase()}
                           {!isActive && <span className="text-red-500 text-[10px] block">(Inactive)</span>}
                         </th>
                       );
@@ -703,8 +704,8 @@ export default function DigitalPayments() {
                         <tr key={row.id} className={`text-xs text-gray-700 md:text-sm ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/60"}`}>
                           <td className="sticky left-0 bg-inherit z-10 whitespace-nowrap px-4 py-3">{formatDisplayDate(row.date)}</td>
                           {displayedOutlets.map((outlet) => {
-                            const area = outlet.area || outlet;
-                            return <td key={area} className="whitespace-nowrap px-4 py-3">{formatCurrencyTwoDecimals(row.outlets[area])}</td>;
+                            const outletId = typeof outlet === 'string' ? outlet : outlet.id;
+                            return <td key={outletId} className="whitespace-nowrap px-4 py-3">{formatCurrencyTwoDecimals(row.outlets[outletId])}</td>;
                           })}
                           <td className="sticky right-0 bg-inherit z-10 whitespace-nowrap px-4 py-3 text-right font-semibold">
                             {formatCurrencyTwoDecimals(typeof row.totalAmount === 'number' ? row.totalAmount : Object.values(row.outlets || {}).reduce((sum, v) => sum + (Number(v) || 0), 0))}
@@ -719,8 +720,8 @@ export default function DigitalPayments() {
                       <tr className="bg-orange-50 font-semibold text-orange-700 border-t-2 border-orange-200">
                         <td className="sticky left-0 bg-orange-50 z-10 whitespace-nowrap px-4 py-3">Grand Total</td>
                         {displayedOutlets.map((outlet) => {
-                          const area = outlet.area || outlet;
-                          return <td key={area} className="whitespace-nowrap px-4 py-3">{formatCurrencyTwoDecimals(columnTotals[area])}</td>;
+                          const outletId = typeof outlet === 'string' ? outlet : outlet.id;
+                          return <td key={outletId} className="whitespace-nowrap px-4 py-3">{formatCurrencyTwoDecimals(columnTotals[outletId])}</td>;
                         })}
                         <td className="sticky right-0 bg-orange-50 z-10 whitespace-nowrap px-4 py-3 text-right">{formatCurrencyTwoDecimals(columnTotals.grandTotal)}</td>
                         {isAdmin && <td className="sticky right-0 bg-orange-50 z-10 whitespace-nowrap px-4 py-3"></td>}

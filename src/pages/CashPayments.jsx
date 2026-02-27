@@ -194,7 +194,7 @@ export default function CashPayments() {
     }
     return outlets;
   }, [outlets, zone]);
-  const displayedOutlets = isSupervisor ? formOutlets : outlets;
+  const displayedOutlets = (isSupervisor ? formOutlets : outlets).map(o => typeof o === 'string' ? o : o.id);
   const [rangeType, setRangeType] = useState("");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -682,7 +682,7 @@ export default function CashPayments() {
             )}
           </div>
 
-          <DailyTable rows={filteredRows} outlets={displayedOutlets} onEdit={handleEditClick} showRupee={true} />
+          <DailyTable rows={filteredRows} outlets={displayedOutlets} allOutlets={outlets} onEdit={handleEditClick} showRupee={true} />
 
           {editModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30 p-4">
@@ -690,11 +690,12 @@ export default function CashPayments() {
                 <h2 className="text-base sm:text-lg font-semibold mb-4">Edit Cash Payment ({editRow.date})</h2>
                 <div className="space-y-3">
                   {outlets.map((o) => {
-                    const area = o.area || o;
+                    const outletId = typeof o === 'string' ? o : o.id;
+                    const name = typeof o === 'string' ? o : o.area || outletId;
                     return (
-                      <div key={area} className="flex flex-col sm:flex-row sm:items-center gap-2">
-                        <label className="w-full sm:w-32 text-xs font-medium text-gray-700">{area}</label>
-                        <input type="number" min="0" step="1" value={editValues[area] ?? 0} onChange={e => setEditValues((prev) => ({ ...prev, [area]: Number(e.target.value) }))} className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400" />
+                      <div key={outletId} className="flex flex-col sm:flex-row sm:items-center gap-2">
+                        <label className="w-full sm:w-32 text-xs font-medium text-gray-700">{name}</label>
+                        <input type="number" min="0" step="1" value={editValues[outletId] ?? 0} onChange={e => setEditValues((prev) => ({ ...prev, [outletId]: Number(e.target.value) }))} className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400" />
                       </div>
                     );
                   })}

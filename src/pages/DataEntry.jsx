@@ -393,7 +393,7 @@ export default function DataEntry() {
       if (!neccrateLocked && neccrate !== "") {
         tasks.push(fetch(`${API}/neccrate/add`, {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ date, outlet, rate: Number(neccrate) }),
+          body: JSON.stringify({ date, outletId: outlet, rate: Number(neccrate) }),
         }));
       }
 

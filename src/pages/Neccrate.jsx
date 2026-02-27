@@ -114,16 +114,17 @@ const Neccrate = () => {
       if (!pivotMap[date]) pivotMap[date] = {};
 
       if (doc.outlet) {
-        // per-outlet format: { date, outlet, rate, remarks }
-        pivotMap[date][doc.outlet] = { rate: doc.rate ?? 0, docId, remarks: doc.remarks || "" };
+        // per-outlet format: { date, outlet, rate, rateValue, remarks }
+        pivotMap[date][doc.outlet] = {
+          rate: doc.rateValue ?? Number(doc.rate) ?? 0,
+          docId,
+          remarks: doc.remarks || ""
+        };
       } else if (doc.outlets && typeof doc.outlets === "object") {
         // outlets-map format: { date, outlets: { A: rate, B: rate } }
         Object.entries(doc.outlets).forEach(([outletKey, rate]) => {
-          pivotMap[date][outletKey] = { rate: rate ?? 0, docId, remarks: doc.remarks || "" };
+          pivotMap[date][outletKey] = { rate: Number(rate) ?? 0, docId, remarks: doc.remarks || "" };
         });
-      } else {
-        // legacy global: no outlet key — skip or place under "global"
-        // only include if outlet key exists
       }
     });
 

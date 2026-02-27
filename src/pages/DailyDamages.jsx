@@ -395,7 +395,8 @@ export default function DailyDamages() {
   console.log('DailyDamages - outlets count:', outlets.length, '| formOutlets count:', formOutlets.length);
 
   // For display, supervisors should only see their zone's outlets
-  const displayedOutlets = isSupervisor ? formOutlets : outlets;
+  // Use outletId for mapping and display
+  const displayedOutlets = (isSupervisor ? formOutlets : outlets).map(o => typeof o === 'string' ? o : o.id);
 
   // Listen for outlet updates from other pages
   useEffect(() => {
@@ -892,11 +893,12 @@ export default function DailyDamages() {
                   <tr className="bg-orange-100 text-sm">
                     <th className="p-3 text-left w-40 sticky left-0 bg-orange-100 z-10">Date</th>
                     {displayedOutlets.map((outlet) => {
-                      const area = typeof outlet === 'string' ? outlet : outlet.area;
-                      const isActive = typeof outlet === 'string' || !outlet.status || outlet.status === "Active";
+                      const outletObj = outlets.find(o => (typeof o === 'string' ? o : o.id) === outlet);
+                      const name = typeof outletObj === 'string' ? outletObj : outletObj?.area || outlet;
+                      const isActive = typeof outletObj === 'string' || !outletObj?.status || outletObj?.status === "Active";
                       return (
-                        <th key={area} className="p-3 text-center min-w-[120px]">
-                          {area}
+                        <th key={outlet} className="p-3 text-center min-w-[120px]">
+                          {name}
                           {!isActive && <span className="text-red-500 text-[10px] block">(Inactive)</span>}
                         </th>
                       );
@@ -920,7 +922,7 @@ export default function DailyDamages() {
                         {displayedOutlets.map((outlet) => {
                           const area = typeof outlet === 'string' ? outlet : outlet.area;
                           return (
-                            <td key={area} className="p-3 text-center">{d[area] ?? 0}</td>
+                            <td key={outlet} className="p-3 text-center">{d[outlet] ?? 0}</td>
                           );
                         })}
                         <td className="p-3 text-center font-bold text-orange-600 sticky right-0 bg-white z-10">
@@ -943,10 +945,9 @@ export default function DailyDamages() {
                   <tr className="bg-orange-50 font-semibold text-orange-700">
                     <td className="p-3 text-left sticky left-0 bg-orange-50 z-10">Grand Total</td>
                     {displayedOutlets.map((outlet) => {
-                      const area = typeof outlet === 'string' ? outlet : outlet.area;
-                      const total = filteredData.reduce((sum, d) => sum + Number(d[area] || 0), 0);
+                      const total = filteredData.reduce((sum, d) => sum + Number(d[outlet] || 0), 0);
                       return (
-                        <td key={area} className="p-3 text-center">{total}</td>
+                        <td key={outlet} className="p-3 text-center">{total}</td>
                       );
                     })}
                     <td className="p-3 text-center sticky right-0 bg-orange-50 z-10">

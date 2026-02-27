@@ -24,10 +24,13 @@ export const addNeccRate = async (req, res) => {
     if (!date || !outletId || !rate) {
       return res.status(400).json({ message: "Missing required field: date, outletId, or rate" });
     }
+    const numericRate = Number(rate);
     const docRef = await db.collection("neccRates").add({
       date,
       outletId,
-      rate,
+      outlet: outletId, // duplicate for frontend compatibility
+      rate: `₹${numericRate.toFixed(2)} per egg`,
+      rateValue: numericRate,
       remarks: remarks || "—",
       createdAt: new Date(),
     });

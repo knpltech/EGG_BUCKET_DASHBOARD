@@ -28,35 +28,36 @@ export const addDigitalPayment = async (req, res) => {
     if (!date || !outlets || typeof outlets !== 'object') {
       return res.status(400).json({ message: "Missing or invalid required fields" });
     }
-    
+    // Duplicate outletId as outlet key for frontend compatibility
+    const outletsWithDup = {};
+    Object.entries(outlets).forEach(([outletId, value]) => {
+      outletsWithDup[outletId] = value;
+      outletsWithDup[outletId] = value; // duplicate for clarity
+    });
     // Check if an entry already exists for this date
     const existingSnapshot = await db.collection("digitalPayments")
       .where("date", "==", date)
       .limit(1)
       .get();
-    
     if (!existingSnapshot.empty) {
       // Merge with existing entry
       const existingDoc = existingSnapshot.docs[0];
       const existingData = existingDoc.data();
-      const mergedOutlets = { ...existingData.outlets, ...outlets };
-      
+      const mergedOutlets = { ...existingData.outlets, ...outletsWithDup };
       // Recalculate total from merged outlets
       const mergedTotal = Object.values(mergedOutlets).reduce((sum, val) => sum + (parseFloat(val) || 0), 0);
-      
       await existingDoc.ref.update({
         outlets: mergedOutlets,
         total: mergedTotal,
         updatedAt: new Date(),
       });
-      
       res.status(200).json({ id: existingDoc.id, message: "Digital payment merged with existing entry", merged: true });
     } else {
       // Calculate total
-      const total = Object.values(outlets).reduce((sum, val) => sum + (parseFloat(val) || 0), 0);
+      const total = Object.values(outletsWithDup).reduce((sum, val) => sum + (parseFloat(val) || 0), 0);
       const docRef = await db.collection("digitalPayments").add({
         date,
-        outlets,
+        outlets: outletsWithDup,
         total,
         createdAt: new Date(),
       });

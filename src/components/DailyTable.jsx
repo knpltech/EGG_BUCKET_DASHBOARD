@@ -10,16 +10,18 @@ function formatDisplayDate(iso) {
   });
 }
 
-export default function DailyTable({rows, outlets = [], onEdit, showRupee = false}) {
+export default function DailyTable({rows, outlets = [], onEdit, showRupee = false, allOutlets = []}) {
 
 
-  // Build outlet names and a normalized map for case-insensitive lookup
-  const outletNames = Array.isArray(outlets) && outlets.length > 0 
-    ? outlets.map(o => {
-        let name = typeof o === 'string' ? o : o.area || o.name || o.id || JSON.stringify(o);
-        return name.replace(/\(Inactive\)/gi, '').trim();
-      })
-    : ["AECS Layout", "Bandepalya", "Hosa Road", "Singasandra", "Kudlu Gate"];
+  // Use outletId for mapping and display
+  const outletIds = Array.isArray(outlets) && outlets.length > 0
+    ? outlets.map(o => typeof o === 'string' ? o : o.id)
+    : [];
+  // Map outletId to display name
+  const getOutletName = (id) => {
+    const found = (allOutlets || []).find(o => (typeof o === 'string' ? o : o.id) === id);
+    return found ? (found.area || found.name || id) : id;
+  };
 
   // Helper: get value from row.outlets by case-insensitive key
   function getOutletValue(outletsObj, outletName) {
@@ -33,16 +35,16 @@ export default function DailyTable({rows, outlets = [], onEdit, showRupee = fals
 
   // Calculate totals dynamically based on outlets
   const totals = {};
-  outletNames.forEach((outlet) => {
-    totals[outlet] = rows.reduce((s, r) => s + (r.outlets ? Number(getOutletValue(r.outlets, outlet)) : 0), 0);
+  outletIds.forEach((outletId) => {
+    totals[outletId] = rows.reduce((s, r) => s + (r.outlets ? Number(r.outlets[outletId] || 0) : 0), 0);
   });
 
   const grandTotal = Object.values(totals).reduce((s, v) => s + v, 0);
 
   // Check if outlet is active: default to active if status is missing
   const isOutletActive = (outletName) => {
-    if (!Array.isArray(outlets) || outlets.length === 0) return true;
-    const outletObj = outlets.find(o => o.area === outletName);
+    if (!Array.isArray(allOutlets) || allOutlets.length === 0) return true;
+    const outletObj = allOutlets.find(o => (typeof o === 'string' ? o : o.id) === outletName);
     if (!outletObj || typeof outletObj.status === 'undefined') return true;
     return outletObj.status === "Active";
   };
@@ -71,10 +73,10 @@ export default function DailyTable({rows, outlets = [], onEdit, showRupee = fals
           <thead className="bg-gray-50">
             <tr className="text-left text-xs font-semibold text-gray-500">
               <th className="min-w-[130px] px-4 py-3">Date</th>
-              {outletNames.map((outlet, i) => {
+              {outletIds.map((outletId, i) => {
                 return (
-                  <th key={String(outlet) + '-' + i} className="px-4 py-3 whitespace-nowrap">
-                    {String(outlet).toUpperCase()}
+                  <th key={String(outletId) + '-' + i} className="px-4 py-3 whitespace-nowrap">
+                    {getOutletName(outletId).toUpperCase()}
                   </th>
                 );
               })}
@@ -101,12 +103,12 @@ export default function DailyTable({rows, outlets = [], onEdit, showRupee = fals
                 <td className="whitespace-nowrap px-4 py-3">
                   {formatDisplayDate(row.date)}
                 </td>
-                {outletNames.map((outlet, j) => (
-                  <td key={String(outlet) + '-' + j} className="whitespace-nowrap px-4 py-3">
+                {outletIds.map((outletId, j) => (
+                  <td key={String(outletId) + '-' + j} className="whitespace-nowrap px-4 py-3">
                     {formatCurrencyNoDecimals(
                       row.outlets
-                        ? getOutletValue(row.outlets, outlet)
-                        : row[outlet] ?? 0
+                        ? row.outlets[outletId] || 0
+                        : row[outletId] ?? 0
                     )}
                   </td>
                 ))}
@@ -132,9 +134,9 @@ export default function DailyTable({rows, outlets = [], onEdit, showRupee = fals
             {/* ⭐ COLUMN TOTAL ROW (GRAND TOTAL) */}
             <tr className="bg-orange-50 font-semibold text-orange-700">
               <td className="whitespace-nowrap px-4 py-3">Grand Total</td>
-              {outletNames.map((outlet, i) => (
-                <td key={String(outlet) + '-total-' + i} className="whitespace-nowrap px-4 py-3">
-                  {formatCurrencyNoDecimals(totals[outlet])}
+              {outletIds.map((outletId, i) => (
+                <td key={String(outletId) + '-total-' + i} className="whitespace-nowrap px-4 py-3">
+                  {formatCurrencyNoDecimals(totals[outletId])}
                 </td>
               ))}
               <td className="whitespace-nowrap px-4 py-3 text-right text-orange-800">
