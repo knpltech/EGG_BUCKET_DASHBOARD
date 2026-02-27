@@ -265,8 +265,8 @@ export default function DailyDamages() {
   // Debug: log role flags
   console.log('DailyDamages - isSupervisor:', isSupervisor, '| zone:', zone);
   
-  // For supervisor, treat as data agent for form visibility
-  const showForms = isAdmin || isDataAgent || isSupervisor;
+  // Supervisors can view but should not enter data here
+  const showForms = isAdmin || isDataAgent;
 
   const { damages, setDamages, addDamage } = useDamage();
 
@@ -393,6 +393,9 @@ export default function DailyDamages() {
   
   // Debug: log outlets and filtering
   console.log('DailyDamages - outlets count:', outlets.length, '| formOutlets count:', formOutlets.length);
+
+  // For display, supervisors should only see their zone's outlets
+  const displayedOutlets = isSupervisor ? formOutlets : outlets;
 
   // Listen for outlet updates from other pages
   useEffect(() => {
@@ -888,7 +891,7 @@ export default function DailyDamages() {
                 <thead>
                   <tr className="bg-orange-100 text-sm">
                     <th className="p-3 text-left w-40 sticky left-0 bg-orange-100 z-10">Date</th>
-                    {outlets.map((outlet) => {
+                    {displayedOutlets.map((outlet) => {
                       const area = typeof outlet === 'string' ? outlet : outlet.area;
                       const isActive = typeof outlet === 'string' || !outlet.status || outlet.status === "Active";
                       return (
@@ -914,7 +917,7 @@ export default function DailyDamages() {
                         className="border-t text-sm hover:bg-gray-50 transition"
                       >
                         <td className="p-3 text-left sticky left-0 bg-white z-10">{formatDateDisplay(d.date)}</td>
-                        {outlets.map((outlet) => {
+                        {displayedOutlets.map((outlet) => {
                           const area = typeof outlet === 'string' ? outlet : outlet.area;
                           return (
                             <td key={area} className="p-3 text-center">{d[area] ?? 0}</td>
@@ -939,7 +942,7 @@ export default function DailyDamages() {
                   {/* Grand Total Row */}
                   <tr className="bg-orange-50 font-semibold text-orange-700">
                     <td className="p-3 text-left sticky left-0 bg-orange-50 z-10">Grand Total</td>
-                    {outlets.map((outlet) => {
+                    {displayedOutlets.map((outlet) => {
                       const area = typeof outlet === 'string' ? outlet : outlet.area;
                       const total = filteredData.reduce((sum, d) => sum + Number(d[area] || 0), 0);
                       return (
@@ -967,7 +970,7 @@ export default function DailyDamages() {
               <div className="bg-white rounded-xl shadow-lg p-6 min-w-[320px] max-w-full max-h-[80vh] overflow-y-auto">
                 <h2 className="text-lg font-semibold mb-4">Edit Daily Damage ({formatDateDisplay(editRow.date)})</h2>
                 <div className="space-y-3">
-                  {outlets.map((outlet) => {
+                  {displayedOutlets.map((outlet) => {
                     const area = typeof outlet === 'string' ? outlet : outlet.area;
                     return (
                       <div key={area} className="flex items-center gap-2">

@@ -172,8 +172,8 @@ const CashCalendar = ({ rows, selectedDate, onSelectDate, showDots = true }) => 
 
 export default function CashPayments() {
   const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
-  // For supervisor, treat as data agent for form visibility
-  const showForms = isAdmin || isDataAgent || isSupervisor;
+  // Supervisors can view but should not enter data here
+  const showForms = isAdmin || isDataAgent;
 
   // Refs
   const calendarRef = useRef(null);
@@ -194,6 +194,7 @@ export default function CashPayments() {
     }
     return outlets;
   }, [outlets, zone]);
+  const displayedOutlets = isSupervisor ? formOutlets : outlets;
   const [rangeType, setRangeType] = useState("");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -681,7 +682,7 @@ export default function CashPayments() {
             )}
           </div>
 
-          <DailyTable rows={filteredRows} outlets={outlets} onEdit={handleEditClick} showRupee={true} />
+          <DailyTable rows={filteredRows} outlets={displayedOutlets} onEdit={handleEditClick} showRupee={true} />
 
           {editModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30 p-4">

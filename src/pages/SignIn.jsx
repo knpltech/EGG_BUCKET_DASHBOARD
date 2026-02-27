@@ -58,6 +58,10 @@ export default function SignIn() {
           userZoneId = "Zone 1";
         }
         console.log('Login - Server zoneId:', data.user.zoneId, '| Server zone:', data.user.zone, '| Form zone:', zone, '| Using:', userZoneId);
+        // Persist token for authenticated requests
+        if (data.token) {
+          localStorage.setItem('token', data.token);
+        }
         localStorage.setItem('user', JSON.stringify({
           ...data.user,
           role: role.charAt(0).toUpperCase() + role.slice(1),

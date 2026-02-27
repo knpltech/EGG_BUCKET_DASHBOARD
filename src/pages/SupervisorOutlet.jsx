@@ -68,7 +68,10 @@ export default function SupervisorOutlet() {
       }
       // Fetch all outlets in supervisor's zone (no createdBy filter)
       let url = `${API_URL}/outlets/zone/${userZone}`;
-      const res = await fetch(url);
+      const token = localStorage.getItem('token');
+      const res = await fetch(url, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : undefined
+      });
       if (res.ok) {
         const data = await res.json();
         setOutlets(Array.isArray(data) ? data : []);
@@ -156,9 +159,10 @@ export default function SupervisorOutlet() {
       const outlet = outlets.find(o => o.id === id);
       if (!outlet) return;
       const updated = { ...outlet, status: newStatus };
+      const token = localStorage.getItem('token');
       const res = await fetch(`${API_URL}/outlets/add`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: Object.assign({ "Content-Type": "application/json" }, token ? { Authorization: `Bearer ${token}` } : {}),
         body: JSON.stringify(updated),
       });
       if (res.ok) {
@@ -195,7 +199,7 @@ export default function SupervisorOutlet() {
         };
         const res = await fetch(`${API_URL}/outlets/add`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: Object.assign({ "Content-Type": "application/json" }, token ? { Authorization: `Bearer ${token}` } : {}),
           body: JSON.stringify(updatedOutlet),
         });
         if (res.ok) {
@@ -221,7 +225,7 @@ export default function SupervisorOutlet() {
         };
         const res = await fetch(`${API_URL}/outlets/add`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: Object.assign({ "Content-Type": "application/json" }, token ? { Authorization: `Bearer ${token}` } : {}),
           body: JSON.stringify(outletToAdd),
         });
         if (res.ok) {

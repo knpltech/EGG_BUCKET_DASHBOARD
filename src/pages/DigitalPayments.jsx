@@ -180,8 +180,8 @@ const BaseCalendar = ({ rows, selectedDate, onSelectDate, showDots }) => {
 
 export default function DigitalPayments() {
   const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
-  // For supervisor, treat as data agent for form visibility
-  const showForms = isAdmin || isDataAgent || isSupervisor;
+  // Supervisors can view but should not enter data here
+  const showForms = isAdmin || isDataAgent;
 
   // Refs
   const entryCalendarRef = useRef(null);
@@ -202,6 +202,9 @@ export default function DigitalPayments() {
     }
     return outlets;
   }, [outlets, zone]);
+
+  // For display, supervisors should only see their zone's outlets
+  const displayedOutlets = isSupervisor ? formOutlets : outlets;
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
   const [entryDate, setEntryDate] = useState("");
@@ -699,7 +702,7 @@ export default function DigitalPayments() {
                       {filteredRows.map((row, idx) => (
                         <tr key={row.id} className={`text-xs text-gray-700 md:text-sm ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/60"}`}>
                           <td className="sticky left-0 bg-inherit z-10 whitespace-nowrap px-4 py-3">{formatDisplayDate(row.date)}</td>
-                          {outlets.map((outlet) => {
+                          {displayedOutlets.map((outlet) => {
                             const area = outlet.area || outlet;
                             return <td key={area} className="whitespace-nowrap px-4 py-3">{formatCurrencyTwoDecimals(row.outlets[area])}</td>;
                           })}
@@ -715,7 +718,7 @@ export default function DigitalPayments() {
                       ))}
                       <tr className="bg-orange-50 font-semibold text-orange-700 border-t-2 border-orange-200">
                         <td className="sticky left-0 bg-orange-50 z-10 whitespace-nowrap px-4 py-3">Grand Total</td>
-                        {outlets.map((outlet) => {
+                        {displayedOutlets.map((outlet) => {
                           const area = outlet.area || outlet;
                           return <td key={area} className="whitespace-nowrap px-4 py-3">{formatCurrencyTwoDecimals(columnTotals[area])}</td>;
                         })}
@@ -734,7 +737,7 @@ export default function DigitalPayments() {
               <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
                 <h2 className="text-base sm:text-lg font-semibold mb-4">Edit Digital Payment ({formatDisplayDate(editRow.date)})</h2>
                 <div className="space-y-3">
-                  {outlets.map((outlet) => {
+                  {displayedOutlets.map((outlet) => {
                     const area = outlet.area || outlet;
                     return (
                       <div key={area} className="flex flex-col sm:flex-row sm:items-center gap-2">
