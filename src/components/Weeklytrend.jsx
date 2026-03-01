@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   BarChart,
   Bar,
@@ -77,9 +77,22 @@ function formatYAxis(value) {
 
 /* ---------- COMPONENT ---------- */
 
-const Weeklytrend = ({ rows = [] }) => {
+const Weeklytrend = ({ rows = [], outlets: allowedOutlets = [] }) => {
   const [chartData, setChartData] = useState([]);
   const [outletKeys, setOutletKeys] = useState([]);
+
+  // map id -> display name
+  const nameMap = useMemo(() => {
+    const map = {};
+    if (Array.isArray(allowedOutlets)) {
+      allowedOutlets.forEach(o => {
+        const key = typeof o === 'string' ? o : o.id || o.area || o.name;
+        const label = typeof o === 'string' ? o : o.area || o.name || key;
+        map[key] = label;
+      });
+    }
+    return map;
+  }, [allowedOutlets]);
 
   useEffect(() => {
     if (!Array.isArray(rows)) {
@@ -99,13 +112,23 @@ const Weeklytrend = ({ rows = [] }) => {
       days.push(d);
     }
 
-    // Collect all outlet names
+    // Collect all outlet names from rows
     const outletSet = new Set();
     rows.forEach(r => {
       if (r.outlets) {
         Object.keys(r.outlets).forEach(o => outletSet.add(o));
       }
     });
+
+    // If a list of allowed outlets was passed, intersect with it
+    if (Array.isArray(allowedOutlets) && allowedOutlets.length > 0) {
+      const allowedKeys = new Set(
+        allowedOutlets.map(o => (typeof o === 'string' ? o : o.id || o.area || o.name))
+      );
+      outletSet.forEach(key => {
+        if (!allowedKeys.has(key)) outletSet.delete(key);
+      });
+    }
 
     const outlets = Array.from(outletSet);
     setOutletKeys(outlets);
@@ -198,17 +221,19 @@ const Weeklytrend = ({ rows = [] }) => {
 
 
               <Tooltip
+                formatter={(value, name) => [value, nameMap[name] || name]}
                 labelFormatter={(_, payload) =>
                   payload?.[0]?.payload?.fullDate
                 }
               />
 
-              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Legend wrapperStyle={{ fontSize: 11 }} formatter={(val) => nameMap[val] || val} />
 
               {outletKeys.map((outlet, idx) => (
                 <Bar
                   key={outlet}
                   dataKey={outlet}
+                  name={nameMap[outlet] || outlet}
                   fill={COLORS[idx % COLORS.length]}
                   radius={[6, 6, 0, 0]}
                   maxBarSize={26}

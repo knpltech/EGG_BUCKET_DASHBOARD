@@ -380,8 +380,9 @@ export default function DailyDamages() {
     loadOutlets();
   }, [loadOutlets]);
 
-  // formOutlets - zone-filtered for data entry forms
+  // formOutlets - zone-filtered for data entry forms (viewers see all)
   const formOutlets = useMemo(() => {
+    if (isViewer) return outlets;
     if (zone) {
       return outlets.filter((outlet) => {
         const outletZone = typeof outlet === 'string' ? null : outlet.zoneId;
@@ -389,7 +390,7 @@ export default function DailyDamages() {
       });
     }
     return outlets;
-  }, [outlets, zone]);
+  }, [outlets, zone, isViewer]);
   
   // Debug: log outlets and filtering
   console.log('DailyDamages - outlets count:', outlets.length, '| formOutlets count:', formOutlets.length);
@@ -683,112 +684,7 @@ export default function DailyDamages() {
             </button>
           </div>
           {/* Entry Section - moved to top */}
-          {showForms && formOutlets.length > 0 && (
-            <div className="bg-white shadow rounded-xl p-6 m-6">
-              <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-100">
-                  <DamageEntryIcon className="h-6 w-6" />
-                </div>
-                <div>
-                  <h2 className="text-base font-semibold text-gray-900 md:text-lg">
-                    Daily Damages Entry
-                  </h2>
-                  <p className="text-xs text-gray-500 md:text-sm">
-                    Add new egg damage amounts for each outlet.
-                  </p>
-                </div>
-              </div>
-              <div className="space-y-5">
-                {/* Select Date */}
-                <div className="grid gap-4 md:grid-cols-[160px,1fr] md:items-center">
-                  <label className="text-xs font-medium text-gray-700 md:text-sm">
-                    Select Date
-                  </label>
-                  <div className="relative w-full" ref={entryCalendarRef}>
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setIsEntryCalendarOpen((open) => !open)}
-                        className="flex w-full items-center justify-between rounded-xl border border-gray-200 bg-eggBg px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm"
-                      >
-                        <span>
-                          {entryDate ? formatDateDMY(entryDate) : "dd-mm-yyyy"}
-                        </span>
-                        <CalendarIcon className="h-4 w-4 text-gray-500" />
-                      </button>
-                    </div>
-                    {hasEntry && (
-                      <div className="mt-2 flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-green-500" />
-                        <div className="text-xs font-medium text-green-700">
-                          Entry ({entryTotal}) • Locked
-                        </div>
-                      </div>
-                    )}
-                    {isEntryCalendarOpen && (
-                      <div className="absolute right-0 top-full z-50 mt-2">
-                        <BaseCalendar
-                          rows={damages}
-                          selectedDate={entryDate}
-                          onSelectDate={handleEntryDateSelect}
-                          showDots={true}
-                        />
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {/* Outlet inputs */}
-                <div className="grid gap-3 md:grid-cols-5">
-                  {formOutlets.map((outlet) => {
-                    const area = typeof outlet === 'string' ? outlet : outlet.area;
-                    const isActive = typeof outlet === 'string' || !outlet.status || outlet.status === "Active";
-                    return (
-                      <div key={area} className="space-y-1">
-                        <p className="text-xs font-medium text-gray-600">
-                          {area}
-                          {!isActive && <span className="text-red-500 ml-1">(Inactive)</span>}
-                        </p>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            value={form[area] ?? 0}
-                            onChange={(e) =>
-                              setForm((prev) => ({
-                                ...prev,
-                                [area]: Number(e.target.value),
-                              }))
-                            }
-                            disabled={hasEntry || !isActive}
-                            className={`w-full rounded-xl border border-gray-200 bg-eggBg px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm ${
-                              (hasEntry || !isActive) ? "bg-gray-50 cursor-not-allowed" : ""
-                            }`}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                {/* Save button */}
-                <div className="flex flex-col items-center gap-2 pt-4">
-                  <button
-                    type="button"
-                    onClick={save}
-                    disabled={hasEntry}
-                    className={`inline-flex items-center justify-center rounded-2xl px-6 py-2.5 text-sm font-semibold text-white shadow-md ${
-                      hasEntry
-                        ? "bg-gray-400 cursor-not-allowed"
-                        : "bg-orange-500 hover:bg-orange-600"
-                    }`}
-                  >
-                    {hasEntry ? "Locked" : "Save Entry"}
-                  </button>
-                  <p className="text-center text-[11px] text-gray-500 md:text-xs">
-                    Values support decimals for exact amounts.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
+          
 
           {/* No outlets warning */}
           {showForms && outlets.length === 0 && (

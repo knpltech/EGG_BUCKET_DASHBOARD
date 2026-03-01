@@ -144,10 +144,9 @@ export default function SignIn() {
             <option value="dataagent">Data Agent</option>
             <option value="viewer">Viewer</option>
           </select>
-          {/* ZONE (Conditional) */}
+          {/* ZONE (only for data agents and supervisors) */}
           {[
             "dataagent",
-            "viewer",
             "supervisor"
           ].includes(role) && (
             <select

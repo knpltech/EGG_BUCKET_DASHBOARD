@@ -150,7 +150,7 @@ export default function Sidebar({ supervisor }) {
             </Link>
             <Link to="/admin/distribution" className={linkClass("/admin/distribution")}> 
               <FontAwesomeIcon icon={faUsers} />
-              {open && "Add Data Agent & Supervisor"}
+              {open && "Add Supervisor"}
             </Link>
             <Link to="/admin/outlets" className={linkClass("/admin/outlets")}> 
               <FontAwesomeIcon icon={faStore} />
@@ -158,7 +158,7 @@ export default function Sidebar({ supervisor }) {
             </Link>
             <Link to="/admin/users" className={linkClass("/admin/users")}> 
               <FontAwesomeIcon icon={faUsers} />
-              {open && "Users"}
+              {open && "Supervisors Display"}
             </Link>
           </>
         )}
@@ -193,7 +193,7 @@ export default function Sidebar({ supervisor }) {
         {dataAgentRoles && dataAgentRoles.includes("distribution") && !isAdmin && (
           <Link to="/admin/distribution" className={linkClass("/admin/distribution")}> 
             <FontAwesomeIcon icon={faUserPlus} />
-            {open && "Add Data Agent"}
+            {open && "Add Supervisor"}
           </Link>
         )}
         {dataAgentRoles && dataAgentRoles.includes("outlets") && !isAdmin && (
@@ -250,7 +250,7 @@ export default function Sidebar({ supervisor }) {
             {(dataAgentRoles.includes("distribution")) && (
               <Link to="/admin/distribution" className={linkClass("/admin/distribution")}> 
                 <FontAwesomeIcon icon={faUsers} />
-                {open && "Add Data Agent & Supervisor"}
+                {open && "Add Supervisor"}
               </Link>
             )}
             {/* Removed duplicate Outlets link for data agents */}
