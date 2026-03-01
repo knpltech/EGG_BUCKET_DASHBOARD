@@ -187,6 +187,15 @@ export default function CashPayments() {
   const [outlets, setOutlets] = useState([]);
   const [rows, setRows] = useState([]);
 
+  // Debug logs for troubleshooting
+  useEffect(() => {
+    console.log("CashPayments: outlets loaded", outlets.length, outlets);
+  }, [outlets]);
+
+  useEffect(() => {
+    console.log("CashPayments: rows loaded", rows.length, rows);
+  }, [rows]);
+
   // formOutlets: zone-filtered for data entry
   const formOutlets = useMemo(() => {
     if (zone && Array.isArray(outlets)) {
@@ -240,6 +249,7 @@ export default function CashPayments() {
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
+        console.log("CashPayments: formOutlets", formOutlets.length, formOutlets);
           if (Array.isArray(parsed) && parsed.length > 0) {
             setOutlets(parsed);
           }
@@ -443,6 +453,7 @@ export default function CashPayments() {
     // Only save data for user's outlets (formOutlets)
     const outletAmounts = {};
     formOutlets.forEach((o) => {
+        console.log("CashPayments: filteredRows", sorted.length, sorted);
       const area = o.area || o;
       outletAmounts[area] = Number(entryValues[area]) || 0;
     });
@@ -549,175 +560,172 @@ export default function CashPayments() {
 
   return (
     <div className="min-h-screen bg-eggBg px-4 py-6 md:px-8">
-      {showForms && formOutlets.length > 0 && (
-        <>
-          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl md:text-3xl font-semibold text-gray-900">Cash Payments</h1>
+          <p className="mt-1 text-sm md:text-base text-gray-500">Manage and record daily cash collections across outlets.</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={fetchPayments} className="inline-flex items-center rounded-full bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-300">
+            Refresh
+          </button>
+          <button onClick={downloadExcel} className="inline-flex items-center rounded-full bg-[#ff7518] px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90">
+            Export Report
+          </button>
+        </div>
+      </div>
+
+      {/* Only show entry form for admins/data agents */}
+      {showForms && (
+        <div className="mb-6 rounded-2xl bg-eggWhite p-4 shadow-sm sm:p-6">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-100 text-lg text-orange-500">₹</div>
             <div>
-              <h1 className="text-2xl md:text-3xl font-semibold text-gray-900">Cash Payments</h1>
-              <p className="mt-1 text-sm md:text-base text-gray-500">Manage and record daily cash collections across outlets.</p>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={fetchPayments} className="inline-flex items-center rounded-full bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-300">
-                Refresh
-              </button>
-              <button onClick={downloadExcel} className="inline-flex items-center rounded-full bg-[#ff7518] px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90">
-                Export Report
-              </button>
+              <h2 className="text-base font-semibold text-gray-900 md:text-lg">Cash Payment Entry</h2>
+              <p className="text-xs text-gray-500 md:text-sm">Enter cash amounts collected for today.</p>
             </div>
           </div>
 
-          {showForms && (
-            <div className="mb-6 rounded-2xl bg-eggWhite p-4 shadow-sm sm:p-6">
-              <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-100 text-lg text-orange-500">₹</div>
-                <div>
-                  <h2 className="text-base font-semibold text-gray-900 md:text-lg">Cash Payment Entry</h2>
-                  <p className="text-xs text-gray-500 md:text-sm">Enter cash amounts collected for today.</p>
-                </div>
-              </div>
+          <form onSubmit={handleSaveEntry} className="space-y-5">
+            <div className="grid gap-4 sm:grid-cols-[160px,1fr] sm:items-center">
+              <label className="text-xs font-medium text-gray-700 md:text-sm">Collection Date</label>
+              <div className="relative w-full z-30" ref={calendarRef}>
+                <button type="button" onClick={() => setIsCalendarOpen((o) => !o)} className="flex w-full items-center justify-between rounded-xl border border-gray-200 bg-eggBg px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm">
+                  <span>{entryDate ? formatDisplayDate(entryDate) : "Select date"}</span>
+                  <CalendarIcon className="h-4 w-4 text-gray-500" />
+                </button>
 
-              <form onSubmit={handleSaveEntry} className="space-y-5">
-                <div className="grid gap-4 sm:grid-cols-[160px,1fr] sm:items-center">
-                  <label className="text-xs font-medium text-gray-700 md:text-sm">Collection Date</label>
-                  <div className="relative w-full z-30" ref={calendarRef}>
-                    <button type="button" onClick={() => setIsCalendarOpen((o) => !o)} className="flex w-full items-center justify-between rounded-xl border border-gray-200 bg-eggBg px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm">
-                      <span>{entryDate ? formatDisplayDate(entryDate) : "Select date"}</span>
-                      <CalendarIcon className="h-4 w-4 text-gray-500" />
-                    </button>
-
-                    {hasEntry && (
-                      <div className="mt-2 flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-green-500" />
-                        <div className="text-xs font-medium text-green-700">Entry ({formatCurrencyNoDecimals(entryTotal)}) • Locked</div>
-                      </div>
-                    )}
-
-                    {isCalendarOpen && (
-                      <div className="absolute right-0 top-full z-50 mt-2">
-                        <CashCalendar rows={rows} selectedDate={entryDate} onSelectDate={(iso) => { setEntryDate(iso); setIsCalendarOpen(false); }} />
-                      </div>
-                    )}
+                {hasEntry && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-green-500" />
+                    <div className="text-xs font-medium text-green-700">Entry ({formatCurrencyNoDecimals(entryTotal)}) • Locked</div>
                   </div>
-                </div>
+                )}
 
-                <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                  {formOutlets.map((outlet) => {
-                    const area = outlet.area || outlet;
-                    const isActive = !outlet.status || outlet.status === "Active";
-                    return (
-                      <div key={area} className="space-y-1">
-                        <p className="text-xs font-medium text-gray-600">
-                          {area.toUpperCase()}
-                          {!isActive && <span className="text-red-500 ml-1">(Inactive)</span>}
-                        </p>
-                        <div className="relative">
-                          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">₹</span>
-                          <input type="number" min="0" step="1" value={entryValues[area] || ""} onChange={(e) => handleEntryChange(area, e.target.value)} disabled={hasEntry || !isActive} className={`w-full rounded-xl border border-gray-200 bg-eggBg pl-7 pr-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm ${(hasEntry || !isActive) ? 'bg-gray-50 cursor-not-allowed' : ''}`} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="flex flex-col items-center gap-2 pt-4">
-                  <button type="submit" disabled={hasEntry || isSaving} className={`inline-flex items-center justify-center rounded-2xl px-6 py-2.5 text-sm font-semibold text-white shadow-md ${hasEntry || isSaving ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'}`}>
-                    {isSaving ? (
-                      <>
-                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Saving...
-                      </>
-                    ) : hasEntry ? 'Locked' : 'Save Entry'}
-                  </button>
-                  <p className="text-center text-[11px] text-gray-500 md:text-xs">Note: Cash values must be whole numbers only. No decimals allowed.</p>
-                </div>
-              </form>
+                {isCalendarOpen && (
+                  <div className="absolute right-0 top-full z-50 mt-2">
+                    <CashCalendar rows={rows} selectedDate={entryDate} onSelectDate={(iso) => { setEntryDate(iso); setIsCalendarOpen(false); }} />
+                  </div>
+                )}
+              </div>
             </div>
-          )}
 
-          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex flex-wrap gap-2">
-              <button onClick={() => setRangeType("thisMonth")} className={`rounded-full px-4 py-2 text-xs md:text-sm font-medium border ${rangeType === "thisMonth" ? "bg-orange-500 text-white border-orange-500" : "bg-eggWhite text-gray-700 border-gray-200 hover:bg-gray-50"}`}>This Month</button>
-              <button onClick={() => setRangeType("lastMonth")} className={`rounded-full px-4 py-2 text-xs md:text-sm font-medium border ${rangeType === "lastMonth" ? "bg-orange-500 text-white border-orange-500" : "bg-eggWhite text-gray-700 border-gray-200 hover:bg-gray-50"}`}>Last Month</button>
-              <button onClick={() => setRangeType("custom")} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs md:text-sm font-medium border ${rangeType === "custom" ? "bg-orange-500 text-white border-orange-500" : "bg-eggWhite text-gray-700 border-gray-200 hover:bg-gray-50"}`}>
-                <span>Custom Range</span>
-                <CalendarIcon className="h-4 w-4" />
+            <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+              {formOutlets.map((outlet) => {
+                const area = outlet.area || outlet;
+                const isActive = !outlet.status || outlet.status === "Active";
+                return (
+                  <div key={area} className="space-y-1">
+                    <p className="text-xs font-medium text-gray-600">
+                      {area.toUpperCase()}
+                      {!isActive && <span className="text-red-500 ml-1">(Inactive)</span>}
+                    </p>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">₹</span>
+                      <input type="number" min="0" step="1" value={entryValues[area] || ""} onChange={(e) => handleEntryChange(area, e.target.value)} disabled={hasEntry || !isActive} className={`w-full rounded-xl border border-gray-200 bg-eggBg pl-7 pr-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm ${(hasEntry || !isActive) ? 'bg-gray-50 cursor-not-allowed' : ''}`} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-col items-center gap-2 pt-4">
+              <button type="submit" disabled={hasEntry || isSaving} className={`inline-flex items-center justify-center rounded-2xl px-6 py-2.5 text-sm font-semibold text-white shadow-md ${hasEntry || isSaving ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'}`}>
+                {isSaving ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Saving...
+                  </>
+                ) : hasEntry ? 'Locked' : 'Save Entry'}
+              </button>
+              <p className="text-center text-[11px] text-gray-500 md:text-xs">Note: Cash values must be whole numbers only. No decimals allowed.</p>
+            </div>
+          </form>
+        </div>
+      )}
+
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setRangeType("thisMonth")} className={`rounded-full px-4 py-2 text-xs md:text-sm font-medium border ${rangeType === "thisMonth" ? "bg-orange-500 text-white border-orange-500" : "bg-eggWhite text-gray-700 border-gray-200 hover:bg-gray-50"}`}>This Month</button>
+          <button onClick={() => setRangeType("lastMonth")} className={`rounded-full px-4 py-2 text-xs md:text-sm font-medium border ${rangeType === "lastMonth" ? "bg-orange-500 text-white border-orange-500" : "bg-eggWhite text-gray-700 border-gray-200 hover:bg-gray-50"}`}>Last Month</button>
+          <button onClick={() => setRangeType("custom")} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs md:text-sm font-medium border ${rangeType === "custom" ? "bg-orange-500 text-white border-orange-500" : "bg-eggWhite text-gray-700 border-gray-200 hover:bg-gray-50"}`}>
+            <span>Custom Range</span>
+            <CalendarIcon className="h-4 w-4" />
+          </button>
+        </div>
+
+        {rangeType === "custom" && (
+          <div className="flex flex-wrap gap-3">
+            <div className="flex items-center gap-2">
+              <label className="text-xs md:text-sm font-medium text-gray-700">Date From</label>
+              <div className="relative z-30" ref={customFromRef}>
+                <button type="button" onClick={() => { setIsCustomFromOpen((o) => !o); setIsCustomToOpen(false); }} className="flex min-w-[140px] sm:min-w-[150px] items-center justify-between rounded-xl border border-gray-200 bg-eggWhite px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm">
+                  <span>{customFrom ? formatDateDMY(customFrom) : "dd-mm-yyyy"}</span>
+                  <CalendarIcon className="h-4 w-4 text-gray-500" />
+                </button>
+                {isCustomFromOpen && (
+                  <div className="absolute left-0 top-full z-50 mt-2">
+                    <CashCalendar rows={[]} selectedDate={customFrom} onSelectDate={(iso) => { setCustomFrom(iso); setIsCustomFromOpen(false); }} showDots={false} />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-xs md:text-sm font-medium text-gray-700">Date To</label>
+              <div className="relative z-30" ref={customToRef}>
+                <button type="button" onClick={() => { setIsCustomToOpen((o) => !o); setIsCustomFromOpen(false); }} className="flex min-w-[140px] sm:min-w-[150px] items-center justify-between rounded-xl border border-gray-200 bg-eggWhite px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm">
+                  <span>{customTo ? formatDateDMY(customTo) : "dd-mm-yyyy"}</span>
+                  <CalendarIcon className="h-4 w-4 text-gray-500" />
+                </button>
+                {isCustomToOpen && (
+                  <div className="absolute right-0 top-full z-50 mt-2">
+                    <CashCalendar rows={[]} selectedDate={customTo} onSelectDate={(iso) => { setCustomTo(iso); setIsCustomToOpen(false); }} showDots={false} />
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <DailyTable rows={filteredRows} outlets={displayedOutlets} allOutlets={outlets} onEdit={handleEditClick} showRupee={true} />
+
+      {editModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30 p-4">
+          <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
+            <h2 className="text-base sm:text-lg font-semibold mb-4">Edit Cash Payment ({editRow.date})</h2>
+            <div className="space-y-3">
+              {outlets.map((o) => {
+                const outletId = typeof o === 'string' ? o : o.id;
+                const name = typeof o === 'string' ? o : o.area || outletId;
+                return (
+                  <div key={outletId} className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <label className="w-full sm:w-32 text-xs font-medium text-gray-700">{name}</label>
+                    <input type="number" min="0" step="1" value={editValues[outletId] ?? 0} onChange={e => setEditValues((prev) => ({ ...prev, [outletId]: Number(e.target.value) }))} className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400" />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex justify-end gap-2 mt-6">
+              <button onClick={() => { setEditModalOpen(false); setEditRow({}); setEditValues({}); }} disabled={isEditSaving} className="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 text-xs font-medium hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed">Cancel</button>
+              <button onClick={handleEditSave} disabled={isEditSaving} className="px-4 py-2 rounded-lg bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center">
+                {isEditSaving ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Saving...
+                  </>
+                ) : 'Save'}
               </button>
             </div>
-
-            {rangeType === "custom" && (
-              <div className="flex flex-wrap gap-3">
-                <div className="flex items-center gap-2">
-                  <label className="text-xs md:text-sm font-medium text-gray-700">Date From</label>
-                  <div className="relative z-30" ref={customFromRef}>
-                    <button type="button" onClick={() => { setIsCustomFromOpen((o) => !o); setIsCustomToOpen(false); }} className="flex min-w-[140px] sm:min-w-[150px] items-center justify-between rounded-xl border border-gray-200 bg-eggWhite px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm">
-                      <span>{customFrom ? formatDateDMY(customFrom) : "dd-mm-yyyy"}</span>
-                      <CalendarIcon className="h-4 w-4 text-gray-500" />
-                    </button>
-                    {isCustomFromOpen && (
-                      <div className="absolute left-0 top-full z-50 mt-2">
-                        <CashCalendar rows={[]} selectedDate={customFrom} onSelectDate={(iso) => { setCustomFrom(iso); setIsCustomFromOpen(false); }} showDots={false} />
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <label className="text-xs md:text-sm font-medium text-gray-700">Date To</label>
-                  <div className="relative z-30" ref={customToRef}>
-                    <button type="button" onClick={() => { setIsCustomToOpen((o) => !o); setIsCustomFromOpen(false); }} className="flex min-w-[140px] sm:min-w-[150px] items-center justify-between rounded-xl border border-gray-200 bg-eggWhite px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm">
-                      <span>{customTo ? formatDateDMY(customTo) : "dd-mm-yyyy"}</span>
-                      <CalendarIcon className="h-4 w-4 text-gray-500" />
-                    </button>
-                    {isCustomToOpen && (
-                      <div className="absolute right-0 top-full z-50 mt-2">
-                        <CashCalendar rows={[]} selectedDate={customTo} onSelectDate={(iso) => { setCustomTo(iso); setIsCustomToOpen(false); }} showDots={false} />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
-
-          <DailyTable rows={filteredRows} outlets={displayedOutlets} allOutlets={outlets} onEdit={handleEditClick} showRupee={true} />
-
-          {editModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30 p-4">
-              <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
-                <h2 className="text-base sm:text-lg font-semibold mb-4">Edit Cash Payment ({editRow.date})</h2>
-                <div className="space-y-3">
-                  {outlets.map((o) => {
-                    const outletId = typeof o === 'string' ? o : o.id;
-                    const name = typeof o === 'string' ? o : o.area || outletId;
-                    return (
-                      <div key={outletId} className="flex flex-col sm:flex-row sm:items-center gap-2">
-                        <label className="w-full sm:w-32 text-xs font-medium text-gray-700">{name}</label>
-                        <input type="number" min="0" step="1" value={editValues[outletId] ?? 0} onChange={e => setEditValues((prev) => ({ ...prev, [outletId]: Number(e.target.value) }))} className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400" />
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="flex justify-end gap-2 mt-6">
-                  <button onClick={() => { setEditModalOpen(false); setEditRow({}); setEditValues({}); }} disabled={isEditSaving} className="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 text-xs font-medium hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed">Cancel</button>
-                  <button onClick={handleEditSave} disabled={isEditSaving} className="px-4 py-2 rounded-lg bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center">
-                    {isEditSaving ? (
-                      <>
-                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Saving...
-                      </>
-                    ) : 'Save'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </>
+        </div>
       )}
     </div>
   );

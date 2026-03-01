@@ -30,16 +30,18 @@ function ProtectedRoute({ element, requiredRole }) {
   try {
     user = JSON.parse(localStorage.getItem("user"));
   } catch {}
-  const isAdmin = user && (user.role === "Admin" || (Array.isArray(user.roles) && user.roles.includes("admin")));
-  const isViewer = user && (user.role === "Viewer" || (Array.isArray(user.roles) && user.roles.includes("viewer")));
-  const isSupervisor = user && (user.role === "Supervisor" || user.role === "supervisor");
-  const dataAgentRoles = Array.isArray(user?.roles) ? user.roles : (user?.role ? [user.role] : []);
+  const role = user?.role ? String(user.role).toLowerCase() : "";
+  const roles = Array.isArray(user?.roles) ? user.roles.map(r => String(r).toLowerCase()) : [];
+  const isAdmin = role === "admin" || roles.includes("admin");
+  const isViewer = role === "viewer" || roles.includes("viewer");
+  const isSupervisor = role === "supervisor" || roles.includes("supervisor");
+  const dataAgentRoles = roles.length ? roles : (role ? [role] : []);
   if (
     isAdmin ||
     !requiredRole ||
-    dataAgentRoles.includes(requiredRole) ||
+    dataAgentRoles.includes(String(requiredRole).toLowerCase()) ||
     isViewer ||
-    (requiredRole === "supervisor" && isSupervisor)
+    (String(requiredRole).toLowerCase() === "supervisor" && isSupervisor)
   ) {
     return element;
   }

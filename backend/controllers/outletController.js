@@ -113,9 +113,11 @@ export const getZoneOutlets = async (req, res) => {
 export const getAllOutlets = async (req, res) => {
   try {
     const snapshot = await db.collection("outlets").get();
-    const outlets = snapshot.docs.map(doc => doc.data());
-    return res.json(outlets);
+    const outlets = Array.isArray(snapshot.docs) ? snapshot.docs.map(doc => doc.data()) : [];
+    console.log("getAllOutlets: returned", outlets.length, "outlets");
+    return res.json(Array.isArray(outlets) ? outlets : []);
   } catch (err) {
+    console.error("getAllOutlets error:", err);
     return res.status(500).json({ success: false, error: err.message });
   }
 };

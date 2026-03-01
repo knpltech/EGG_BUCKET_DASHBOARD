@@ -182,6 +182,7 @@ export default function DigitalPayments() {
   const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
   // Supervisors can view but should not enter data here
   const showForms = isAdmin || isDataAgent;
+  const showTable = isAdmin || isDataAgent || isSupervisor;
 
   // Refs
   const entryCalendarRef = useRef(null);
@@ -204,7 +205,7 @@ export default function DigitalPayments() {
   }, [outlets, zone]);
 
   // For display, supervisors should only see their zone's outlets
-  const displayedOutlets = (isSupervisor ? formOutlets : outlets).map(o => typeof o === 'string' ? o : o.id);
+  const displayedOutlets = isSupervisor ? formOutlets : outlets;
   const [filterFrom, setFilterFrom] = useState("");
   const [filterTo, setFilterTo] = useState("");
   const [entryDate, setEntryDate] = useState("");
@@ -395,16 +396,16 @@ export default function DigitalPayments() {
   // Column totals with memoization
   const columnTotals = useMemo(() => {
     const totals = {};
-    outlets.forEach((outlet) => {
-      const area = outlet.area || outlet;
-      totals[area] = filteredRows.reduce((sum, r) => sum + (r.outlets?.[area] ? Number(r.outlets[area]) : 0), 0);
+    displayedOutlets.forEach((outlet) => {
+      const area = outlet.area || outlet.name || outlet.id;
+      totals[area] = filteredRows.reduce((sum, r) => sum + (r.outlets?.[outlet.id] ? Number(r.outlets[outlet.id]) : 0), 0);
     });
     totals.grandTotal = filteredRows.reduce((sum, r) => 
       sum + (typeof r.totalAmount === 'number' ? r.totalAmount : Object.values(r.outlets || {}).reduce((s, v) => s + (Number(v) || 0), 0)),
       0
     );
     return totals;
-  }, [filteredRows, outlets]);
+  }, [filteredRows, displayedOutlets]);
 
   // Handlers with useCallback
   const handleQuickRange = useCallback((type) => {
@@ -550,7 +551,7 @@ export default function DigitalPayments() {
 
   return (
     <div className="min-h-screen bg-eggBg px-4 py-6 md:px-8 flex flex-col">
-      {showForms && formOutlets.length > 0 && (
+      {showTable && formOutlets.length > 0 && (
         <>
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -678,9 +679,9 @@ export default function DigitalPayments() {
                 <thead className="bg-gray-50">
                   <tr className="text-left text-xs font-semibold text-gray-500">
                     <th className="sticky left-0 bg-gray-50 z-10 min-w-[120px] px-4 py-3">Date</th>
-                    {outlets.map((outlet) => {
-                      const outletId = typeof outlet === 'string' ? outlet : outlet.id;
-                      const name = typeof outlet === 'string' ? outlet : outlet.area || outletId;
+                    {displayedOutlets.map((outlet) => {
+                      const outletId = outlet.id;
+                      const name = outlet.area || outlet.name || outletId;
                       const isActive = !outlet.status || outlet.status === "Active";
                       return (
                         <th key={outletId} className="min-w-[100px] px-4 py-3 whitespace-nowrap">
@@ -696,7 +697,7 @@ export default function DigitalPayments() {
                 <tbody>
                   {filteredRows.length === 0 ? (
                     <tr>
-                      <td colSpan={outlets.length + 2 + (isAdmin ? 1 : 0)} className="text-center py-6 text-gray-500">No data available</td>
+                      <td colSpan={displayedOutlets.length + 2 + (isAdmin ? 1 : 0)} className="text-center py-6 text-gray-500">No data available</td>
                     </tr>
                   ) : (
                     <>
@@ -704,7 +705,7 @@ export default function DigitalPayments() {
                         <tr key={row.id} className={`text-xs text-gray-700 md:text-sm ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/60"}`}>
                           <td className="sticky left-0 bg-inherit z-10 whitespace-nowrap px-4 py-3">{formatDisplayDate(row.date)}</td>
                           {displayedOutlets.map((outlet) => {
-                            const outletId = typeof outlet === 'string' ? outlet : outlet.id;
+                            const outletId = outlet.id;
                             return <td key={outletId} className="whitespace-nowrap px-4 py-3">{formatCurrencyTwoDecimals(row.outlets[outletId])}</td>;
                           })}
                           <td className="sticky right-0 bg-inherit z-10 whitespace-nowrap px-4 py-3 text-right font-semibold">
@@ -720,8 +721,8 @@ export default function DigitalPayments() {
                       <tr className="bg-orange-50 font-semibold text-orange-700 border-t-2 border-orange-200">
                         <td className="sticky left-0 bg-orange-50 z-10 whitespace-nowrap px-4 py-3">Grand Total</td>
                         {displayedOutlets.map((outlet) => {
-                          const outletId = typeof outlet === 'string' ? outlet : outlet.id;
-                          return <td key={outletId} className="whitespace-nowrap px-4 py-3">{formatCurrencyTwoDecimals(columnTotals[outletId])}</td>;
+                          const area = outlet.area || outlet.name || outlet.id;
+                          return <td key={outlet.id} className="whitespace-nowrap px-4 py-3">{formatCurrencyTwoDecimals(columnTotals[area])}</td>;
                         })}
                         <td className="sticky right-0 bg-orange-50 z-10 whitespace-nowrap px-4 py-3 text-right">{formatCurrencyTwoDecimals(columnTotals.grandTotal)}</td>
                         {isAdmin && <td className="sticky right-0 bg-orange-50 z-10 whitespace-nowrap px-4 py-3"></td>}
