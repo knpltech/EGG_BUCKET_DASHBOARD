@@ -182,7 +182,8 @@ export default function DigitalPayments() {
   const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
   // Supervisors can view but should not enter data here
   const showForms = isAdmin || isDataAgent;
-  const showTable = isAdmin || isDataAgent || isSupervisor;
+  // viewers should also be allowed to see the table (read‑only)
+  const showTable = isAdmin || isDataAgent || isSupervisor || isViewer;
 
   // Refs
   const entryCalendarRef = useRef(null);
@@ -563,76 +564,7 @@ export default function DigitalPayments() {
             </button>
           </div>
 
-          {showForms && (
-            <div className="mb-6 rounded-2xl bg-eggWhite p-4 shadow-sm sm:p-6">
-              <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-100">
-                  <DigitalEntryIcon className="h-6 w-6" />
-                </div>
-                <div>
-                  <h2 className="text-base font-semibold text-gray-900 md:text-lg">Digital Payment Entry</h2>
-                  <p className="text-xs text-gray-500 md:text-sm">Add new UPI/online collection amounts for each outlet.</p>
-                </div>
-              </div>
-
-              <form onSubmit={handleSaveEntry} className="space-y-5">
-                <div className="grid gap-4 sm:grid-cols-[160px,1fr] sm:items-center">
-                  <label className="text-xs font-medium text-gray-700 md:text-sm">Select Date</label>
-                  <div className="relative w-full z-30" ref={entryCalendarRef}>
-                    <button type="button" onClick={() => setIsEntryCalendarOpen((o) => !o)} className="flex w-full items-center justify-between rounded-xl border border-gray-200 bg-eggBg px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm">
-                      <span>{entryDate ? formatDateDMY(entryDate) : "dd-mm-yyyy"}</span>
-                      <CalendarIcon className="h-4 w-4 text-gray-500" />
-                    </button>
-                    {hasEntry && (
-                      <div className="mt-2 flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-green-500" />
-                        <div className="text-xs font-medium text-green-700">Entry ({formatCurrencyTwoDecimals(entryTotal)}) • Locked</div>
-                      </div>
-                    )}
-                    {isEntryCalendarOpen && (
-                      <div className="absolute right-0 top-full z-50 mt-2">
-                        <BaseCalendar rows={rows} selectedDate={entryDate} onSelectDate={(iso) => { setEntryDate(iso); setIsEntryCalendarOpen(false); }} showDots={true} />
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                  {formOutlets.map((outlet) => {
-                    const area = outlet.area || outlet;
-                    const isActive = !outlet.status || outlet.status === "Active";
-                    return (
-                      <div key={area} className="space-y-1">
-                        <p className="text-xs font-medium text-gray-600">
-                          {area.toUpperCase()}
-                          {!isActive && <span className="text-red-500 ml-1">(Inactive)</span>}
-                        </p>
-                        <div className="relative">
-                          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">₹</span>
-                          <input type="number" min="0" step="0.01" value={entryValues[area] || ""} onChange={(e) => handleEntryChange(area, e.target.value)} disabled={hasEntry || !isActive} className={`w-full rounded-xl border border-gray-200 bg-eggBg pl-7 pr-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm ${(hasEntry || !isActive) ? 'bg-gray-50 cursor-not-allowed' : ''}`} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="flex flex-col items-center gap-2 pt-4">
-                  <button type="submit" disabled={hasEntry || isSaving} className={`inline-flex items-center justify-center rounded-2xl px-6 py-2.5 text-sm font-semibold text-white shadow-md ${hasEntry || isSaving ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'}`}>
-                    {isSaving ? (
-                      <>
-                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Saving...
-                      </>
-                    ) : hasEntry ? 'Locked' : 'Save Entry'}
-                  </button>
-                  <p className="text-center text-[11px] text-gray-500 md:text-xs">Values support decimals for exact UPI/online amounts.</p>
-                </div>
-              </form>
-            </div>
-          )}
+          
 
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap gap-3">

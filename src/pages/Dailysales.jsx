@@ -24,8 +24,8 @@ const Dailysales = () => {
   // formOutlets: zone-filtered for data entry, filter active only for data agent
   const formOutlets = useMemo(() => {
     let list = outlets;
-    // Filter by zone for any user with zone
-    if (zone && Array.isArray(list)) {
+    // Filter by zone for any user with zone except viewers (viewers see all)
+    if (!isViewer && zone && Array.isArray(list)) {
       list = list.filter(o => typeof o === 'object' && zonesMatch(o.zoneId, zone));
     }
     // Filter active only for data agent
@@ -37,7 +37,7 @@ const Dailysales = () => {
       });
     }
     return list;
-  }, [outlets, isDataAgent, zone]);
+  }, [outlets, isDataAgent, zone, isViewer]);
     
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -311,7 +311,7 @@ const Dailysales = () => {
         <Topbar />
 
         {/* ================= ENTRY FORM (ADMIN + DATA AGENT + SUPERVISOR) ================= */}
-        {showForms && outlets.length > 0 && (
+        {/* {showForms && outlets.length > 0 && (
           <div className="mt-4 mb-8">
             <Dailyentryform
               addrow={addrow}
@@ -320,7 +320,7 @@ const Dailysales = () => {
               outlets={formOutlets}
             />
           </div>
-        )}
+        )} */}
 
         {/* No outlets warning */}
         {showForms && outlets.length === 0 && (
@@ -401,10 +401,11 @@ const Dailysales = () => {
           </div>
         )}
 
-        {/* ================= WEEKLY TREND (ADMIN + SUPERVISOR) ================= */}
-        {(isAdmin || isSupervisor) && outlets.length > 0 && (
+        {/* ================= WEEKLY TREND (visible to admin, supervisor, viewer) ================= */}
+        {(isAdmin || isSupervisor || isViewer) && outlets.length > 0 && (
           <div className="mt-10">
-            <Weeklytrend rows={rows} />
+            {/* pass formOutlets so supervisors only see their zone; viewers/admins get all */}
+            <Weeklytrend rows={rows} outlets={formOutlets} />
           </div>
         )}
       </div>
