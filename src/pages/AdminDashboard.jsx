@@ -134,10 +134,10 @@ export default function AdminDashboard() {
       {/* Footer */}
       <div className="mt-12 p-4 bg-orange-100 rounded-xl flex flex-col sm:flex-row justify-between gap-2 text-sm">
         <div>
-          <strong>Contact:</strong> eggbukect@144.com
+          <strong>Contact:</strong> 7204704048
         </div>
         <div>
-          <strong>Address:</strong> Bandepalya, Bangalore, Karnataka
+          <strong>Address:</strong> HSR Layout, Bangalore, Karnataka
         </div>
       </div>
 
