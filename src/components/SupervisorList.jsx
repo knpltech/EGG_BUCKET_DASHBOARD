@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { getRoleFlags, zonesMatch } from "../utils/role";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -15,34 +16,100 @@ const getStoredSupervisors = () => {
 
 const setStoredSupervisors = (data) => {
   localStorage.setItem("supervisors", JSON.stringify(data));
+  try {
+    // Also store a zone-indexed map for quick lookup by zone
+    const byZone = {};
+    (data || []).forEach((s) => {
+      const z = s.zoneId || s.zone || "_no_zone";
+      byZone[z] = byZone[z] || [];
+      byZone[z].push(s);
+    });
+    localStorage.setItem("supervisors_by_zone", JSON.stringify(byZone));
+  } catch (err) {
+    // ignore
+  }
 };
 
 const SupervisorList = () => {
   const [supervisors, setSupervisors] = useState([]);
+  const [outlets, setOutlets] = useState([]);
 
   /* =========================
      LOAD SUPERVISORS FROM API
   ========================= */
   useEffect(() => {
-    const fetchSupervisors = async () => {
+    const fetchData = async () => {
+      let fetchedSupervisors = null;
       try {
-        const res = await fetch(`${API_URL}/admin/all-supervisors`);
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data) && data.length > 0) {
-            setSupervisors(data);
-            setStoredSupervisors(data);
-            return;
+        const [supRes, outletsRes] = await Promise.all([
+          fetch(`${API_URL}/admin/all-supervisors`),
+          fetch(`${API_URL}/outlets/all`),
+        ]);
+
+        if (supRes.ok) {
+          const sdata = await supRes.json();
+          if (Array.isArray(sdata) && sdata.length > 0) fetchedSupervisors = sdata;
+        }
+
+        if (outletsRes && outletsRes.ok) {
+          const odata = await outletsRes.json();
+          if (Array.isArray(odata)) {
+            setOutlets(odata);
+            localStorage.setItem("egg_outlets_v1", JSON.stringify(odata));
+          }
+        } else {
+          // fallback to localStorage for outlets
+          const saved = localStorage.getItem("egg_outlets_v1");
+          if (saved) {
+            try { setOutlets(JSON.parse(saved)); } catch {}
           }
         }
       } catch (err) {
-        console.error("Error fetching supervisors:", err);
+        console.error("Error fetching supervisors/outlets:", err);
       }
-      // Fallback to localStorage
-      setSupervisors(getStoredSupervisors());
+
+      if (fetchedSupervisors) {
+        // Merge fetched supervisors with any locally stored supervisors (which may contain passwords)
+        const stored = getStoredSupervisors();
+        const byUsername = {};
+        (fetchedSupervisors || []).forEach((fs) => {
+          const key = (fs.username || fs.id || "").toLowerCase();
+          byUsername[key] = { ...fs };
+        });
+        (stored || []).forEach((ls) => {
+          const key = (ls.username || ls.id || "").toLowerCase();
+          if (byUsername[key]) {
+            // merge stored fields into fetched (prefer fetched for backend fields, but keep stored.password)
+            byUsername[key] = { ...byUsername[key], ...ls, password: ls.password || byUsername[key].password };
+          } else {
+            byUsername[key] = ls;
+          }
+        });
+
+        const merged = Object.values(byUsername);
+        setSupervisors(merged);
+        setStoredSupervisors(merged);
+      } else {
+        setSupervisors(getStoredSupervisors());
+      }
     };
-    fetchSupervisors();
+    fetchData();
+    const handleSupUpdate = (e) => {
+      if (e?.detail && Array.isArray(e.detail)) {
+        setSupervisors(e.detail);
+        setStoredSupervisors(e.detail);
+      }
+    };
+    window.addEventListener('egg:supervisors-updated', handleSupUpdate);
+    return () => window.removeEventListener('egg:supervisors-updated', handleSupUpdate);
   }, []);
+
+  // helper to get outlets for a zone
+  const getOutletsForZone = (zoneId) => {
+    if (!zoneId) return [];
+    if (!Array.isArray(outlets)) return [];
+    return outlets.filter((o) => zonesMatch(o.zoneId || o.zone, zoneId));
+  };
 
   /* =========================
      DELETE SUPERVISOR
@@ -114,6 +181,17 @@ const SupervisorList = () => {
                   </span>
                 </p>
               )}
+              {/* Show outlets for supervisor's zone */}
+              {((s.zoneId || s.zone) && getOutletsForZone(s.zoneId || s.zone).length > 0) && (
+                <div>
+                  <p className="font-medium">Outlets in zone:</p>
+                  <ul className="text-sm text-gray-600 list-disc list-inside max-h-24 overflow-auto">
+                    {getOutletsForZone(s.zoneId || s.zone).map((o) => (
+                      <li key={o.id || (o.area || o)}>{o.area || o.name || o.id || o}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
 
             <div className="mt-4 flex gap-2">
@@ -123,6 +201,11 @@ const SupervisorList = () => {
               >
                 Delete
               </button>
+              {getRoleFlags().isAdmin && s.password && (
+                <div className="text-xs px-3 py-1 rounded-lg border border-gray-200 bg-gray-50 text-gray-800">
+                  <strong>Password:</strong> {s.password}
+                </div>
+              )}
             </div>
           </div>
         ))}
