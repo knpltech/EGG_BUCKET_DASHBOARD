@@ -76,9 +76,16 @@ const Supervisor = () => {
       .then(data => {
         if (data.success) {
           // Store supervisor in localStorage with numeric zone and zoneId for compatibility
+          // Also keep the plain password so admin can see it in the supervisors display
           const supervisors = getStoredSupervisors();
-          supervisors.push({ username: form.username.trim(), zone: zoneNum, zoneId: zoneNum });
+          const id = form.username.trim();
+          supervisors.push({ id, username: form.username.trim(), zone: zoneNum, zoneId: zoneNum, password: form.password, createdAt: new Date().toISOString() });
           setStoredSupervisors(supervisors);
+          setStoredSupervisors(supervisors);
+          // Notify other parts of the app that supervisors list changed
+          try {
+            window.dispatchEvent(new CustomEvent('egg:supervisors-updated', { detail: supervisors }));
+          } catch (err) {}
           alert("Supervisor created successfully");
           setForm({
             username: "",
