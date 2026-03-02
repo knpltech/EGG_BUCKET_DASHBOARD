@@ -141,7 +141,6 @@ export default function SignIn() {
           >
             <option value="admin">Admin</option>
             <option value="supervisor">Supervisor</option>
-            <option value="dataagent">Data Agent</option>
             <option value="viewer">Viewer</option>
           </select>
           {/* ZONE (only for data agents and supervisors) */}

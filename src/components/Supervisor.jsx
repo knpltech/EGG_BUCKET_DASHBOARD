@@ -65,7 +65,7 @@ const Supervisor = () => {
     const zoneNum = parseInt(form.zone.replace(/[^0-9]/g, ""), 10);
 
     // POST to backend
-    fetch("/api/supervisor/add", {
+    fetch(`${API_URL}/supervisor/add`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
