@@ -208,7 +208,7 @@ function BaseCalendar({ selectedDate, onSelectDate, rows = [] }) {
   );
 }
 
-const Dailyheader = ({ dailySalesData = [], fromDate, toDate, setFromDate, setToDate, allRows = [] }) => {
+const Dailyheader = ({ dailySalesData = [], fromDate, toDate, setFromDate, setToDate, allRows = [], onExport }) => {
   const fromCalendarRef = useRef(null);
   const toCalendarRef = useRef(null);
   const [openCal, setOpenCal] = useState(null); // "from" | "to" | null
@@ -232,19 +232,39 @@ const Dailyheader = ({ dailySalesData = [], fromDate, toDate, setFromDate, setTo
 
   const handleQuickRange = (type) => {
     const today = new Date();
+    const iso = (d) => d.toISOString().slice(0,10);
 
-    if (type === "lastWeek") {
-      const from = new Date();
-      from.setDate(today.getDate() - 7);
-      setFromDate(from.toISOString().slice(0,10));
-      setToDate(today.toISOString().slice(0,10));
+    if (type === "thisMonth") {
+      const from = new Date(today.getFullYear(), today.getMonth(), 1);
+      setFromDate(iso(from));
+      setToDate(iso(today));
+      return;
     }
 
     if (type === "lastMonth") {
       const from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
       const to = new Date(today.getFullYear(), today.getMonth(), 0);
-      setFromDate(from.toISOString().slice(0,10));
-      setToDate(to.toISOString().slice(0,10));
+      setFromDate(iso(from));
+      setToDate(iso(to));
+      return;
+    }
+
+    if (type === "thisWeek") {
+      const start = new Date(today);
+      start.setDate(today.getDate() - today.getDay());
+      setFromDate(iso(start));
+      setToDate(iso(today));
+      return;
+    }
+
+    if (type === "lastWeek") {
+      const end = new Date(today);
+      end.setDate(today.getDate() - today.getDay() - 1);
+      const start = new Date(end);
+      start.setDate(end.getDate() - 6);
+      setFromDate(iso(start));
+      setToDate(iso(end));
+      return;
     }
   };
 
@@ -319,17 +339,25 @@ const Dailyheader = ({ dailySalesData = [], fromDate, toDate, setFromDate, setTo
         </div>
 
         {/* QUICK BUTTONS */}
-        <button className="border px-4 py-2 rounded-lg text-sm hover:bg-gray-50" onClick={() => handleQuickRange("lastWeek")}>
-          Last Week
+        <button className="border px-4 py-2 rounded-lg text-sm hover:bg-gray-50" onClick={() => handleQuickRange("thisMonth")}>
+          This Month
         </button>
 
         <button className="border px-4 py-2 rounded-lg text-sm hover:bg-gray-50" onClick={() => handleQuickRange("lastMonth")}>
           Last Month
         </button>
 
+        <button className="border px-4 py-2 rounded-lg text-sm hover:bg-gray-50" onClick={() => handleQuickRange("thisWeek")}>
+          This Week
+        </button>
+
+        <button className="border px-4 py-2 rounded-lg text-sm hover:bg-gray-50" onClick={() => handleQuickRange("lastWeek")}>
+          Last Week
+        </button>
+
         {/* DOWNLOAD */}
         <button
-          onClick={handleDownload}
+          onClick={() => (onExport ? onExport() : handleDownload())}
           className="bg-orange-500 text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-orange-600"
         >
           Download

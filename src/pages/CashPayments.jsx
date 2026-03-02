@@ -390,10 +390,26 @@ export default function CashPayments() {
       return `${year}-${month}-${day}`;
     };
 
-    if (rangeType === "lastMonth") {
+    if (rangeType === "thisMonth") {
+      const first = new Date(now.getFullYear(), now.getMonth(), 1);
+      from = toLocalIso(first);
+      to = toLocalIso(now);
+    } else if (rangeType === "lastMonth") {
       const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       from = toLocalIso(lastMonth);
       to = toLocalIso(new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0));
+    } else if (rangeType === "thisWeek") {
+      const startOfWeek = new Date(now);
+      startOfWeek.setDate(now.getDate() - now.getDay());
+      from = toLocalIso(startOfWeek);
+      to = toLocalIso(now);
+    } else if (rangeType === "lastWeek") {
+      const endOfLastWeek = new Date(now);
+      endOfLastWeek.setDate(now.getDate() - now.getDay() - 1);
+      const startOfLastWeek = new Date(endOfLastWeek);
+      startOfLastWeek.setDate(endOfLastWeek.getDate() - 6);
+      from = toLocalIso(startOfLastWeek);
+      to = toLocalIso(endOfLastWeek);
     } else if (rangeType === "custom" && customFrom && customTo) {
       from = toLocalIso(customFrom);
       to = toLocalIso(customTo);
@@ -542,14 +558,14 @@ export default function CashPayments() {
     }
 
     const data = filteredRows.map((row) => {
-      const obj = { Date: row.date };
+      const obj = { Date: formatDateDMY(row.date) };
       if (Array.isArray(outlets) && outlets.length > 0) {
         outlets.forEach((outletObj) => {
           const area = outletObj.area || outletObj;
-          obj[area] = row.outlets[area] ?? 0;
+          obj[area] = Number(row.outlets?.[area] ?? 0);
         });
       }
-      obj.Total = row.totalAmount;
+      obj.Total = Number(row.totalAmount ?? (Array.isArray(outlets) ? outlets.reduce((s, o) => s + Number(row.outlets?.[(o.area || o)] || 0), 0) : 0));
       return obj;
     });
 
@@ -567,9 +583,6 @@ export default function CashPayments() {
           <p className="mt-1 text-sm md:text-base text-gray-500">Manage and record daily cash collections across outlets.</p>
         </div>
         <div className="flex gap-2">
-          <button onClick={fetchPayments} className="inline-flex items-center rounded-full bg-gray-200 px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-300">
-            Refresh
-          </button>
           <button onClick={downloadExcel} className="inline-flex items-center rounded-full bg-[#ff7518] px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90">
             Export Report
           </button>
@@ -580,14 +593,16 @@ export default function CashPayments() {
       
 
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap gap-2">
-          <button onClick={() => setRangeType("thisMonth")} className={`rounded-full px-4 py-2 text-xs md:text-sm font-medium border ${rangeType === "thisMonth" ? "bg-orange-500 text-white border-orange-500" : "bg-eggWhite text-gray-700 border-gray-200 hover:bg-gray-50"}`}>This Month</button>
-          <button onClick={() => setRangeType("lastMonth")} className={`rounded-full px-4 py-2 text-xs md:text-sm font-medium border ${rangeType === "lastMonth" ? "bg-orange-500 text-white border-orange-500" : "bg-eggWhite text-gray-700 border-gray-200 hover:bg-gray-50"}`}>Last Month</button>
-          <button onClick={() => setRangeType("custom")} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs md:text-sm font-medium border ${rangeType === "custom" ? "bg-orange-500 text-white border-orange-500" : "bg-eggWhite text-gray-700 border-gray-200 hover:bg-gray-50"}`}>
-            <span>Custom Range</span>
-            <CalendarIcon className="h-4 w-4" />
-          </button>
-        </div>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={() => setRangeType("thisMonth")} className={`rounded-full px-4 py-2 text-xs md:text-sm font-medium border ${rangeType === "thisMonth" ? "bg-orange-500 text-white border-orange-500" : "bg-eggWhite text-gray-700 border-gray-200 hover:bg-gray-50"}`}>This Month</button>
+              <button onClick={() => setRangeType("lastMonth")} className={`rounded-full px-4 py-2 text-xs md:text-sm font-medium border ${rangeType === "lastMonth" ? "bg-orange-500 text-white border-orange-500" : "bg-eggWhite text-gray-700 border-gray-200 hover:bg-gray-50"}`}>Last Month</button>
+              <button onClick={() => setRangeType("thisWeek")} className={`rounded-full px-4 py-2 text-xs md:text-sm font-medium border ${rangeType === "thisWeek" ? "bg-orange-500 text-white border-orange-500" : "bg-eggWhite text-gray-700 border-gray-200 hover:bg-gray-50"}`}>This Week</button>
+              <button onClick={() => setRangeType("lastWeek")} className={`rounded-full px-4 py-2 text-xs md:text-sm font-medium border ${rangeType === "lastWeek" ? "bg-orange-500 text-white border-orange-500" : "bg-eggWhite text-gray-700 border-gray-200 hover:bg-gray-50"}`}>Last Week</button>
+              <button onClick={() => setRangeType("custom")} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs md:text-sm font-medium border ${rangeType === "custom" ? "bg-orange-500 text-white border-orange-500" : "bg-eggWhite text-gray-700 border-gray-200 hover:bg-gray-50"}`}>
+                <span>Custom Range</span>
+                <CalendarIcon className="h-4 w-4" />
+              </button>
+            </div>
 
         {rangeType === "custom" && (
           <div className="flex flex-wrap gap-3">

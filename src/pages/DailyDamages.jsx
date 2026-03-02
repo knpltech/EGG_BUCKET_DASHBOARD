@@ -641,7 +641,19 @@ export default function DailyDamages() {
       alert("No data available for selected dates");
       return;
     }
-    const ws = XLSX.utils.json_to_sheet(filteredData);
+    // Build clean tabular data: Date, <area columns...>, Total
+    const data = filteredData.map((row) => {
+      const obj = { Date: formatDateDMY(row.date) };
+      // Use original outlets array to get area labels (objects or strings)
+      outlets.forEach((o) => {
+        const area = typeof o === 'string' ? o : o.area;
+        obj[area] = Number(row[area] ?? 0);
+      });
+      obj.Total = Number(row.total ?? outlets.reduce((s, o) => s + Number(row[(typeof o === 'string' ? o : o.area)] || 0), 0));
+      return obj;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Daily Damages");
     XLSX.writeFile(wb, "Daily_Damages_Report.xlsx");
@@ -649,18 +661,45 @@ export default function DailyDamages() {
 
   const handleQuickRange = (type) => {
     const today = new Date();
-    const to = today.toISOString().slice(0, 10);
-    let fromDateVal;
-    if (type === "lastWeek") {
-      const d = new Date(today);
-      d.setDate(d.getDate() - 7);
-      fromDateVal = d.toISOString().slice(0, 10);
-    } else if (type === "lastMonth") {
-      const d = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-      fromDateVal = d.toISOString().slice(0, 10);
+    const iso = (d) => d.toISOString().slice(0, 10);
+
+    if (type === "thisMonth") {
+      const from = new Date(today.getFullYear(), today.getMonth(), 1);
+      setFromDate(iso(from));
+      setToDate(iso(today));
+      return;
     }
-    setFromDate(fromDateVal || "");
-    setToDate(to);
+
+    if (type === "lastMonth") {
+      const from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const to = new Date(today.getFullYear(), today.getMonth(), 0); // last day of prev month
+      setFromDate(iso(from));
+      setToDate(iso(to));
+      return;
+    }
+
+    if (type === "thisWeek") {
+      const startOfWeek = new Date(today);
+      startOfWeek.setDate(today.getDate() - today.getDay()); // Sunday
+      setFromDate(iso(startOfWeek));
+      setToDate(iso(today));
+      return;
+    }
+
+    if (type === "lastWeek") {
+      // Last calendar week (Sunday - Saturday)
+      const endOfLastWeek = new Date(today);
+      endOfLastWeek.setDate(today.getDate() - today.getDay() - 1); // last week's Saturday
+      const startOfLastWeek = new Date(endOfLastWeek);
+      startOfLastWeek.setDate(endOfLastWeek.getDate() - 6); // last week's Sunday
+      setFromDate(iso(startOfLastWeek));
+      setToDate(iso(endOfLastWeek));
+      return;
+    }
+
+    // fallback
+    setFromDate("");
+    setToDate("");
   };
 
   return (
@@ -767,10 +806,10 @@ export default function DailyDamages() {
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => handleQuickRange("lastWeek")}
+                onClick={() => handleQuickRange("thisMonth")}
                 className="rounded-full border border-gray-200 bg-eggWhite px-4 py-2 text-xs md:text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
               >
-                Last Week
+                This Month
               </button>
               <button
                 type="button"
@@ -778,6 +817,20 @@ export default function DailyDamages() {
                 className="rounded-full border border-gray-200 bg-eggWhite px-4 py-2 text-xs md:text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
               >
                 Last Month
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickRange("thisWeek")}
+                className="rounded-full border border-gray-200 bg-eggWhite px-4 py-2 text-xs md:text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+              >
+                This Week
+              </button>
+              <button
+                type="button"
+                onClick={() => handleQuickRange("lastWeek")}
+                className="rounded-full border border-gray-200 bg-eggWhite px-4 py-2 text-xs md:text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+              >
+                Last Week
               </button>
             </div>
           </div>

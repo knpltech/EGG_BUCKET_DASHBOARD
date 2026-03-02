@@ -411,20 +411,40 @@ export default function DigitalPayments() {
   // Handlers with useCallback
   const handleQuickRange = useCallback((type) => {
     const today = new Date();
-    const to = today.toISOString().slice(0, 10);
-    let fromDate;
+    const iso = (d) => d.toISOString().slice(0,10);
 
-    if (type === "lastWeek") {
-      const d = new Date(today);
-      d.setDate(d.getDate() - 7);
-      fromDate = d.toISOString().slice(0, 10);
-    } else if (type === "lastMonth") {
-      const d = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-      fromDate = d.toISOString().slice(0, 10);
+    if (type === "thisMonth") {
+      const from = new Date(today.getFullYear(), today.getMonth(), 1);
+      setFilterFrom(iso(from));
+      setFilterTo(iso(today));
+      return;
     }
 
-    setFilterFrom(fromDate || "");
-    setFilterTo(to);
+    if (type === "lastMonth") {
+      const from = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const to = new Date(today.getFullYear(), today.getMonth(), 0);
+      setFilterFrom(iso(from));
+      setFilterTo(iso(to));
+      return;
+    }
+
+    if (type === "thisWeek") {
+      const start = new Date(today);
+      start.setDate(today.getDate() - today.getDay());
+      setFilterFrom(iso(start));
+      setFilterTo(iso(today));
+      return;
+    }
+
+    if (type === "lastWeek") {
+      const end = new Date(today);
+      end.setDate(today.getDate() - today.getDay() - 1);
+      const start = new Date(end);
+      start.setDate(end.getDate() - 6);
+      setFilterFrom(iso(start));
+      setFilterTo(iso(end));
+      return;
+    }
   }, []);
 
   const handleEntryChange = useCallback((outlet, value) => {
@@ -534,13 +554,22 @@ export default function DigitalPayments() {
       return;
     }
 
+    const fmt = (iso) => {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return iso;
+      const day = String(d.getDate()).padStart(2, "0");
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const year = d.getFullYear();
+      return `${day}-${month}-${year}`;
+    };
+
     const data = filteredRows.map((row) => {
-      const obj = { Date: row.date };
+      const obj = { Date: fmt(row.date) };
       outlets.forEach((o) => {
         const area = o.area || o;
-        obj[area] = row.outlets[area] ?? 0;
+        obj[area] = Number(row.outlets?.[area] ?? 0);
       });
-      obj.Total = row.totalAmount;
+      obj.Total = Number(row.totalAmount ?? Object.values(row.outlets || {}).reduce((s, v) => s + (Number(v) || 0), 0));
       return obj;
     });
 
@@ -600,8 +629,10 @@ export default function DigitalPayments() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => handleQuickRange("lastWeek")} className="rounded-full border border-gray-200 bg-eggWhite px-4 py-2 text-xs md:text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">Last Week</button>
+              <button type="button" onClick={() => handleQuickRange("thisMonth")} className="rounded-full border border-gray-200 bg-eggWhite px-4 py-2 text-xs md:text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">This Month</button>
               <button type="button" onClick={() => handleQuickRange("lastMonth")} className="rounded-full border border-gray-200 bg-eggWhite px-4 py-2 text-xs md:text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">Last Month</button>
+              <button type="button" onClick={() => handleQuickRange("thisWeek")} className="rounded-full border border-gray-200 bg-eggWhite px-4 py-2 text-xs md:text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">This Week</button>
+              <button type="button" onClick={() => handleQuickRange("lastWeek")} className="rounded-full border border-gray-200 bg-eggWhite px-4 py-2 text-xs md:text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">Last Week</button>
             </div>
           </div>
 

@@ -275,13 +275,22 @@ const Dailysales = () => {
 
   /* ================= DOWNLOAD ================= */
   const handleDownload = () => {
+    const fmt = (iso) => {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return iso;
+      const day = String(d.getDate()).padStart(2, "0");
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const year = d.getFullYear();
+      return `${day}-${month}-${year}`;
+    };
+
     const data = filteredRows.map((row) => {
-      const obj = { Date: row.date };
+      const obj = { Date: fmt(row.date) };
       outlets.forEach((o) => {
         const area = o.area || o;
-        obj[area] = row.outlets?.[area] ?? 0;
+        obj[area] = Number(row.outlets?.[area] ?? 0);
       });
-      obj.Total = row.total || 0;
+      obj.Total = Number(row.total ?? outlets.reduce((s, o) => s + Number(row.outlets?.[(o.area || o)] || 0), 0));
       return obj;
     });
 
@@ -332,13 +341,14 @@ const Dailysales = () => {
         {/* ================= HEADER ================= */}
         {(isAdmin || isViewer || isDataAgent || isSupervisor) && outlets.length > 0 && (
           <Dailyheader 
-            dailySalesData={filteredRows}
-            fromDate={fromDate}
-            toDate={toDate}
-            setFromDate={setFromDate}
-            setToDate={setToDate}
-            allRows={rows}
-          />
+              dailySalesData={filteredRows}
+              fromDate={fromDate}
+              toDate={toDate}
+              setFromDate={setFromDate}
+              setToDate={setToDate}
+              allRows={rows}
+              onExport={handleDownload}
+            />
         )}
 
         {/* ================= TABLE (ADMIN + VIEWER + DATA AGENT + SUPERVISOR) ================= */}
