@@ -5,6 +5,8 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 
+const API_URL = import.meta.env.VITE_API_URL;
+
 /* =========================
    LOCAL STORAGE HELPERS
 ========================= */
