@@ -92,12 +92,14 @@ const Neccrate = () => {
         Object.keys(doc.outlets).forEach(k => keysInData.add(k));
     });
 
-    // Order: follow the outlets list, then append any keys not in the list
+    // Order: include all outlets from the outlets list (so ones without data are shown),
+    // then append any extra keys that only appear in the data.
     const ordered = [];
     outlets.forEach(o => {
       const key = o.id || o.area || o.name;
-      if (keysInData.has(key)) ordered.push(key);
+      ordered.push(key);
     });
+    // Append any keys that are present in data but not in the outlets list
     keysInData.forEach(k => { if (!ordered.includes(k)) ordered.push(k); });
     return ordered;
   }, [filteredRawRows, outlets]);
@@ -274,7 +276,10 @@ const Neccrate = () => {
                       </td>
                       {outletColumns.map(key => (
                         <td key={key} className="px-5 py-4 text-gray-700 whitespace-nowrap">
-                          {dateData[key] !== undefined ? Number(dateData[key].rate).toLocaleString("en-IN") : <span className="text-gray-300">—</span>}
+                          {(() => {
+                            const val = Number(dateData[key]?.rate ?? 0);
+                            return val.toLocaleString("en-IN");
+                          })()}
                         </td>
                       ))}
                       <td className="px-5 py-4 font-semibold text-orange-500 whitespace-nowrap">

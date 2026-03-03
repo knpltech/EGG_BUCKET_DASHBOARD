@@ -215,18 +215,6 @@ const Supervisor = () => {
           </button>
         </div>
       </div>
-
-      {/* INFO */}
-      <div className="mt-6 bg-orange-50 border border-black-200 rounded-xl p-4">
-        <h3 className="font-semibold mb-1">
-          Supervisor Rules
-        </h3>
-        <ul className="text-sm ml-5">
-          <li>Only one supervisor per zone</li>
-          <li>Zones are locked once a supervisor is created</li>
-          <li>Deleting a supervisor frees the zone automatically</li>
-        </ul>
-      </div>
     </div>
   );
 };
