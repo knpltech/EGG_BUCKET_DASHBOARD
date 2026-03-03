@@ -250,7 +250,6 @@ export default function CashPayments() {
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-        console.log("CashPayments: formOutlets", formOutlets.length, formOutlets);
           if (Array.isArray(parsed) && parsed.length > 0) {
             setOutlets(parsed);
           }
@@ -415,10 +414,6 @@ export default function CashPayments() {
       to = toLocalIso(customTo);
     }
 
-    // DEBUG: Log all row.date values and filter range
-    // console.log('Filter range:', from, 'to', to);
-    // rows.forEach(r => console.log('Row date:', r.date, 'ISO:', toLocalIso(r.date)));
-
     const filtered = (!from || !to) ? rows : rows.filter((row) => {
       const d = toLocalIso(row.date);
       return d && d >= from && d <= to;
@@ -470,7 +465,6 @@ export default function CashPayments() {
     // Only save data for user's outlets (formOutlets)
     const outletAmounts = {};
     formOutlets.forEach((o) => {
-        console.log("CashPayments: filteredRows", sorted.length, sorted);
       const area = o.area || o;
       outletAmounts[area] = Number(entryValues[area]) || 0;
     });
@@ -503,6 +497,8 @@ export default function CashPayments() {
     }
   }, [entryDate, entryValues, formOutlets, hasEntry, isSaving]);
 
+  // FIX 1: Normalize editValues to use area names (matching how data is stored)
+  // FIX 2: Store values as strings to preserve user input, only convert on save
   const handleEditClick = useCallback((row) => {
     const fullRow = { ...row };
     if (!row.id) {
@@ -510,9 +506,22 @@ export default function CashPayments() {
       if (found?.id) fullRow.id = found.id;
     }
     setEditRow(fullRow);
-    setEditValues({ ...row.outlets });
+    // Build editValues keyed by area name (same key used in row.outlets)
+    const normalizedValues = {};
+    outlets.forEach((o) => {
+      const area = typeof o === 'string' ? o : (o.area || o.id);
+      // Store as string to prevent auto-conversion to decimals
+      const val = row.outlets?.[area];
+      normalizedValues[area] = val != null ? String(val) : "0";
+    });
+    setEditValues(normalizedValues);
     setEditModalOpen(true);
-  }, [rows]);
+  }, [rows, outlets]);
+
+  // FIX 3: Compute live total from editValues so the Total column updates in real time
+  const editTotal = useMemo(() => {
+    return Object.values(editValues).reduce((sum, v) => sum + (Number(v) || 0), 0);
+  }, [editValues]);
 
   const handleEditSave = useCallback(async () => {
     if (isEditSaving) return; // Prevent double submission
@@ -522,8 +531,12 @@ export default function CashPayments() {
       return;
     }
 
-    const updatedOutlets = { ...editValues };
-    const totalAmount = Object.values(updatedOutlets).reduce((s, v) => s + (Number(v) || 0), 0);
+    // Convert string values to numbers only at save time
+    const updatedOutlets = {};
+    Object.entries(editValues).forEach(([key, val]) => {
+      updatedOutlets[key] = Number(val) || 0;
+    });
+    const totalAmount = Object.values(updatedOutlets).reduce((s, v) => s + v, 0);
 
     setIsEditSaving(true);
     try {
@@ -647,16 +660,39 @@ export default function CashPayments() {
             <h2 className="text-base sm:text-lg font-semibold mb-4">Edit Cash Payment ({editRow.date})</h2>
             <div className="space-y-3">
               {outlets.map((o) => {
-                const outletId = typeof o === 'string' ? o : o.id;
-                const name = typeof o === 'string' ? o : o.area || outletId;
+                const area = typeof o === 'string' ? o : (o.area || o.id);
+                const name = typeof o === 'string' ? o : (o.area || o.id);
                 return (
-                  <div key={outletId} className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <div key={area} className="flex flex-col sm:flex-row sm:items-center gap-2">
                     <label className="w-full sm:w-32 text-xs font-medium text-gray-700">{name}</label>
-                    <input type="number" min="0" step="1" value={editValues[outletId] ?? 0} onChange={e => setEditValues((prev) => ({ ...prev, [outletId]: Number(e.target.value) }))} className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400" />
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      // FIX: value stored as string — no auto decimal conversion
+                      value={editValues[area] ?? ""}
+                      onChange={e =>
+                        setEditValues((prev) => ({
+                          ...prev,
+                          // Store raw string so user input is preserved exactly
+                          [area]: e.target.value,
+                        }))
+                      }
+                      className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                    />
                   </div>
                 );
               })}
             </div>
+
+            {/* FIX: Live-computed total that reflects edits instantly */}
+            <div className="mt-4 flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
+              <span className="text-xs font-semibold text-gray-600">Total</span>
+              <span className="text-sm font-bold text-orange-600">
+                {formatCurrencyNoDecimals(editTotal)}
+              </span>
+            </div>
+
             <div className="flex justify-end gap-2 mt-6">
               <button onClick={() => { setEditModalOpen(false); setEditRow({}); setEditValues({}); }} disabled={isEditSaving} className="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 text-xs font-medium hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed">Cancel</button>
               <button onClick={handleEditSave} disabled={isEditSaving} className="px-4 py-2 rounded-lg bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center">
