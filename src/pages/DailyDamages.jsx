@@ -304,29 +304,17 @@ export default function DailyDamages() {
   const [editRow,       setEditRow]       = useState({});
   const [editValues,    setEditValues]    = useState({});
 
-  const fromCalendarRef  = useRef(null);
-  const toCalendarRef    = useRef(null);
-  const entryCalendarRef = useRef(null);
+  const fromCalendarRef = useRef(null);
+  const toCalendarRef   = useRef(null);
 
-  const [isFromCalendarOpen,  setIsFromCalendarOpen]  = useState(false);
-  const [isToCalendarOpen,    setIsToCalendarOpen]    = useState(false);
-  const [isEntryCalendarOpen, setIsEntryCalendarOpen] = useState(false);
+  const [isFromCalendarOpen, setIsFromCalendarOpen] = useState(false);
+  const [isToCalendarOpen,   setIsToCalendarOpen]   = useState(false);
 
   const STORAGE_KEY = "egg_outlets_v1";
   const [outlets, setOutlets] = useState([]);
 
-  const initialForm = outlets.reduce((acc, outlet) => {
-    const area = typeof outlet === 'string' ? outlet : outlet.area;
-    acc[area] = 0;
-    return acc;
-  }, {});
-
-  const [form,       setForm]       = useState(initialForm);
-  const [entryDate,  setEntryDate]  = useState(new Date().toISOString().split("T")[0]);
-  const [fromDate,   setFromDate]   = useState("");
-  const [toDate,     setToDate]     = useState("");
-  const [hasEntry,   setHasEntry]   = useState(false);
-  const [entryTotal, setEntryTotal] = useState(0);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate,   setToDate]   = useState("");
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -336,7 +324,7 @@ export default function DailyDamages() {
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [fromCalendarRef, toCalendarRef]);
 
   useEffect(() => {
     const fetchDamages = async () => {
@@ -413,69 +401,7 @@ export default function DailyDamages() {
     };
   }, [loadOutlets]);
 
-  useEffect(() => {
-    setForm(() => {
-      const f = {};
-      formOutlets.forEach((outlet) => { const area = typeof outlet === 'string' ? outlet : outlet.area; f[area] = 0; });
-      return f;
-    });
-  }, [formOutlets]);
 
-  useEffect(() => {
-    const existing = damages.find((d) => d.date === entryDate);
-    if (existing) {
-      const loaded = {};
-      let hasDataForMyOutlets = false;
-      formOutlets.forEach((outlet) => {
-        const area  = typeof outlet === 'string' ? outlet : outlet.area;
-        const value = existing[area] ?? 0;
-        loaded[area] = value;
-        if (value > 0) hasDataForMyOutlets = true;
-      });
-      setForm(loaded);
-      setHasEntry(hasDataForMyOutlets);
-      const myTotal = formOutlets.reduce((sum, outlet) => {
-        const area = typeof outlet === 'string' ? outlet : outlet.area;
-        return sum + Number(existing[area] || 0);
-      }, 0);
-      setEntryTotal(myTotal);
-    } else {
-      const reset = {};
-      formOutlets.forEach((outlet) => { const area = typeof outlet === 'string' ? outlet : outlet.area; reset[area] = 0; });
-      setForm(reset);
-      setHasEntry(false);
-      setEntryTotal(0);
-    }
-  }, [entryDate, damages, formOutlets]);
-
-  const handleEntryDateSelect = (iso) => {
-    setEntryDate(iso);
-    const existingEntry = damages.find((d) => d.date === iso);
-    if (existingEntry) {
-      const loaded = {};
-      let hasDataForMyOutlets = false;
-      formOutlets.forEach((outlet) => {
-        const area  = typeof outlet === 'string' ? outlet : outlet.area;
-        const value = existingEntry[area] ?? 0;
-        loaded[area] = value;
-        if (value > 0) hasDataForMyOutlets = true;
-      });
-      setForm(loaded);
-      setHasEntry(hasDataForMyOutlets);
-      const myTotal = formOutlets.reduce((sum, outlet) => {
-        const area = typeof outlet === 'string' ? outlet : outlet.area;
-        return sum + Number(existingEntry[area] || 0);
-      }, 0);
-      setEntryTotal(myTotal);
-    } else {
-      const reset = {};
-      formOutlets.forEach((outlet) => { const area = typeof outlet === 'string' ? outlet : outlet.area; reset[area] = 0; });
-      setForm(reset);
-      setHasEntry(false);
-      setEntryTotal(0);
-    }
-    setIsEntryCalendarOpen(false);
-  };
 
   const handleEditClick = (row) => {
     const fullRow = { ...row };
@@ -524,22 +450,7 @@ export default function DailyDamages() {
     } catch (err) { alert("Error updating entry: " + err.message); }
   };
 
-  const save = async () => {
-    const total = formOutlets.reduce((s, outlet) => {
-      const area = typeof outlet === 'string' ? outlet : outlet.area;
-      return s + Number(form[area] || 0);
-    }, 0);
-    addDamage({ date: entryDate, ...form, total });
-    try {
-      await fetch(`${API_URL}/daily-damage/add-daily-damage`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: entryDate, damages: { ...form }, total }),
-      });
-    } catch (err) {}
-    alert(`Saved entry for ${entryDate}`);
-    setHasEntry(true);
-    setEntryTotal(total);
-  };
+
 
   const getFilteredData = () => {
     const sortedUnique = Array.from(
@@ -596,17 +507,6 @@ export default function DailyDamages() {
               Download Excel
             </button>
           </div>
-
-          {showForms && outlets.length === 0 && (
-            <div className="mt-4 mb-8 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
-              <p className="text-sm text-yellow-800">No outlets available. Please add outlets first.</p>
-            </div>
-          )}
-          {showForms && outlets.length > 0 && formOutlets.length === 0 && (
-            <div className="mt-4 mb-8 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
-              <p className="text-sm text-yellow-800">No outlets available for your zone. Please contact an administrator.</p>
-            </div>
-          )}
 
           {/* Date filters + quick range buttons */}
           <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
