@@ -81,28 +81,34 @@ const Neccrate = () => {
     return found ? (found.name || found.area || key) : key;
   };
 
-  /* ---- derive ordered outlet columns from data + outlet list ----
-     Use the outlets list order if available, then append any extra keys from the data. */
+  /* ---- derive ordered outlet columns from outlet list ONLY ----
+     Use the outlets list as the source of truth. Only show outlets that currently exist. */
   const outletColumns = useMemo(() => {
-    // All outlet keys that appear in the filtered raw data
-    const keysInData = new Set();
-    filteredRawRows.forEach(doc => {
-      if (doc.outlet) keysInData.add(doc.outlet);
-      if (doc.outlets && typeof doc.outlets === "object")
-        Object.keys(doc.outlets).forEach(k => keysInData.add(k));
-    });
-
-    // Order: include all outlets from the outlets list (so ones without data are shown),
-    // then append any extra keys that only appear in the data.
     const ordered = [];
+    const seen = new Set();
+    
     outlets.forEach(o => {
-      const key = o.id || o.area || o.name;
-      ordered.push(key);
+      const canonicalKey = o.id || o.area || o.name;
+      if (!seen.has(canonicalKey)) {
+        seen.add(canonicalKey);
+        ordered.push(canonicalKey);
+      }
     });
-    // Append any keys that are present in data but not in the outlets list
-    keysInData.forEach(k => { if (!ordered.includes(k)) ordered.push(k); });
+    
     return ordered;
-  }, [filteredRawRows, outlets]);
+  }, [outlets]);
+
+  /* ---- Build a map to normalize any outlet identifier to canonical key ---- */
+  const outletKeyMap = useMemo(() => {
+    const map = new Map();
+    outlets.forEach(o => {
+      const canonicalKey = o.id || o.area || o.name;
+      if (o.id) map.set(o.id, canonicalKey);
+      if (o.area) map.set(o.area, canonicalKey);
+      if (o.name) map.set(o.name, canonicalKey);
+    });
+    return map;
+  }, [outlets]);
 
   /* ---- pivot: one row per date with rates per outlet column ----
      pivotMap[date][outletKey] = { rate, docId, remarks } */
@@ -117,7 +123,9 @@ const Neccrate = () => {
 
       if (doc.outlet) {
         // per-outlet format: { date, outlet, rate, rateValue, remarks }
-        pivotMap[date][doc.outlet] = {
+        // Normalize the outlet key
+        const normalizedKey = outletKeyMap.get(doc.outlet) || doc.outlet;
+        pivotMap[date][normalizedKey] = {
           rate: doc.rateValue ?? Number(doc.rate) ?? 0,
           docId,
           remarks: doc.remarks || ""
@@ -125,14 +133,15 @@ const Neccrate = () => {
       } else if (doc.outlets && typeof doc.outlets === "object") {
         // outlets-map format: { date, outlets: { A: rate, B: rate } }
         Object.entries(doc.outlets).forEach(([outletKey, rate]) => {
-          pivotMap[date][outletKey] = { rate: Number(rate) ?? 0, docId, remarks: doc.remarks || "" };
+          const normalizedKey = outletKeyMap.get(outletKey) || outletKey;
+          pivotMap[date][normalizedKey] = { rate: Number(rate) ?? 0, docId, remarks: doc.remarks || "" };
         });
       }
     });
 
     const sortedDates = Object.keys(pivotMap).sort((a, b) => new Date(a) - new Date(b));
     return { pivotMap, sortedDates };
-  }, [filteredRawRows]);
+  }, [filteredRawRows, outletKeyMap]);
 
   /* ---- date-range filter ---- */
   const filteredDates = useMemo(() => {

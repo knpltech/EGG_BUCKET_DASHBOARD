@@ -112,25 +112,22 @@ const Weeklytrend = ({ rows = [], outlets: allowedOutlets = [] }) => {
       days.push(d);
     }
 
-    // Collect all outlet names from rows
-    const outletSet = new Set();
-    rows.forEach(r => {
-      if (r.outlets) {
-        Object.keys(r.outlets).forEach(o => outletSet.add(o));
-      }
-    });
-
-    // If a list of allowed outlets was passed, intersect with it
+    // Use allowedOutlets as the source for outlet keys (so ALL outlets appear in chart)
+    // This ensures newly created outlets and those without sales also show up
+    let outlets = [];
     if (Array.isArray(allowedOutlets) && allowedOutlets.length > 0) {
-      const allowedKeys = new Set(
-        allowedOutlets.map(o => (typeof o === 'string' ? o : o.id || o.area || o.name))
-      );
-      outletSet.forEach(key => {
-        if (!allowedKeys.has(key)) outletSet.delete(key);
+      outlets = allowedOutlets.map(o => (typeof o === 'string' ? o : o.id || o.area || o.name));
+    } else {
+      // Fallback: collect outlet names from rows if no allowedOutlets provided
+      const outletSet = new Set();
+      rows.forEach(r => {
+        if (r.outlets) {
+          Object.keys(r.outlets).forEach(o => outletSet.add(o));
+        }
       });
+      outlets = Array.from(outletSet);
     }
 
-    const outlets = Array.from(outletSet);
     setOutletKeys(outlets);
 
     // Build chart rows day-by-day
@@ -163,7 +160,7 @@ const Weeklytrend = ({ rows = [], outlets: allowedOutlets = [] }) => {
     });
 
     setChartData(finalData);
-  }, [rows]);
+  }, [rows, allowedOutlets]);
 
   const COLORS = [
     "#f97316",

@@ -22,7 +22,8 @@ const Dailysales = () => {
 
   const formOutlets = useMemo(() => {
     let list = outlets;
-    if (!isViewer && zone && Array.isArray(list)) {
+    // Admin and Viewer see all outlets; others filter by zone
+    if (!isViewer && !isAdmin && zone && Array.isArray(list)) {
       list = list.filter(o => typeof o === 'object' && zonesMatch(o.zoneId, zone));
     }
     if (isDataAgent && Array.isArray(list) && list.length > 0) {
@@ -33,7 +34,7 @@ const Dailysales = () => {
       });
     }
     return list;
-  }, [outlets, isDataAgent, zone, isViewer]);
+}, [outlets, isAdmin, isDataAgent, zone, isViewer]);
 
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
