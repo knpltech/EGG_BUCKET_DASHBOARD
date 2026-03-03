@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { fetchReportsData, fetchOutlets, exportReports } from '../context/reportsApi';
+import { getRoleFlags, zonesMatch } from '../utils/role';
 
 // DEBUG: Fetch all outlet names from backend data for troubleshooting
 async function fetchAllOutletNames() {
@@ -61,7 +62,10 @@ import {
 } from 'recharts';
 
 const Reports = () => {
-  const [outlets, setOutlets] = useState([]);
+  // Role-based access: admins see all outlets, supervisors see only their zone's outlets
+  const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
+
+  const [outlets, setOutlets] = useState([]);       // raw full outlet objects from backend
   const [selectedOutlet, setSelectedOutlet] = useState(null);
   const [reportData, setReportData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -92,35 +96,45 @@ const Reports = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Load outlets once on mount
+  // Load outlets once on mount — preserve full objects (including zoneId) for role filtering
   useEffect(() => {
     const loadOutlets = async () => {
       setOutletsLoading(true);
       try {
         const outletsData = await fetchOutlets();
+        // Keep raw objects so zoneId is available for supervisor filtering
         const normalizedOutlets = outletsData.map(o => ({
-          id: o.name || o.id,
-          name: o.name || o.id
+          ...o,
+          id:   o.name || o.id,   // use area name as id (matches how report API is called)
+          name: o.name || o.id,
+          zoneId: o.zoneId || o.zone || null,
         }));
         setOutlets(normalizedOutlets);
-        if (normalizedOutlets.length > 0) {
-          setSelectedOutlet(normalizedOutlets[0].id);
-        }
       } catch (err) {
         setError('Failed to load outlets');
-        const demoOutlets = [
-          { id: 'AECS Layout', name: 'AECS Layout' },
-          { id: 'Bandepalya', name: 'Bandepalya' }
-        ];
-        setOutlets(demoOutlets);
-        setSelectedOutlet(demoOutlets[0].id);
+        setOutlets([]);
       } finally {
         setOutletsLoading(false);
       }
     };
     loadOutlets();
-    fetchAllOutletNames().then(setDebugOutletNames);
   }, []);
+
+  // Filter outlets by role: admins/viewers/dataAgents see all; supervisors see their zone only
+  const visibleOutlets = useMemo(() => {
+    if (isSupervisor && zone) {
+      return outlets.filter(o => zonesMatch(o.zoneId, zone));
+    }
+    return outlets; // admin, viewer, dataAgent — all outlets
+  }, [outlets, isSupervisor, zone]);
+
+  // Keep selectedOutlet in sync when visibleOutlets changes
+  useEffect(() => {
+    if (visibleOutlets.length === 0) { setSelectedOutlet(null); return; }
+    // If current selection is not in the visible list, reset to first
+    const stillVisible = visibleOutlets.some(o => o.id === selectedOutlet);
+    if (!stillVisible) setSelectedOutlet(visibleOutlets[0].id);
+  }, [visibleOutlets]);
 
   // Fetch report data when outlet or date range changes
   useEffect(() => {
@@ -346,6 +360,23 @@ const Reports = () => {
     );
   }
 
+  // Supervisor with no zone assigned or no outlets in their zone
+  if (!outletsLoading && visibleOutlets.length === 0) {
+    return (
+      <div className="min-h-screen bg-eggBg flex items-center justify-center">
+        <div className="text-center p-8 bg-white rounded-2xl shadow-sm border border-gray-100 max-w-sm">
+          <span className="text-4xl mb-4 block">🔒</span>
+          <h2 className="text-lg font-semibold text-gray-800 mb-2">No Outlets Available</h2>
+          <p className="text-sm text-gray-500">
+            {isSupervisor
+              ? 'No outlets are assigned to your zone. Please contact an administrator.'
+              : 'No active outlets found.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-eggBg px-3 py-6 md:px-6 flex flex-col">
       <style>{`
@@ -377,7 +408,7 @@ const Reports = () => {
                 onChange={(e) => setSelectedOutlet(e.target.value)}
                 disabled={loading}
               >
-                {outlets.filter(o => o.status !== 'Inactive').map(outlet => (
+                {visibleOutlets.filter(o => o.status !== 'Inactive').map(outlet => (
                   <option key={outlet.id} value={outlet.id}>{outlet.name}</option>
                 ))}
               </select>
