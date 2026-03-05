@@ -35,17 +35,30 @@ function getYAxisConfig(data, outletKeys) {
 }
 
 
-// Parse both yyyy-mm-dd and dd-mm-yyyy
+// Parse various date formats: yyyy-mm-dd, dd-mm-yyyy, ISO dates, etc.
 function parseAnyDate(dateStr) {
   if (!dateStr) return null;
 
+  // Handle yyyy-mm-dd format
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
     return new Date(dateStr);
   }
 
+  // Handle dd-mm-yyyy format
   if (/^\d{2}-\d{2}-\d{4}$/.test(dateStr)) {
     const [dd, mm, yyyy] = dateStr.split("-");
     return new Date(`${yyyy}-${mm}-${dd}`);
+  }
+
+  // Handle ISO date strings (e.g., 2026-03-05T00:00:00.000Z)
+  if (/^\d{4}-\d{2}-\d{2}T/.test(dateStr)) {
+    return new Date(dateStr);
+  }
+
+  // Fallback: try parsing with Date constructor
+  const parsed = new Date(dateStr);
+  if (!isNaN(parsed.getTime())) {
+    return parsed;
   }
 
   return null;
@@ -81,17 +94,22 @@ const Weeklytrend = ({ rows = [], outlets: allowedOutlets = [] }) => {
   const [chartData, setChartData] = useState([]);
   const [outletKeys, setOutletKeys] = useState([]);
 
-  // map id -> display name
-  const nameMap = useMemo(() => {
-    const map = {};
+  // map id -> display name AND create reverse mapping (area -> id)
+  const { nameMap, areaToIdMap } = useMemo(() => {
+    const nameMap = {};
+    const areaToIdMap = {};
     if (Array.isArray(allowedOutlets)) {
       allowedOutlets.forEach(o => {
         const key = typeof o === 'string' ? o : o.id || o.area || o.name;
         const label = typeof o === 'string' ? o : o.area || o.name || key;
-        map[key] = label;
+        nameMap[key] = label;
+        // Map area name back to the key we use (for data lookup)
+        if (typeof o === 'object' && o.area) {
+          areaToIdMap[o.area] = key;
+        }
       });
     }
-    return map;
+    return { nameMap, areaToIdMap };
   }, [allowedOutlets]);
 
   useEffect(() => {
@@ -151,8 +169,18 @@ const Weeklytrend = ({ rows = [], outlets: allowedOutlets = [] }) => {
       });
 
       if (match?.outlets) {
-        Object.entries(match.outlets).forEach(([o, v]) => {
-          rowData[o] = Number(v) || 0;
+        // Map outlet values properly - data may be keyed by area name or by id
+        outlets.forEach(outletKey => {
+          // Direct match by key (could be id or area)
+          if (match.outlets[outletKey] !== undefined) {
+            rowData[outletKey] = Number(match.outlets[outletKey]) || 0;
+          } else {
+            // Fallback: if key is an id, look up by area name
+            const areaName = nameMap[outletKey]; // nameMap maps id -> area name
+            if (areaName && match.outlets[areaName] !== undefined) {
+              rowData[outletKey] = Number(match.outlets[areaName]) || 0;
+            }
+          }
         });
       }
 
@@ -160,7 +188,7 @@ const Weeklytrend = ({ rows = [], outlets: allowedOutlets = [] }) => {
     });
 
     setChartData(finalData);
-  }, [rows, allowedOutlets]);
+  }, [rows, allowedOutlets, nameMap]);
 
   const COLORS = [
     "#f97316",

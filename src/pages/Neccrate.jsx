@@ -37,19 +37,39 @@ const Neccrate = () => {
     const token = localStorage.getItem('token');
     const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
     const url = (isSupervisor && zone) ? `${API_URL}/outlets/zone/${zone}` : `${API_URL}/outlets/all`;
+    console.log('Neccrate - fetching outlets from:', url, '| isSupervisor:', isSupervisor, '| zone:', zone);
     fetch(url, { headers })
-      .then(r => r.json())
-      .then(d => setOutlets(Array.isArray(d) ? d : []))
-      .catch(() => setOutlets([]));
+      .then(r => {
+        if (!r.ok) {
+          console.warn('Neccrate - outlets fetch failed:', r.status, r.statusText);
+          // Fallback to all outlets if zone-specific fetch fails
+          if (isSupervisor && zone) {
+            return fetch(`${API_URL}/outlets/all`, { headers }).then(r2 => r2.json());
+          }
+        }
+        return r.json();
+      })
+      .then(d => {
+        console.log('Neccrate - outlets loaded:', Array.isArray(d) ? d.length : 0);
+        setOutlets(Array.isArray(d) ? d : []);
+      })
+      .catch(err => {
+        console.error('Neccrate - outlets fetch error:', err);
+        setOutlets([]);
+      });
   }, [isSupervisor, zone]);
 
   /* ---- fetch NECC rates ---- */
   const fetchRates = async () => {
     try {
-      const res  = await fetch(`${API_URL}/neccrate/all`);
+      const token = localStorage.getItem('token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+      const res  = await fetch(`${API_URL}/neccrate/all`, { headers });
       const data = await res.json();
+      console.log('Neccrate - rates loaded:', Array.isArray(data) ? data.length : 0);
       setRawRows(Array.isArray(data) ? data.map(d => ({ id: d.id || d._id, ...d })) : []);
-    } catch {
+    } catch (err) {
+      console.error('Neccrate - rates fetch error:', err);
       setRawRows([]);
     }
   };
@@ -59,12 +79,31 @@ const Neccrate = () => {
   /* ---- for supervisors: filter raw rows to only include outlets in their zone ---- */
   const filteredRawRows = useMemo(() => {
     if (!isSupervisor) return rawRows;
+    // If outlets not loaded yet or empty, show all rates to avoid blank display
+    if (!outlets || outlets.length === 0) return rawRows;
     try {
-      const zoneKeys = new Set(outlets.map(o => o.id || o.area || o.name));
+      // Build a set of ALL possible outlet identifiers (id, name, area) for matching
+      const zoneKeys = new Set();
+      outlets.forEach(o => {
+        if (o.id) zoneKeys.add(o.id);
+        if (o.name) zoneKeys.add(o.name);
+        if (o.area) zoneKeys.add(o.area);
+        // Also add lowercase versions for case-insensitive matching
+        if (o.name) zoneKeys.add(o.name.toUpperCase());
+        if (o.area) zoneKeys.add(o.area.toUpperCase());
+      });
+      console.log('Neccrate - zoneKeys for filtering:', [...zoneKeys]);
       return rawRows.filter(doc => {
-        if (doc.outlet && zoneKeys.has(doc.outlet)) return true;
+        // Check outlet field with case-insensitive matching
+        if (doc.outlet) {
+          const outletUpper = doc.outlet.toUpperCase?.() || doc.outlet;
+          if (zoneKeys.has(doc.outlet) || zoneKeys.has(outletUpper)) return true;
+        }
         if (doc.outlets && typeof doc.outlets === 'object') {
-          return Object.keys(doc.outlets).some(k => zoneKeys.has(k));
+          return Object.keys(doc.outlets).some(k => {
+            const keyUpper = k.toUpperCase?.() || k;
+            return zoneKeys.has(k) || zoneKeys.has(keyUpper);
+          });
         }
         return false;
       });
@@ -75,20 +114,27 @@ const Neccrate = () => {
      Outlets are stored by id/area/name. We try to match to the outlets list
      and return the human-readable name. Fallback: use the key as-is (already a name). */
   const getOutletName = (key) => {
+    if (!key) return key;
+    const keyUpper = key.toUpperCase?.() || key;
+    const keyLower = key.toLowerCase?.() || key;
     const found = outlets.find(o =>
-      o.id === key || o.area === key || o.name === key
+      o.id === key || o.id === keyUpper || o.id === keyLower ||
+      o.area === key || o.area?.toUpperCase() === keyUpper ||
+      o.name === key || o.name?.toUpperCase() === keyUpper
     );
     return found ? (found.name || found.area || key) : key;
   };
 
   /* ---- derive ordered outlet columns from outlet list ONLY ----
-     Use the outlets list as the source of truth. Only show outlets that currently exist. */
+     Use the outlets list as the source of truth. Only show outlets that currently exist.
+     Use NAME as canonical key since NECC rates store outlet by name */
   const outletColumns = useMemo(() => {
     const ordered = [];
     const seen = new Set();
     
     outlets.forEach(o => {
-      const canonicalKey = o.id || o.area || o.name;
+      // Use name as canonical key (uppercased for consistency) since NECC rates store by name
+      const canonicalKey = (o.name || o.area || o.id).toUpperCase();
       if (!seen.has(canonicalKey)) {
         seen.add(canonicalKey);
         ordered.push(canonicalKey);
@@ -102,10 +148,23 @@ const Neccrate = () => {
   const outletKeyMap = useMemo(() => {
     const map = new Map();
     outlets.forEach(o => {
-      const canonicalKey = o.id || o.area || o.name;
-      if (o.id) map.set(o.id, canonicalKey);
-      if (o.area) map.set(o.area, canonicalKey);
-      if (o.name) map.set(o.name, canonicalKey);
+      // Use name as canonical key (uppercased for consistency)
+      const canonicalKey = (o.name || o.area || o.id).toUpperCase();
+      // Map all variations (case-insensitive) to the canonical key
+      if (o.id) {
+        map.set(o.id, canonicalKey);
+        map.set(o.id.toUpperCase(), canonicalKey);
+      }
+      if (o.area) {
+        map.set(o.area, canonicalKey);
+        map.set(o.area.toUpperCase(), canonicalKey);
+        map.set(o.area.toLowerCase(), canonicalKey);
+      }
+      if (o.name) {
+        map.set(o.name, canonicalKey);
+        map.set(o.name.toUpperCase(), canonicalKey);
+        map.set(o.name.toLowerCase(), canonicalKey);
+      }
     });
     return map;
   }, [outlets]);
@@ -123,8 +182,13 @@ const Neccrate = () => {
 
       if (doc.outlet) {
         // per-outlet format: { date, outlet, rate, rateValue, remarks }
-        // Normalize the outlet key
-        const normalizedKey = outletKeyMap.get(doc.outlet) || doc.outlet;
+        // Normalize the outlet key - try multiple case variations
+        let normalizedKey = outletKeyMap.get(doc.outlet);
+        if (!normalizedKey && doc.outlet.toUpperCase) {
+          normalizedKey = outletKeyMap.get(doc.outlet.toUpperCase()) || 
+                          outletKeyMap.get(doc.outlet.toLowerCase());
+        }
+        normalizedKey = normalizedKey || doc.outlet.toUpperCase?.() || doc.outlet;
         pivotMap[date][normalizedKey] = {
           rate: doc.rateValue ?? Number(doc.rate) ?? 0,
           docId,
@@ -133,7 +197,12 @@ const Neccrate = () => {
       } else if (doc.outlets && typeof doc.outlets === "object") {
         // outlets-map format: { date, outlets: { A: rate, B: rate } }
         Object.entries(doc.outlets).forEach(([outletKey, rate]) => {
-          const normalizedKey = outletKeyMap.get(outletKey) || outletKey;
+          let normalizedKey = outletKeyMap.get(outletKey);
+          if (!normalizedKey && outletKey.toUpperCase) {
+            normalizedKey = outletKeyMap.get(outletKey.toUpperCase()) ||
+                            outletKeyMap.get(outletKey.toLowerCase());
+          }
+          normalizedKey = normalizedKey || outletKey.toUpperCase?.() || outletKey;
           pivotMap[date][normalizedKey] = { rate: Number(rate) ?? 0, docId, remarks: doc.remarks || "" };
         });
       }

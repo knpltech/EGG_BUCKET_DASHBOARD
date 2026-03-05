@@ -2,11 +2,12 @@
 export const updateNeccRate = async (req, res) => {
   try {
     const { id } = req.params;
-    const { date, outletId, rate, remarks } = req.body;
-    if (!date || !outletId || !rate) {
-      return res.status(400).json({ message: "Missing required field: date, outletId, or rate" });
+    const { date, outletId, outlet, rate, remarks } = req.body;
+    const outletValue = outletId || outlet; // Accept either field for compatibility
+    if (!date || !outletValue || !rate) {
+      return res.status(400).json({ message: "Missing required field: date, outletId/outlet, or rate" });
     }
-    const updateData = { date, outletId, rate, remarks: remarks || "—" };
+    const updateData = { date, outletId: outletValue, outlet: outletValue, rate, remarks: remarks || "—" };
     const docRef = db.collection("neccRates").doc(id);
     await docRef.update(updateData);
     const updatedDoc = await docRef.get();
@@ -20,15 +21,16 @@ import { db } from "../config/firebase.js";
 // Add a new NECC rate entry to Firestore
 export const addNeccRate = async (req, res) => {
   try {
-    const { date, outletId, rate, remarks } = req.body;
-    if (!date || !outletId || !rate) {
-      return res.status(400).json({ message: "Missing required field: date, outletId, or rate" });
+    const { date, outletId, outlet, rate, remarks } = req.body;
+    const outletValue = outletId || outlet; // Accept either field for compatibility
+    if (!date || !outletValue || !rate) {
+      return res.status(400).json({ message: "Missing required field: date, outletId/outlet, or rate" });
     }
     const numericRate = Number(rate);
     const docRef = await db.collection("neccRates").add({
       date,
-      outletId,
-      outlet: outletId, // duplicate for frontend compatibility
+      outletId: outletValue,
+      outlet: outletValue, // duplicate for frontend compatibility
       rate: `₹${numericRate.toFixed(2)} per egg`,
       rateValue: numericRate,
       remarks: remarks || "—",

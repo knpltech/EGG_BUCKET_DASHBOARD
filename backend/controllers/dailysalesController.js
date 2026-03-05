@@ -4,9 +4,11 @@ export const updateDailySales = async (req, res) => {
     const { id } = req.params;
     const updateData = req.body;
     const docRef = db.collection("dailySales").doc(id);
-    await docRef.update(updateData);
-    const updatedDoc = await docRef.get();
-    res.status(200).json({ id, ...updatedDoc.data() });
+    
+    // Use set with merge instead of update + get for faster operation
+    await docRef.set({ ...updateData, updatedAt: new Date() }, { merge: true });
+    
+    res.status(200).json({ id, ...updateData, message: "Updated successfully" });
   } catch (error) {
     res.status(500).json({ message: "Error updating daily sales", error: error.message });
   }
@@ -21,17 +23,16 @@ export const addDailySales = async (req, res) => {
     if (!date || !outlets || typeof outlets !== 'object') {
       return res.status(400).json({ message: "Missing or invalid required fields" });
     }
-    // Duplicate outletId as outlet key for frontend compatibility
-    const outletsWithDup = {};
-    Object.entries(outlets).forEach(([outletId, value]) => {
-      outletsWithDup[outletId] = value;
-      outletsWithDup[outletId] = value; // duplicate for clarity
-    });
+    
+    // Prepare outlets data
+    const outletsWithDup = { ...outlets };
+    
     // Check if an entry already exists for this date
     const existingSnapshot = await db.collection("dailySales")
       .where("date", "==", date)
       .limit(1)
       .get();
+      
     if (!existingSnapshot.empty) {
       // Merge with existing entry - combine outlets objects
       const existingDoc = existingSnapshot.docs[0];
@@ -39,11 +40,13 @@ export const addDailySales = async (req, res) => {
       const mergedOutlets = { ...existingData.outlets, ...outletsWithDup };
       // Recalculate total from merged outlets
       const mergedTotal = Object.values(mergedOutlets).reduce((sum, val) => sum + (Number(val) || 0), 0);
+      
       await existingDoc.ref.update({
         outlets: mergedOutlets,
         total: mergedTotal,
         updatedAt: new Date(),
       });
+      
       res.status(200).json({ id: existingDoc.id, message: "Daily sales merged with existing entry", merged: true });
     } else {
       // Calculate total from outlets

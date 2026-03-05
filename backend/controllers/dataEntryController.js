@@ -1,15 +1,27 @@
 import { db } from "../config/firebase.js";
 
-// Helper function to get outlet area/name from outlet ID
+// Simple outlet cache to avoid repeated lookups
+const outletCache = new Map();
+
+// Helper function to get outlet area/name from outlet ID (with caching)
 const getOutletInfo = async (outletId) => {
+  // Check cache first
+  if (outletCache.has(outletId)) {
+    return outletCache.get(outletId);
+  }
+  
   try {
     const doc = await db.collection("outlets").doc(outletId).get();
     if (doc.exists) {
       const data = doc.data();
-      return { area: data.area || data.name, name: data.name };
+      const info = { area: data.area || data.name, name: data.name };
+      outletCache.set(outletId, info); // Cache for future use
+      return info;
     }
     // If not found by ID, it might be the name itself
-    return { area: outletId, name: outletId };
+    const info = { area: outletId, name: outletId };
+    outletCache.set(outletId, info);
+    return info;
   } catch (err) {
     return { area: outletId, name: outletId };
   }
@@ -45,7 +57,7 @@ const mergeToCollection = async (collectionName, date, outletKey, value, fieldNa
   }
 };
 
-// Add a new data entry - stores to multiple collections
+// Add a new data entry - stores to multiple collections (OPTIMIZED with parallel operations)
 export const addDataEntry = async (req, res) => {
   try {
     const { 
@@ -65,77 +77,79 @@ export const addDataEntry = async (req, res) => {
       return res.status(400).json({ message: "Outlet and date are required" });
     }
     
-    // Get outlet area/name for storing in other collections
-    const outletInfo = await getOutletInfo(outletId);
+    // Run initial queries in PARALLEL
+    const [outletInfo, existingEntrySnap] = await Promise.all([
+      getOutletInfo(outletId),
+      db.collection("dataEntries")
+        .where("outletId", "==", outletId)
+        .where("date", "==", date)
+        .limit(1)
+        .get()
+    ]);
+    
     const outletKey = outletInfo.area;
     
-    // Check if entry already exists for this outlet + date
-    const existingEntry = await db.collection("dataEntries")
-      .where("outletId", "==", outletId)
-      .where("date", "==", date)
-      .limit(1)
-      .get();
-    
-    if (!existingEntry.empty) {
+    if (!existingEntrySnap.empty) {
       return res.status(400).json({ message: "Entry already exists for this outlet and date" });
     }
     
-    // Store to respective collections
-    const results = {};
+    // Prepare all merge operations to run in PARALLEL
+    const mergePromises = [];
+    const resultKeys = [];
     
     // 1. Daily Sales (quantity)
     if (salesQty && Number(salesQty) > 0) {
-      results.dailySales = await mergeToCollection("dailySales", date, outletKey, Number(salesQty));
+      mergePromises.push(mergeToCollection("dailySales", date, outletKey, Number(salesQty)));
+      resultKeys.push("dailySales");
     }
     
     // 2. Daily Damages
     if (dailyDamage && Number(dailyDamage) > 0) {
-      results.dailyDamages = await mergeToCollection("dailyDamages", date, outletKey, Number(dailyDamage), "damages");
+      mergePromises.push(mergeToCollection("dailyDamages", date, outletKey, Number(dailyDamage), "damages"));
+      resultKeys.push("dailyDamages");
     }
     
     // 3. Digital Payments
     if (digitalPayment && Number(digitalPayment) > 0) {
-      results.digitalPayments = await mergeToCollection("digitalPayments", date, outletKey, Number(digitalPayment));
+      mergePromises.push(mergeToCollection("digitalPayments", date, outletKey, Number(digitalPayment)));
+      resultKeys.push("digitalPayments");
     }
     
     // 4. Cash Payments
     if (cashPayment && Number(cashPayment) > 0) {
-      console.log("Saving cash payment:", { date, outletKey, cashPayment: Number(cashPayment) });
-      results.cashPayments = await mergeToCollection("cashPayments", date, outletKey, Number(cashPayment), "outlets");
-      console.log("Cash payment result:", results.cashPayments);
+      mergePromises.push(mergeToCollection("cashPayments", date, outletKey, Number(cashPayment), "outlets"));
+      resultKeys.push("cashPayments");
     }
     
-    // 5. NECC Rate - Store to neccRates collection
-    if (neccRate && Number(neccRate) > 0) {
-      // Require outletId for NECC rate
-      if (!outletId) {
-        results.neccRate = { error: 'Missing outletId for NECC rate' };
-      } else {
-        // Check if NECC rate already exists for this date and outlet
-        const existingRate = await db.collection("neccRates")
+    // 5. NECC Rate - handled separately due to different logic
+    let neccRateResult = null;
+    if (neccRate && Number(neccRate) > 0 && outletId) {
+      mergePromises.push(
+        db.collection("neccRates")
           .where("date", "==", date)
           .where("outletId", "==", outletId)
           .limit(1)
-          .get();
-        if (existingRate.empty) {
-          // Create new NECC rate entry for this date and outlet
-          const rateDoc = await db.collection("neccRates").add({
-            date,
-            outletId,
-            rate: `₹${Number(neccRate).toFixed(2)} per egg`,
-            rateValue: Number(neccRate),
-            createdAt: new Date(),
-          });
-          results.neccRate = { id: rateDoc.id, created: true };
-        } else {
-          // NECC rate already exists for this date and outlet
-          results.neccRate = { id: existingRate.docs[0].id, exists: true };
-        }
-      }
+          .get()
+          .then(async (existingRate) => {
+            if (existingRate.empty) {
+              const rateDoc = await db.collection("neccRates").add({
+                date,
+                outletId,
+                rate: `₹${Number(neccRate).toFixed(2)} per egg`,
+                rateValue: Number(neccRate),
+                createdAt: new Date(),
+              });
+              return { id: rateDoc.id, created: true };
+            } else {
+              return { id: existingRate.docs[0].id, exists: true };
+            }
+          })
+      );
+      resultKeys.push("neccRate");
     }
     
-    // 6. Store combined entry in dataEntries collection (for lock feature)
-    const entryRef = await db.collection("dataEntries").add({
+    // 6. Create main dataEntry document (add to parallel batch)
+    const entryData = {
       outletId,
       outletName: outletInfo.name,
       outletArea: outletInfo.area,
@@ -149,7 +163,20 @@ export const addDataEntry = async (req, res) => {
       totalReceivedAmount: Number(totalReceivedAmount) || 0,
       differenceAmount: Number(differenceAmount) || 0,
       createdAt: new Date(),
+    };
+    mergePromises.push(db.collection("dataEntries").add(entryData));
+    resultKeys.push("dataEntry");
+    
+    // Execute ALL operations in PARALLEL
+    const parallelResults = await Promise.all(mergePromises);
+    
+    // Build results object
+    const results = {};
+    resultKeys.forEach((key, idx) => {
+      results[key] = parallelResults[idx];
     });
+    
+    const entryRef = results.dataEntry;
     
     res.status(201).json({ 
       id: entryRef.id, 
