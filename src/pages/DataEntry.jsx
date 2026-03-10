@@ -175,6 +175,8 @@ export default function DataEntry() {
   const [allDigitalData, setAllDigitalData] = useState([]);
   const [allDamagesData, setAllDamagesData] = useState([]);
   const [allNeccData,    setAllNeccData]    = useState([]);
+  const [allIncentiveData, setAllIncentiveData] = useState([]);
+  const [incentive,setIncentive] = useState("");
 
   // Per-field values & locks
   const [neccrate,       setNeccrate]       = useState("");
@@ -187,7 +189,7 @@ export default function DataEntry() {
   const [cashLocked,     setCashLocked]     = useState(false);
   const [digital,        setDigital]        = useState("");
   const [digitalLocked,  setDigitalLocked]  = useState(false);
-
+  const [incentiveLocked,setIncentiveLocked] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   /* ---- click outside calendar ---- */
@@ -214,25 +216,32 @@ export default function DataEntry() {
   /* ================= LOAD ALL COLLECTIONS ================= */
   const loadAllData = useCallback(async () => {
     try {
-      const [sRes, cRes, dRes, dmRes, nRes] = await Promise.all([
+
+      const [sRes, cRes, dRes, dmRes, nRes, iRes] = await Promise.all([
         fetch(`${API}/dailysales/all`),
         fetch(`${API}/cash-payments/all`),
         fetch(`${API}/digital-payments/all`),
         fetch(`${API}/daily-damage/all`),
         fetch(`${API}/neccrate/all`),
+        fetch(`${API}/incentive/all`)
       ]);
-      const [sData, cData, dData, dmData, nData] = await Promise.all([
-        sRes.ok  ? sRes.json()  : [],
-        cRes.ok  ? cRes.json()  : [],
-        dRes.ok  ? dRes.json()  : [],
+
+      const [sData, cData, dData, dmData, nData, iData] = await Promise.all([
+        sRes.ok ? sRes.json() : [],
+        cRes.ok ? cRes.json() : [],
+        dRes.ok ? dRes.json() : [],
         dmRes.ok ? dmRes.json() : [],
-        nRes.ok  ? nRes.json()  : [],
+        nRes.ok ? nRes.json() : [],
+        iRes.ok ? iRes.json() : []
       ]);
-      setAllSalesData  (Array.isArray(sData)  ? sData  : []);
-      setAllCashData   (Array.isArray(cData)  ? cData  : []);
-      setAllDigitalData(Array.isArray(dData)  ? dData  : []);
+
+      setAllSalesData(Array.isArray(sData) ? sData : []);
+      setAllCashData(Array.isArray(cData) ? cData : []);
+      setAllDigitalData(Array.isArray(dData) ? dData : []);
       setAllDamagesData(Array.isArray(dmData) ? dmData : []);
-      setAllNeccData   (Array.isArray(nData)  ? nData  : []);
+      setAllNeccData(Array.isArray(nData) ? nData : []);
+      setAllIncentiveData(Array.isArray(iData) ? iData : []);
+
     } catch (err) {
       console.error("Error loading all data:", err);
     }
@@ -263,15 +272,19 @@ export default function DataEntry() {
       normalizeDate(doc.date || doc.createdAt) === date &&
       doc.damages && doc.damages[outlet] !== undefined
     );
-    const hasInNecc    = (date) => allNeccData.some(doc => {
+    const hasInNecc = (date) => allNeccData.some(doc => {
       const docDate = normalizeDate(doc.date || doc.createdAt);
-      if (docDate !== date) return false;
+
       return (
-        (doc.outlet && doc.outlet === outlet) ||
-        (doc.outlets && doc.outlets[outlet] !== undefined) ||
-        doc.rate !== undefined
+        docDate === date &&
+        doc.outletId === outlet
       );
     });
+    
+    const hasInIncentive = (date) => allIncentiveData.some(doc =>
+      normalizeDate(doc.date || doc.createdAt) === date &&
+      doc.outlets && doc.outlets[outlet] !== undefined
+    );
 
     // Collect all dates that appear for this outlet across all 5 collections
     const allDates = new Set();
@@ -298,12 +311,12 @@ export default function DataEntry() {
 
     const completed = new Set();
     allDates.forEach(date => {
-      const checks = [hasInSales(date), hasInCash(date), hasInDigital(date), hasInDamages(date), hasInNecc(date)];
+      const checks = [hasInSales(date), hasInCash(date), hasInDigital(date), hasInDamages(date), hasInNecc(date),hasInIncentive(date)];
       if (checks.every(Boolean)) completed.add(date);
     });
 
     return { completedDates: completed };
-  }, [outlet, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData]);
+  }, [outlet, date, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData]);
 
   /* ================= LOCK CHECK WHEN OUTLET + DATE CHANGE ================= */
   useEffect(() => {
@@ -352,25 +365,36 @@ export default function DataEntry() {
     else { setDamages(""); setDamagesLocked(false); }
 
     // NECC Rate — per outlet
-    const foundNecc = allNeccData.find(doc => {
-      const docDate = normalizeDate(doc.date || doc.createdAt);
-      return docDate === date && (
-        (doc.outlet && doc.outlet === outlet) ||
-        (doc.outlets && doc.outlets[outlet] !== undefined)
-      );
-    });
+    // NECC Rate — per outlet
+    const foundNecc = allNeccData.find(doc =>
+      normalizeDate(doc.date || doc.createdAt) === date &&
+      doc.outletId === outlet
+    );
+
     if (foundNecc) {
-      const val = (foundNecc.outlets && foundNecc.outlets[outlet] !== undefined)
-        ? foundNecc.outlets[outlet]
-        : foundNecc.rate || "";
-      setNeccrate(val);
+      setNeccrate(foundNecc.rateValue ?? "");
       setNeccrateLocked(true);
     } else {
       setNeccrate("");
       setNeccrateLocked(false);
     }
 
-  }, [outlet, date, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData]);
+    // Incentive — stored under doc.outlets[area]
+    const foundIncentive = allIncentiveData.find(doc =>
+      normalizeDate(doc.date || doc.createdAt) === date &&
+      doc.outlets && doc.outlets[outlet] !== undefined
+    );
+
+    if (foundIncentive) {
+      setIncentive(foundIncentive.outlets[outlet]);
+      setIncentiveLocked(true);
+    } else {
+      setIncentive("");
+      setIncentiveLocked(false);
+    }
+    
+
+  }, [outlet, date, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData]);
 
   /* ================= RESET ================= */
   const handleReset = () => {
@@ -379,6 +403,7 @@ export default function DataEntry() {
     if (!damagesLocked)  setDamages("");
     if (!cashLocked)     setCash("");
     if (!digitalLocked)  setDigital("");
+    if (!incentiveLocked) setIncentive("");
   };
 
   /* ================= SUBMIT ================= */
@@ -389,7 +414,13 @@ export default function DataEntry() {
   const handleSubmit = async () => {
     if (!outlet || !date) { alert("Please select an outlet and date first."); return; }
 
-    const allAlreadyLocked = neccrateLocked && salesLocked && damagesLocked && cashLocked && digitalLocked;
+    const allAlreadyLocked =
+      neccrateLocked &&
+      salesLocked &&
+      damagesLocked &&
+      cashLocked &&
+      digitalLocked &&
+      incentiveLocked;
     if (allAlreadyLocked) {
       alert("All data for this outlet and date is already submitted. No changes to save.");
       return;
@@ -401,11 +432,13 @@ export default function DataEntry() {
     if (!damagesLocked  && damages === "")  missingFields.push("Daily Damages");
     if (!cashLocked     && cash === "")     missingFields.push("Cash Payment");
     if (!digitalLocked  && digital === "")  missingFields.push("Digital Payment");
+    if (!incentiveLocked && incentive === "") missingFields.push("Daily Incentive");
 
     if (missingFields.length > 0) {
       alert(`Please fill in all fields before submitting:\n• ${missingFields.join("\n• ")}`);
       return;
     }
+
 
     setIsSubmitting(true);
     const tasks = [];
@@ -438,6 +471,24 @@ export default function DataEntry() {
         }));
       }
 
+      if (!incentiveLocked && incentive !== "") {
+
+        tasks.push(
+          fetch(`${API}/incentive/add`,{
+            method:"POST",
+            headers:{
+              "Content-Type":"application/json"
+            },
+            body:JSON.stringify({
+              date,
+              outlet,
+              value:Number(incentive)
+            })
+          })
+        );
+
+      }
+
       // Cash Payments — outlets[area]
       if (!cashLocked && cash !== "") {
         tasks.push(fetch(`${API}/cash-payments/add`, {
@@ -456,6 +507,8 @@ export default function DataEntry() {
         }));
       }
 
+      if (!incentiveLocked && incentive === "") missingFields.push("Daily Incentive");
+
       const results = await Promise.all(tasks);
       for (const r of results) {
         if (!r.ok) { const txt = await r.text(); throw new Error(txt || "Failed to save one of the entries"); }
@@ -469,6 +522,8 @@ export default function DataEntry() {
       if (!damagesLocked  && damages !== "")  setDamagesLocked(true);
       if (!cashLocked     && cash !== "")     setCashLocked(true);
       if (!digitalLocked  && digital !== "")  setDigitalLocked(true);
+      if (!incentiveLocked && incentive !== "")
+  setIncentiveLocked(true);
 
       // Refresh all data so calendar dots and lock states update immediately
       await loadAllData();
@@ -501,13 +556,20 @@ export default function DataEntry() {
     (!cashLocked     && cash !== "")     ||
     (!digitalLocked  && digital !== "");
 
-  const allAlreadyLocked = neccrateLocked && salesLocked && damagesLocked && cashLocked && digitalLocked;
+  const allAlreadyLocked =
+    neccrateLocked &&
+    salesLocked &&
+    damagesLocked &&
+    cashLocked &&
+    digitalLocked &&
+    incentiveLocked;
   const allUnlockedFilled =
     (neccrateLocked || neccrate !== "") &&
-    (salesLocked    || sales !== "")    &&
-    (damagesLocked  || damages !== "")  &&
-    (cashLocked     || cash !== "")     &&
-    (digitalLocked  || digital !== "");
+    (salesLocked || sales !== "") &&
+    (damagesLocked || damages !== "") &&
+    (cashLocked || cash !== "") &&
+    (digitalLocked || digital !== "") &&
+    (incentiveLocked || incentive !== "");
   const canSubmit = !allAlreadyLocked && allUnlockedFilled;
 
   const inputCls = (locked) => [
@@ -635,6 +697,28 @@ export default function DataEntry() {
               />
               {neccrateLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
             </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+              Daily Incentive
+              </label>
+
+              <input
+              type="number"
+              placeholder="Daily Incentive"
+              className={inputCls(incentiveLocked)}
+              value={incentive}
+              disabled={incentiveLocked}
+              onChange={(e)=>setIncentive(e.target.value)}
+              />
+
+              {incentiveLocked &&
+              <div className="text-xs text-green-700 mt-1">
+              ✓ Already entered
+              </div>
+              }
+
+              </div>
 
             {/* ---- 2-col grid ---- */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

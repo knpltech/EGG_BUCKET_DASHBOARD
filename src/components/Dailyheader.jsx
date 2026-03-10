@@ -208,7 +208,7 @@ function BaseCalendar({ selectedDate, onSelectDate, rows = [] }) {
   );
 }
 
-const Dailyheader = ({ dailySalesData = [], fromDate, toDate, setFromDate, setToDate, allRows = [], onExport }) => {
+const Dailyheader = ({ title, subtitle, dailySalesData = [], fromDate, toDate, setFromDate, setToDate, allRows = [], onExport }) => {
   const fromCalendarRef = useRef(null);
   const toCalendarRef = useRef(null);
   const [openCal, setOpenCal] = useState(null); // "from" | "to" | null
@@ -279,9 +279,9 @@ const Dailyheader = ({ dailySalesData = [], fromDate, toDate, setFromDate, setTo
 
       {/* TITLE */}
       <div>
-        <h1 className="text-2xl font-bold">Daily Sales Quantity</h1>
+        <h1 className="text-2xl font-bold">{title}</h1>
         <p className="text-gray-600 text-sm">
-          Manage and track daily egg sales across all outlets.
+          {subtitle}
         </p>
       </div>
 

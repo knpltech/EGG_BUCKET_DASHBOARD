@@ -99,6 +99,10 @@ export default function Sidebar({ supervisor }) {
               <FontAwesomeIcon icon={faEgg} />
               {open && "NECC Rate"}
             </Link>
+            <Link to="/supervisor/incentive" className={linkClass("/supervisor/incentive")}> 
+              <FontAwesomeIcon icon={faEgg} />
+              {open && "Incentive"}
+            </Link>
             <Link to="/supervisor/dailysales" className={linkClass("/supervisor/dailysales")}> 
               <FontAwesomeIcon icon={faIndianRupeeSign} />
               {open && "Daily Sales"}
@@ -135,6 +139,10 @@ export default function Sidebar({ supervisor }) {
             <Link to="/admin/neccrate" className={linkClass("/admin/neccrate")}> 
               <FontAwesomeIcon icon={faEgg} />
               {open && "NECC Rate"}
+            </Link>
+            <Link to="/admin/incentive" className={linkClass("/admin/incentive")}> 
+              <FontAwesomeIcon icon={faEgg} />
+              {open && "Incentive"}
             </Link>
             <Link to="/admin/dailysales" className={linkClass("/admin/dailysales")}> 
               <FontAwesomeIcon icon={faIndianRupeeSign} />
