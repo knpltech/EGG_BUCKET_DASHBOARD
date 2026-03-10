@@ -1,7 +1,8 @@
 import express from "express";
 import {
   addIncentive,
-  getAllIncentives
+  getAllIncentives,
+  updateIncentive
 } from "../controllers/incentiveController.js";
 
 const router = express.Router();
