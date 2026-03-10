@@ -7,7 +7,6 @@ import * as XLSX from "xlsx";
 import Topbar from "../components/Topbar";
 import Dailyheader from "../components/Dailyheader";
 import DailyTable from "../components/DailyTable";
-import Dailyentryform from "../components/Dailyentryform";
 import Weeklytrend from "../components/Weeklytrend";
 
 const OUTLETS_KEY = "egg_outlets_v1";
@@ -225,6 +224,8 @@ const Dailysales = () => {
 
         {(isAdmin || isViewer || isDataAgent || isSupervisor) && outlets.length > 0 && (
           <Dailyheader
+            title={"Daily Sales Quantity"}
+            subtitle={"Manage and track daily egg sales across all outlets."}
             dailySalesData={filteredRows}
             fromDate={fromDate}
             toDate={toDate}

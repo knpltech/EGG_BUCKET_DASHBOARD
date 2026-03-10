@@ -12,12 +12,12 @@ import CashPayments from "./pages/CashPayments";
 import DigitalPayments from "./pages/DigitalPayments";
 import Outlets from "./pages/Outlets";
 import Users from "./pages/Users";
+import IncentivePage from "./pages/IncentivePage";
 import Reports from "./pages/Reports";
 import { Navigate } from "react-router-dom";
 
 import DataAgentDashboard from "./pages/DataAgentDashboard";
 import SupervisorDashboard from "./pages/SupervisorDashboard";
-import SupervisorOutlet from "./pages/SupervisorOutlet";
 import { DamageProvider } from "./context/DamageContext";
 import { PanelProvider } from "./context/PanelContext";
 import AdminLayoutWithPanel from "./layouts/AdminLayoutWithPanel";
@@ -71,6 +71,11 @@ function App() {
             <Route
               path="/admin/neccrate"
               element={<ProtectedRoute element={<AdminLayoutWithPanel><Neccrate /></AdminLayoutWithPanel>} requiredRole="neccrate" />}
+            />
+
+            <Route
+              path="/admin/incentive"
+              element={<ProtectedRoute element={<AdminLayoutWithPanel><IncentivePage /></AdminLayoutWithPanel>} requiredRole="incentive" />}
             />
             <Route
               path="/admin/dailysales"
