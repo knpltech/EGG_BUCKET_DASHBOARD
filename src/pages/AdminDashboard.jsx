@@ -3,7 +3,15 @@ const API_URL = import.meta.env.VITE_API_URL;
 import { useEffect, useState } from "react";
 import { useDamage } from "../context/DamageContext";
 import { getRoleFlags } from "../utils/role";
+import { fetchZoneWiseRevenue } from "../context/reportsApi";
 
+const formatCurrency = (value) => {
+  if (value == null || isNaN(value)) return "₹0";
+  return "₹" + Number(value).toLocaleString("en-IN", {
+    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+  });
+};
 
 export default function AdminDashboard() {
   const { damages } = useDamage();
@@ -12,6 +20,14 @@ export default function AdminDashboard() {
   const [eggsToday, setEggsToday] = useState(0);
   const [neccRate, setNeccRate] = useState('₹0.00');
   const [damagesThisWeek, setDamagesThisWeek] = useState(0);
+  const [zoneRevenue, setZoneRevenue] = useState({
+    'Zone 1': { cash: 0, digital: 0, total: 0 },
+    'Zone 2': { cash: 0, digital: 0, total: 0 },
+    'Zone 3': { cash: 0, digital: 0, total: 0 },
+    'Zone 4': { cash: 0, digital: 0, total: 0 },
+    'Zone 5': { cash: 0, digital: 0, total: 0 },
+  });
+  const [revenueLoading, setRevenueLoading] = useState(true);
 
   useEffect(() => {
     const updateOutlets = async () => {
@@ -82,6 +98,22 @@ export default function AdminDashboard() {
       : null;
     setDamagesThisWeek(damagesToday && !isNaN(Number(damagesToday.total)) ? Number(damagesToday.total) : 0);
 
+    // Today's revenue by zone (cash + digital payments)
+    const fetchRevenue = async () => {
+      try {
+        setRevenueLoading(true);
+        const data = await fetchZoneWiseRevenue();
+        if (data.success) {
+          setZoneRevenue(data.zoneRevenue);
+        }
+      } catch {
+        console.error('Failed to fetch zone revenue');
+      } finally {
+        setRevenueLoading(false);
+      }
+    };
+    fetchRevenue();
+
     return () => {
       window.removeEventListener('egg:outlets-updated', handleOutletsUpdated);
     };
@@ -120,6 +152,23 @@ export default function AdminDashboard() {
         <StatCard title="Total Outlets" value={totalOutlets} icon="🏪" />
         <StatCard title="Damages Today" value={damagesThisWeek} icon="📉" />
         <StatCard title="Today's NECC Rate" value={neccRate} icon="📈" />
+      </div>
+
+      {/* Today's Total Revenue by Zone */}
+      <h2 className="text-xl font-bold mb-4">Today's Revenue by Supervisor Zone</h2>
+      <div className="bg-white rounded-xl shadow-md p-6 mb-10">
+        {revenueLoading ? (
+          <p className="text-gray-500 text-center py-10">Loading revenue data...</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            {Object.entries(zoneRevenue).map(([zoneName, zoneData]) => (
+              <div key={zoneName} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center">
+                <h3 className="font-semibold text-orange-600 mb-4">{zoneName}</h3>
+                <div className="text-3xl font-bold text-orange-600">{formatCurrency(zoneData.total)}</div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Achievements */}
