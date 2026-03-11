@@ -680,45 +680,44 @@ export default function DataEntry() {
               </div>
             )}
 
-            {/* ---- NECC Rate ---- */}
-            <div className="mb-5">
-              <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">
-                NECC Rate
-                <span className="ml-1 text-xs text-gray-400 font-normal">(per outlet)</span>
-              </label>
-              <input
-                type="number"
-                step="0.01"
-                placeholder="NECC Rate for this outlet"
-                className={inputCls(neccrateLocked)}
-                value={neccrate}
-                disabled={neccrateLocked || outletInactive}
-                onChange={e => setNeccrate(e.target.value)}
-              />
-              {neccrateLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
+            {/* ---- NECC Rate and Daily Incentive (side by side) ---- */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">
+                  NECC Rate
+                  <span className="ml-1 text-xs text-gray-400 font-normal">(per outlet)</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="NECC Rate for this outlet"
+                  className={inputCls(neccrateLocked)}
+                  value={neccrate}
+                  disabled={neccrateLocked || outletInactive}
+                  onChange={e => setNeccrate(e.target.value)}
+                />
+                {neccrateLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">
+                  Daily Incentive
+                </label>
+                <input
+                  type="number"
+                  placeholder="Daily Incentive"
+                  className={inputCls(incentiveLocked)}
+                  value={incentive}
+                  disabled={incentiveLocked}
+                  onChange={(e)=>setIncentive(e.target.value)}
+                />
+                {incentiveLocked &&
+                <div className="text-xs text-green-700 mt-1">
+                ✓ Already entered
+                </div>
+                }
+              </div>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-              Daily Incentive
-              </label>
-
-              <input
-              type="number"
-              placeholder="Daily Incentive"
-              className={inputCls(incentiveLocked)}
-              value={incentive}
-              disabled={incentiveLocked}
-              onChange={(e)=>setIncentive(e.target.value)}
-              />
-
-              {incentiveLocked &&
-              <div className="text-xs text-green-700 mt-1">
-              ✓ Already entered
-              </div>
-              }
-
-              </div>
 
             {/* ---- 2-col grid ---- */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

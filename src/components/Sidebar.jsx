@@ -5,6 +5,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faUserPlus } from "@fortawesome/free-solid-svg-icons";
 import { faIndianRupeeSign } from "@fortawesome/free-solid-svg-icons";
 import { faMoneyBillWave } from "@fortawesome/free-solid-svg-icons";
+import { faGift } from "@fortawesome/free-solid-svg-icons";
 import {
   faTableCells,
   faEgg,
@@ -100,7 +101,7 @@ export default function Sidebar({ supervisor }) {
               {open && "NECC Rate"}
             </Link>
             <Link to="/supervisor/incentive" className={linkClass("/supervisor/incentive")}> 
-              <FontAwesomeIcon icon={faEgg} />
+              <FontAwesomeIcon icon={faGift} />
               {open && "Incentive"}
             </Link>
             <Link to="/supervisor/dailysales" className={linkClass("/supervisor/dailysales")}> 
@@ -141,7 +142,7 @@ export default function Sidebar({ supervisor }) {
               {open && "NECC Rate"}
             </Link>
             <Link to="/admin/incentive" className={linkClass("/admin/incentive")}> 
-              <FontAwesomeIcon icon={faEgg} />
+              <FontAwesomeIcon icon={faGift} />
               {open && "Incentive"}
             </Link>
             <Link to="/admin/dailysales" className={linkClass("/admin/dailysales")}> 

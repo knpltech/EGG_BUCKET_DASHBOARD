@@ -34,6 +34,11 @@ const [editValues,setEditValues] = useState({});
 
       const res = await fetch(`${API_URL}/incentive/all`);
 
+      if(!res.ok) {
+        setRows([]);
+        return;
+      }
+
       const data = await res.json();
 
       if(Array.isArray(data)){
@@ -235,16 +240,32 @@ const handleEditSave = async()=>{
           onExport={handleDownload}
         />
 
-        <DailyTable
-            rows={filteredRows}
-            outlets={outlets.map(o=> typeof o==="string" ? o : o.id)}
-            allOutlets={outlets}
-            onEdit={isAdmin ? handleEditClick : null}
-            />
+        {filteredRows.length === 0 ? (
+          <div className="mt-10 bg-white rounded-xl shadow-md p-8 text-center">
+            <p className="text-gray-500">No incentive data available for the selected date range.</p>
+          </div>
+        ) : (
+          <>
+            {outlets && outlets.length > 0 ? (
+              <>
+                <DailyTable
+                    rows={filteredRows}
+                    outlets={outlets.map(o=> typeof o==="string" ? o : o.id)}
+                    allOutlets={outlets}
+                    onEdit={isAdmin ? handleEditClick : null}
+                    />
 
-        <div className="mt-10">
-          <Weeklytrend rows={rows} outlets={outlets}/>
-        </div>
+                <div className="mt-10">
+                  <Weeklytrend rows={rows} outlets={outlets}/>
+                </div>
+              </>
+            ) : (
+              <div className="mt-10 bg-white rounded-xl shadow-md p-8 text-center">
+                <p className="text-gray-500">Loading outlets... Please wait.</p>
+              </div>
+            )}
+          </>
+        )}
 
         {isAdmin && editModalOpen && (
 

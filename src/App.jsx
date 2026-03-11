@@ -119,6 +119,7 @@ function App() {
             <Route path="/supervisor/cash-payments" element={<ProtectedRoute element={<SupervisorLayout><CashPayments supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
             <Route path="/supervisor/reports" element={<ProtectedRoute element={<SupervisorLayout><Reports supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
             <Route path="/supervisor/data-entry" element={<ProtectedRoute element={<SupervisorLayout><DataEntry supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
+            <Route path="/supervisor/incentive" element={<ProtectedRoute element={<SupervisorLayout><IncentivePage supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
 
             {/* DATA AGENT ROUTES */}
             <Route path="/dataagent/dashboard" element={<ProtectedRoute element={<DataAgentDashboard />} requiredRole="dataagent" />} />
