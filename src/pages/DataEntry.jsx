@@ -403,9 +403,23 @@ export default function DataEntry() {
         `${API}/incentive/date/${date}/outlet/${encoded}`,
       ];
 
-      await Promise.all(endpoints.map(url =>
-        fetch(url, { method: "DELETE", headers }).then(r => r.json()).catch(e => ({ error: e.message }))
+      const results = await Promise.all(endpoints.map(url =>
+        fetch(url, { method: "DELETE", headers })
+          .then(r => {
+            if (!r.ok) {
+              throw new Error(`Delete failed with status ${r.status}`);
+            }
+            return r.json();
+          })
+          .catch(e => ({ error: e.message }))
       ));
+
+      // Check for any errors in the results
+      const errors = results.filter(r => r.error);
+      if (errors.length > 0) {
+        console.error("Errors during deletion:", errors);
+        alert(`⚠️ Some data may not have been deleted. Please refresh and try again.`);
+      }
 
       // Reset all fields and locks
       setNeccrate(""); setNeccrateLocked(false);
@@ -417,10 +431,12 @@ export default function DataEntry() {
       setSupervisorInfo(null);
 
       await loadAllData();
-      alert(`Data for "${outlet}" on ${formatDisplayDate(date)} deleted successfully ✅`);
+      if (errors.length === 0) {
+        alert(`Data for "${outlet}" on ${formatDisplayDate(date)} deleted successfully ✅`);
+      }
     } catch (err) {
       console.error("❌ Error deleting data:", err);
-      alert("Failed to delete data. Please try again.");
+      alert("Failed to delete data. Please check your permissions and try again.");
     } finally {
       setIsDeleting(false);
     }
