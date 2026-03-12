@@ -11,7 +11,9 @@ export const verifyAdmin = (req, res, next) => {
     const token = authHeader.split(" ")[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    if (decoded.role !== "admin") {
+    // Normalize role comparison (case-insensitive)
+    const userRole = String(decoded.role).toLowerCase();
+    if (userRole !== "admin") {
       return res.status(403).json({ message: "Access denied. Admins only." });
     }
 

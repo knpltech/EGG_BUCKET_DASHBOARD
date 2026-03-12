@@ -183,6 +183,7 @@ export default function DataEntry() {
   const [incentive,        setIncentive]        = useState("");
 
   const [supervisorInfo, setSupervisorInfo] = useState(null);
+  const [supervisorZones, setSupervisorZones] = useState([]);
 
   const [neccrate,        setNeccrate]        = useState("");
   const [neccrateLocked,  setNeccrateLocked]  = useState(false);
@@ -303,27 +304,60 @@ export default function DataEntry() {
 
   /* ================= SUPERVISOR INFO ================= */
   useEffect(() => {
-    if (!date || !outlet) { setSupervisorInfo(null); return; }
+    if (!date || !outlet) { 
+      setSupervisorInfo(null);
+      setSupervisorZones([]);
+      return; 
+    }
 
+    const allZones = new Set();
+    let firstSupervisor = null;
+
+    // Collect supervisor info from all data sources
     const salesEntry = allSalesData.find(doc => normalizeDate(doc.date || doc.createdAt) === date);
-    if (salesEntry?.addedByPerOutlet?.[outlet]) { setSupervisorInfo(salesEntry.addedByPerOutlet[outlet]); return; }
+    if (salesEntry?.addedByPerOutlet?.[outlet]) {
+      const supervisor = salesEntry.addedByPerOutlet[outlet];
+      if (!firstSupervisor) firstSupervisor = supervisor;
+      if (supervisor?.zone) allZones.add(supervisor.zone);
+    }
 
     const cashEntry = allCashData.find(doc => normalizeDate(doc.date || doc.createdAt) === date);
-    if (cashEntry?.addedByPerOutlet?.[outlet]) { setSupervisorInfo(cashEntry.addedByPerOutlet[outlet]); return; }
+    if (cashEntry?.addedByPerOutlet?.[outlet]) {
+      const supervisor = cashEntry.addedByPerOutlet[outlet];
+      if (!firstSupervisor) firstSupervisor = supervisor;
+      if (supervisor?.zone) allZones.add(supervisor.zone);
+    }
 
     const digitalEntry = allDigitalData.find(doc => normalizeDate(doc.date || doc.createdAt) === date);
-    if (digitalEntry?.addedByPerOutlet?.[outlet]) { setSupervisorInfo(digitalEntry.addedByPerOutlet[outlet]); return; }
+    if (digitalEntry?.addedByPerOutlet?.[outlet]) {
+      const supervisor = digitalEntry.addedByPerOutlet[outlet];
+      if (!firstSupervisor) firstSupervisor = supervisor;
+      if (supervisor?.zone) allZones.add(supervisor.zone);
+    }
 
     const damagesEntry = allDamagesData.find(doc => normalizeDate(doc.date || doc.createdAt) === date);
-    if (damagesEntry?.addedByPerOutlet?.[outlet]) { setSupervisorInfo(damagesEntry.addedByPerOutlet[outlet]); return; }
+    if (damagesEntry?.addedByPerOutlet?.[outlet]) {
+      const supervisor = damagesEntry.addedByPerOutlet[outlet];
+      if (!firstSupervisor) firstSupervisor = supervisor;
+      if (supervisor?.zone) allZones.add(supervisor.zone);
+    }
 
     const neccEntry = allNeccData.find(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outletId === outlet);
-    if (neccEntry?.addedBy) { setSupervisorInfo(neccEntry.addedBy); return; }
+    if (neccEntry?.addedBy) {
+      const supervisor = neccEntry.addedBy;
+      if (!firstSupervisor) firstSupervisor = supervisor;
+      if (supervisor?.zone) allZones.add(supervisor.zone);
+    }
 
     const incentiveEntry = allIncentiveData.find(doc => normalizeDate(doc.date || doc.createdAt) === date);
-    if (incentiveEntry?.addedByPerOutlet?.[outlet]) { setSupervisorInfo(incentiveEntry.addedByPerOutlet[outlet]); return; }
+    if (incentiveEntry?.addedByPerOutlet?.[outlet]) {
+      const supervisor = incentiveEntry.addedByPerOutlet[outlet];
+      if (!firstSupervisor) firstSupervisor = supervisor;
+      if (supervisor?.zone) allZones.add(supervisor.zone);
+    }
 
-    setSupervisorInfo(null);
+    setSupervisorInfo(firstSupervisor);
+    setSupervisorZones(Array.from(allZones).sort());
   }, [date, outlet, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData]);
 
   /* ================= LOCK CHECK ================= */
@@ -403,9 +437,23 @@ export default function DataEntry() {
         `${API}/incentive/date/${date}/outlet/${encoded}`,
       ];
 
-      await Promise.all(endpoints.map(url =>
-        fetch(url, { method: "DELETE", headers }).then(r => r.json()).catch(e => ({ error: e.message }))
+      const results = await Promise.all(endpoints.map(url =>
+        fetch(url, { method: "DELETE", headers })
+          .then(r => {
+            if (!r.ok) {
+              throw new Error(`Delete failed with status ${r.status}`);
+            }
+            return r.json();
+          })
+          .catch(e => ({ error: e.message }))
       ));
+
+      // Check for any errors in the results
+      const errors = results.filter(r => r.error);
+      if (errors.length > 0) {
+        console.error("Errors during deletion:", errors);
+        alert(`⚠️ Some data may not have been deleted. Please refresh and try again.`);
+      }
 
       // Reset all fields and locks
       setNeccrate(""); setNeccrateLocked(false);
@@ -415,12 +463,15 @@ export default function DataEntry() {
       setDigital(""); setDigitalLocked(false);
       setIncentive(""); setIncentiveLocked(false);
       setSupervisorInfo(null);
+      setSupervisorZones([]);
 
       await loadAllData();
-      alert(`Data for "${outlet}" on ${formatDisplayDate(date)} deleted successfully ✅`);
+      if (errors.length === 0) {
+        alert(`Data for "${outlet}" on ${formatDisplayDate(date)} deleted successfully ✅`);
+      }
     } catch (err) {
       console.error("❌ Error deleting data:", err);
-      alert("Failed to delete data. Please try again.");
+      alert("Failed to delete data. Please check your permissions and try again.");
     } finally {
       setIsDeleting(false);
     }
@@ -667,15 +718,13 @@ export default function DataEntry() {
             )}
 
             {/* Added By Info */}
-            {supervisorInfo?.username && (
-              <div className="mb-4 rounded-xl bg-blue-50 border border-blue-200 px-4 py-3">
-                <p className="text-xs md:text-sm text-blue-700">
-                  <span className="font-semibold">
-                    📝 Added by supervisor of zone {supervisorInfo.zone || "Unknown"}
-                  </span>
-                </p>
-              </div>
-            )}
+{supervisorZones.length > 0 && (
+  <div className="mb-4 rounded-xl bg-blue-50 border border-blue-200 px-4 py-3">
+    <p className="text-xs md:text-sm text-blue-700 font-semibold">
+      📝 Added by supervisor of {supervisorZones.map(z => `Zone ${z}`).join(", ")}
+    </p>
+  </div>
+)}
 
             {/* ---- Delete Button (admin only) ---- */}
             {isAdmin && hasDataForOutlet && (
