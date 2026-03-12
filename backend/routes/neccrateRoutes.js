@@ -1,20 +1,22 @@
 import express from "express";
-import { addNeccRate, getAllNeccRates, updateNeccRate, deleteNeccRatesByDate } from "../controllers/neccrateController.js";
+import {
+  addNeccRate,
+  getAllNeccRates,
+  updateNeccRate,
+  deleteNeccRatesByDate,
+  deleteNeccRateByOutletAndDate
+} from "../controllers/neccrateController.js";
+import { verifyAdmin } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// More specific routes MUST come before generic :id routes
-// DELETE /api/neccrate/date/:date - Delete all NECC rate entries for a specific date (admin only)
-router.delete("/date/:date", deleteNeccRatesByDate);
+// ── Admin-only delete routes (specific before generic) ──────────────────────
+router.delete("/date/:date/outlet/:outletId", verifyAdmin, deleteNeccRateByOutletAndDate);
+router.delete("/date/:date", verifyAdmin, deleteNeccRatesByDate);
 
-// GET /api/neccrate/all - Get all NECC rate entries
+// ── Public / authenticated routes ───────────────────────────────────────────
 router.get("/all", getAllNeccRates);
-
-// POST /api/neccrate/add - Add a new NECC rate entry
 router.post("/add", addNeccRate);
-
-// Generic routes come last
-// PATCH /api/neccrate/:id - Update a NECC rate entry by ID
 router.patch("/:id", updateNeccRate);
 
 export default router;

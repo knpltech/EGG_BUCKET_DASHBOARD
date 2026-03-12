@@ -1,21 +1,22 @@
-
 import express from "express";
-import { addDigitalPayment, getAllDigitalPayments, updateDigitalPayment, deleteDigitalPaymentsByDate } from "../controllers/digitalPaymentsController.js";
+import {
+  addDigitalPayment,
+  getAllDigitalPayments,
+  updateDigitalPayment,
+  deleteDigitalPaymentsByDate,
+  deleteDigitalPaymentByOutletAndDate
+} from "../controllers/digitalPaymentsController.js";
+import { verifyAdmin } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// More specific routes MUST come before generic :id routes
-// Delete all digital payment entries for a specific date (admin only)
-router.delete("/date/:date", deleteDigitalPaymentsByDate);
+// ── Admin-only delete routes (specific before generic) ──────────────────────
+router.delete("/date/:date/outlet/:outletId", verifyAdmin, deleteDigitalPaymentByOutletAndDate);
+router.delete("/date/:date", verifyAdmin, deleteDigitalPaymentsByDate);
 
-// Get all digital payment entries
+// ── Public / authenticated routes ───────────────────────────────────────────
 router.get("/all", getAllDigitalPayments);
-
-// Add a new digital payment entry
 router.post("/add", addDigitalPayment);
-
-// Generic routes come last
-// Update a digital payment entry by ID
 router.patch("/:id", updateDigitalPayment);
 
 export default router;

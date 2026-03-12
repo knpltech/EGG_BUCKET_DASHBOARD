@@ -1,20 +1,22 @@
 import express from "express";
-import { addDailySales, getAllDailySales, updateDailySales, deleteDailySalesByDate } from "../controllers/dailysalesController.js";
+import {
+  addDailySales,
+  getAllDailySales,
+  updateDailySales,
+  deleteDailySalesByDate,
+  deleteDailySalesByOutletAndDate
+} from "../controllers/dailysalesController.js";
+import { verifyAdmin } from "../middleware/authMiddleware.js"; // adjust path if different
 
 const router = express.Router();
 
-// More specific routes MUST come before generic :id routes
-// Delete all daily sales entries for a specific date (admin only)
-router.delete("/date/:date", deleteDailySalesByDate);
+// ── Admin-only delete routes (specific before generic) ──────────────────────
+router.delete("/date/:date/outlet/:outletId", verifyAdmin, deleteDailySalesByOutletAndDate);
+router.delete("/date/:date", verifyAdmin, deleteDailySalesByDate);
 
-// Get all daily sales entries
+// ── Public / authenticated routes ───────────────────────────────────────────
 router.get("/all", getAllDailySales);
-
-// Add a new daily sales entry
 router.post("/add", addDailySales);
-
-// Generic routes come last
-// Route to update a daily sales entry by ID
 router.patch("/:id", updateDailySales);
 
 export default router;
