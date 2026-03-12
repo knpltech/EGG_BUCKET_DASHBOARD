@@ -367,7 +367,7 @@ export default function DigitalPayments() {
 
   return (
     <div className="min-h-screen bg-eggBg px-4 py-6 md:px-8 flex flex-col">
-      {showTable && formOutlets.length > 0 && (
+      {showTable && (
         <>
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>

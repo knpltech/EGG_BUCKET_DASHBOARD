@@ -153,16 +153,16 @@ export const fetchTodayRevenue = async () => {
     const cashPayments = await cashResponse.json();
     const digitalPayments = await digitalResponse.json();
 
-    // Find today's data
-    const todaysCash = Array.isArray(cashPayments) 
-      ? cashPayments.find(p => p.date === dateStr)
-      : null;
+    // Sum across all documents for today, not just the first one.
+    const todaysCash = Array.isArray(cashPayments)
+      ? cashPayments.filter(p => p.date === dateStr)
+      : [];
     const todaysDigital = Array.isArray(digitalPayments)
-      ? digitalPayments.find(p => p.date === dateStr)
-      : null;
+      ? digitalPayments.filter(p => p.date === dateStr)
+      : [];
 
-    const cashTotal = todaysCash?.total || 0;
-    const digitalTotal = todaysDigital?.total || 0;
+    const cashTotal = todaysCash.reduce((sum, entry) => sum + (Number(entry?.total) || 0), 0);
+    const digitalTotal = todaysDigital.reduce((sum, entry) => sum + (Number(entry?.total) || 0), 0);
     const combinedTotal = cashTotal + digitalTotal;
 
     return {
@@ -193,8 +193,28 @@ export const fetchZoneWiseRevenue = async () => {
     const today = new Date();
     const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
-    // Fetch cash and digital payments
-    const [cashResponse, digitalResponse] = await Promise.all([
+    const normalizeZoneLabel = (zone) => {
+      if (!zone) return null;
+      const raw = String(zone).trim();
+      const numberMatch = raw.match(/(\d+)/);
+      return numberMatch ? `Zone ${numberMatch[1]}` : raw;
+    };
+
+    const normalizeOutletKey = (value) => {
+      if (!value) return null;
+      return String(value).trim().toUpperCase();
+    };
+
+    const createEmptyZoneRevenue = () => ({
+      'Zone 1': { cash: 0, digital: 0, total: 0 },
+      'Zone 2': { cash: 0, digital: 0, total: 0 },
+      'Zone 3': { cash: 0, digital: 0, total: 0 },
+      'Zone 4': { cash: 0, digital: 0, total: 0 },
+      'Zone 5': { cash: 0, digital: 0, total: 0 },
+    });
+
+    // Fetch cash, digital payments, and outlets for real zone mapping
+    const [cashResponse, digitalResponse, outletsResponse] = await Promise.all([
       fetch(`${API_BASE_URL}/cash-payments/all`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
@@ -202,78 +222,80 @@ export const fetchZoneWiseRevenue = async () => {
       fetch(`${API_BASE_URL}/digital-payments/all`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
+      }),
+      fetch(`${API_BASE_URL}/outlets/all`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
       })
     ]);
 
-    if (!cashResponse.ok || !digitalResponse.ok) {
+    if (!cashResponse.ok || !digitalResponse.ok || !outletsResponse.ok) {
       throw new Error('Failed to fetch payment data');
     }
 
     const cashPayments = await cashResponse.json();
     const digitalPayments = await digitalResponse.json();
+    const outlets = await outletsResponse.json();
 
-    // Find today's payments
-    const todaysCash = Array.isArray(cashPayments) 
-      ? cashPayments.find(p => p.date === dateStr)
-      : null;
+    // Aggregate all payment documents for today, not just the first one.
+    const todaysCash = Array.isArray(cashPayments)
+      ? cashPayments.filter(p => p.date === dateStr)
+      : [];
     const todaysDigital = Array.isArray(digitalPayments)
-      ? digitalPayments.find(p => p.date === dateStr)
-      : null;
+      ? digitalPayments.filter(p => p.date === dateStr)
+      : [];
 
-    // Initialize zone revenue object
-    const zoneRevenue = {
-      'Zone 1': { cash: 0, digital: 0, total: 0 },
-      'Zone 2': { cash: 0, digital: 0, total: 0 },
-      'Zone 3': { cash: 0, digital: 0, total: 0 },
-      'Zone 4': { cash: 0, digital: 0, total: 0 },
-      'Zone 5': { cash: 0, digital: 0, total: 0 },
-    };
+    const zoneRevenue = createEmptyZoneRevenue();
 
-    // Define outlet to zone mapping (will be updated based on actual data)
-    const outletToZone = {
-      'AECS LAYOUT': 1,
-      'AECS Layout': 1,
-      'SINGASANDRA': 1,
-      'Singasandra': 1,
-      'HOSA ROAD': 1,
-      'Hosa Road': 1,
-      'KUDLU GATE': 1,
-      'Kudlu Gate': 1,
-      'BANDEPALYA': 2,
-      'Bandepalya': 2,
-    };
-
-    // Process cash payments
-    if (todaysCash?.outlets && typeof todaysCash.outlets === 'object') {
-      Object.entries(todaysCash.outlets).forEach(([outlet, amount]) => {
-        const amountNum = parseFloat(amount) || 0;
-        if (amountNum === 0) return;
-
-        // Try to find zone
-        let zone = outletToZone[outlet] || outletToZone[outlet.toUpperCase()] || null;
-
-        if (zone) {
-          const zoneKey = `Zone ${zone}`;
-          zoneRevenue[zoneKey].cash += amountNum;
+    const outletToZone = new Map();
+    if (Array.isArray(outlets)) {
+      outlets.forEach((outlet) => {
+        const zoneKey = normalizeZoneLabel(outlet.zoneId || outlet.zone || outlet.zoneNumber);
+        if (!zoneKey) return;
+        if (!zoneRevenue[zoneKey]) {
+          zoneRevenue[zoneKey] = { cash: 0, digital: 0, total: 0 };
         }
+
+        [outlet.id, outlet.area, outlet.name].forEach((key) => {
+          const normalized = normalizeOutletKey(key);
+          if (normalized) outletToZone.set(normalized, zoneKey);
+        });
       });
     }
 
-    // Process digital payments
-    if (todaysDigital?.outlets && typeof todaysDigital.outlets === 'object') {
-      Object.entries(todaysDigital.outlets).forEach(([outlet, amount]) => {
+    const addPaymentTotals = (paymentDoc, paymentType) => {
+      const outletsObj = paymentDoc?.outlets;
+      if (!outletsObj || typeof outletsObj !== 'object') return;
+
+      const addedByZoneMap = new Map();
+      const addedByPerOutlet = paymentDoc?.addedByPerOutlet;
+      if (addedByPerOutlet && typeof addedByPerOutlet === 'object') {
+        Object.entries(addedByPerOutlet).forEach(([outletKey, addedBy]) => {
+          const zoneKey = normalizeZoneLabel(addedBy?.zone);
+          const normalizedOutlet = normalizeOutletKey(outletKey);
+          if (zoneKey && normalizedOutlet) {
+            if (!zoneRevenue[zoneKey]) {
+              zoneRevenue[zoneKey] = { cash: 0, digital: 0, total: 0 };
+            }
+            addedByZoneMap.set(normalizedOutlet, zoneKey);
+          }
+        });
+      }
+
+      Object.entries(outletsObj).forEach(([outlet, amount]) => {
         const amountNum = parseFloat(amount) || 0;
         if (amountNum === 0) return;
 
-        // Try to find zone
-        let zone = outletToZone[outlet] || outletToZone[outlet.toUpperCase()] || null;
+        const normalizedOutlet = normalizeOutletKey(outlet);
+        const zoneKey = outletToZone.get(normalizedOutlet) || addedByZoneMap.get(normalizedOutlet);
+        if (!zoneKey) return;
 
-        if (zone) {
-          const zoneKey = `Zone ${zone}`;
-          zoneRevenue[zoneKey].digital += amountNum;
-        }
+        zoneRevenue[zoneKey][paymentType] += amountNum;
       });
-    }
+    };
+
+    todaysCash.forEach(paymentDoc => addPaymentTotals(paymentDoc, 'cash'));
+    todaysDigital.forEach(paymentDoc => addPaymentTotals(paymentDoc, 'digital'));
 
     // Calculate totals
     Object.keys(zoneRevenue).forEach(zone => {

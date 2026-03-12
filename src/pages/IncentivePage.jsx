@@ -7,15 +7,25 @@ import * as XLSX from "xlsx";
 import Topbar from "../components/Topbar";
 import Dailyheader from "../components/Dailyheader";
 import DailyTable from "../components/DailyTable";
-import Weeklytrend from "../components/Weeklytrend";
 
 const Incentive = () => {
 
   const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
+  const showTable = isAdmin || isViewer || isDataAgent || isSupervisor;
 
   const [rows,setRows] = useState([]);
   const [outlets,setOutlets] = useState([]);
   const [outletLoading,setOutletLoading] = useState(true);
+
+  const formOutlets = useMemo(() => {
+    let list = outlets;
+    if (!isViewer && !isAdmin && zone && Array.isArray(list)) {
+      list = list.filter(o => typeof o === 'object' && zonesMatch(o.zoneId, zone));
+    }
+    return list;
+  }, [outlets, isAdmin, isViewer, zone]);
+
+  const displayedOutlets = isSupervisor ? formOutlets : outlets;
 
   const [fromDate,setFromDate] = useState("");
   const [toDate,setToDate] = useState("");
@@ -181,16 +191,24 @@ const handleEditSave = async()=>{
 
   const handleDownload = ()=>{
 
+    if (!filteredRows.length) {
+      alert("No data available");
+      return;
+    }
+
     const data = filteredRows.map(row=>{
 
       const obj = { Date: row.date };
 
-      outlets.forEach(o=>{
+      displayedOutlets.forEach(o=>{
         const area = o.area || o;
         obj[area] = Number(row.outlets?.[area] ?? 0);
       });
 
-      obj.Total = row.total ?? 0;
+      obj.Total = displayedOutlets.reduce((sum, o) => {
+        const area = o.area || o;
+        return sum + Number(row.outlets?.[area] ?? 0);
+      }, 0);
 
       return obj;
 
@@ -228,42 +246,26 @@ const handleEditSave = async()=>{
 
         <Topbar/>
 
-        <Dailyheader
-          title={"Incentive Entry"}
-          subtitle={"Manage and track daily incentive entries across all outlets."}
-          dailySalesData={filteredRows}
-          fromDate={fromDate}
-          toDate={toDate}
-          setFromDate={setFromDate}
-          setToDate={setToDate}
-          allRows={rows}
-          onExport={handleDownload}
-        />
-
-        {filteredRows.length === 0 ? (
-          <div className="mt-10 bg-white rounded-xl shadow-md p-8 text-center">
-            <p className="text-gray-500">No incentive data available for the selected date range.</p>
-          </div>
-        ) : (
+        {showTable && (
           <>
-            {outlets && outlets.length > 0 ? (
-              <>
-                <DailyTable
-                    rows={filteredRows}
-                    outlets={outlets.map(o=> typeof o==="string" ? o : o.id)}
-                    allOutlets={outlets}
-                    onEdit={isAdmin ? handleEditClick : null}
-                    />
+            <Dailyheader
+              title={"Incentive Entry"}
+              subtitle={"Manage and track daily incentive entries across all outlets."}
+              dailySalesData={filteredRows}
+              fromDate={fromDate}
+              toDate={toDate}
+              setFromDate={setFromDate}
+              setToDate={setToDate}
+              allRows={rows}
+              onExport={handleDownload}
+            />
 
-                <div className="mt-10">
-                  <Weeklytrend rows={rows} outlets={outlets}/>
-                </div>
-              </>
-            ) : (
-              <div className="mt-10 bg-white rounded-xl shadow-md p-8 text-center">
-                <p className="text-gray-500">Loading outlets... Please wait.</p>
-              </div>
-            )}
+            <DailyTable
+              rows={filteredRows}
+              outlets={displayedOutlets.map(o=> typeof o==="string" ? o : o.id)}
+              allOutlets={outlets}
+              onEdit={isAdmin ? handleEditClick : null}
+            />
           </>
         )}
 

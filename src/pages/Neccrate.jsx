@@ -20,6 +20,21 @@ const formatDisplayDate = (iso) => {
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 };
 
+/** Parse a rate value that may be a number, "₹34.00 per egg" string, or anything else */
+const parseRate = (doc) => {
+  // If rate is already a plain number, it's the most recent value (set directly by edit)
+  if (typeof doc.rate === "number" && !isNaN(doc.rate)) return doc.rate;
+  // If rateValue is a valid number, use it (set on add)
+  if (typeof doc.rateValue === "number" && !isNaN(doc.rateValue)) return doc.rateValue;
+  // Fallback: parse formatted string like "₹34.00 per egg"
+  const val = doc.rate ?? doc.rateValue;
+  if (val == null) return 0;
+  const n = Number(val);
+  if (!isNaN(n)) return n;
+  const m = String(val).match(/[\d.]+/);
+  return m ? Number(m[0]) || 0 : 0;
+};
+
 /* ================= Neccrate page ================= */
 const Neccrate = () => {
   const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
@@ -190,7 +205,7 @@ const Neccrate = () => {
         }
         normalizedKey = normalizedKey || doc.outlet.toUpperCase?.() || doc.outlet;
         pivotMap[date][normalizedKey] = {
-          rate: doc.rateValue ?? Number(doc.rate) ?? 0,
+          rate: parseRate(doc),
           docId,
           remarks: doc.remarks || ""
         };
@@ -203,7 +218,7 @@ const Neccrate = () => {
                             outletKeyMap.get(outletKey.toLowerCase());
           }
           normalizedKey = normalizedKey || outletKey.toUpperCase?.() || outletKey;
-          pivotMap[date][normalizedKey] = { rate: Number(rate) ?? 0, docId, remarks: doc.remarks || "" };
+          pivotMap[date][normalizedKey] = { rate: parseRate({ rate }), docId, remarks: doc.remarks || "" };
         });
       }
     });
@@ -231,7 +246,8 @@ const Neccrate = () => {
     // editValues: { outletKey: rate, ... }
     const vals = {};
     outletColumns.forEach(key => {
-      vals[key] = dateData[key]?.rate ?? "";
+      const r = dateData[key]?.rate;
+      vals[key] = (r != null && !isNaN(r) && r !== 0) ? r : "";
     });
     setEditValues(vals);
     setEditModalOpen(true);
@@ -239,39 +255,55 @@ const Neccrate = () => {
 
   const handleEditSave = async () => {
     const { date, dateData } = editRow;
+    const token = localStorage.getItem('token');
+    const authHeaders = {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
 
-    // For each outlet that already has a docId, patch it; new ones would need a POST
-    // Group by docId since multiple outlets can share the same document
-    const docUpdates = {}; // docId -> { outlet, rate, remarks }
+    const patchTasks = [];  // update existing records
+    const postTasks  = [];  // create new records
 
     outletColumns.forEach(outletKey => {
+      const rawVal = editValues[outletKey];
+      // Skip empty or invalid values
+      if (rawVal === "" || rawVal === undefined || rawVal === null) return;
+      const numRate = Number(rawVal);
+      if (isNaN(numRate)) return;
+
       const existing = dateData[outletKey];
-      const newRate  = editValues[outletKey];
       if (existing && existing.docId) {
-        if (!docUpdates[existing.docId]) {
-          docUpdates[existing.docId] = { outlet: outletKey, rate: Number(newRate), remarks: existing.remarks };
-        }
+        // PATCH existing record
+        patchTasks.push(
+          fetch(`${API_URL}/neccrate/${existing.docId}`, {
+            method: "PATCH",
+            headers: authHeaders,
+            body: JSON.stringify({ date, outlet: outletKey, rate: numRate, remarks: existing.remarks || "" }),
+          })
+        );
+      } else {
+        // POST new record for this outlet+date
+        postTasks.push(
+          fetch(`${API_URL}/neccrate/add`, {
+            method: "POST",
+            headers: authHeaders,
+            body: JSON.stringify({ date, outlet: outletKey, rate: numRate, remarks: "" }),
+          })
+        );
       }
     });
 
     try {
-      const tasks = Object.entries(docUpdates).map(([docId, payload]) =>
-        fetch(`${API_URL}/neccrate/${docId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ date, ...payload, rate: Number(payload.rate) }),
-        })
-      );
-      const results = await Promise.all(tasks);
+      const results = await Promise.all([...patchTasks, ...postTasks]);
       for (const r of results) {
-        if (!r.ok) { alert("Failed to update one or more entries"); return; }
+        if (!r.ok) { alert("Failed to save one or more entries"); return; }
       }
       await fetchRates();
       setEditModalOpen(false);
       setEditRow({});
       setEditValues({});
     } catch (err) {
-      alert("Error updating entries: " + err.message);
+      alert("Error saving entries: " + err.message);
     }
   };
 
@@ -405,10 +437,7 @@ const Neccrate = () => {
                     step="0.01"
                     value={editValues[key] ?? ""}
                     onChange={e => setEditValues(p => ({ ...p, [key]: e.target.value }))}
-                    disabled={!editRow.dateData?.[key]} // only editable if record exists
-                    className={`flex-1 border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 ${
-                      editRow.dateData?.[key] ? "border-gray-900" : "border-gray-200 bg-gray-50 cursor-not-allowed text-gray-400"
-                    }`}
+                    className="flex-1 border border-gray-900 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
                   />
                 </div>
               ))}

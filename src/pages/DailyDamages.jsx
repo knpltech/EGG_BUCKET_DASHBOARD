@@ -379,6 +379,12 @@ export default function DailyDamages() {
   console.log('DailyDamages - outlets count:', outlets.length, '| formOutlets count:', formOutlets.length);
 
   const displayedOutlets = (isSupervisor ? formOutlets : outlets).map(o => typeof o === 'string' ? o : o.id);
+  const displayedOutletObjects = isSupervisor ? formOutlets : outlets;
+
+  const getAreaFromDisplayedOutlet = (outletId) => {
+    const outletObj = displayedOutletObjects.find(o => (typeof o === 'string' ? o : o.id) === outletId);
+    return outletObj ? (typeof outletObj === 'string' ? outletObj : outletObj.area) : outletId;
+  };
 
   useEffect(() => {
     const handleOutletsUpdated = (event) => {
@@ -469,8 +475,11 @@ export default function DailyDamages() {
     if (filteredData.length === 0) { alert("No data available for selected dates"); return; }
     const data = filteredData.map((row) => {
       const obj = { Date: formatDateDMY(row.date) };
-      outlets.forEach((o) => { const area = typeof o === 'string' ? o : o.area; obj[area] = Number(row[area] ?? 0); });
-      obj.Total = Number(row.total ?? outlets.reduce((s, o) => s + Number(row[(typeof o === 'string' ? o : o.area)] || 0), 0));
+      displayedOutletObjects.forEach((o) => {
+        const area = typeof o === 'string' ? o : o.area;
+        obj[area] = Number(row[area] ?? 0);
+      });
+      obj.Total = displayedOutletObjects.reduce((s, o) => s + Number(row[(typeof o === 'string' ? o : o.area)] || 0), 0);
       return obj;
     });
     const ws = XLSX.utils.json_to_sheet(data);
@@ -580,7 +589,7 @@ export default function DailyDamages() {
                 <tbody>
                   {filteredData.map((d, i) => {
                     // Always recompute total from area keys so edits reflect immediately
-                    const rowTotal = outlets.reduce((sum, outlet) => {
+                    const rowTotal = displayedOutletObjects.reduce((sum, outlet) => {
                       const area = typeof outlet === 'string' ? outlet : outlet.area;
                       return sum + Math.round(Number(d[area] || 0));
                     }, 0);
@@ -589,8 +598,7 @@ export default function DailyDamages() {
                         <td className="p-3 text-left sticky left-0 bg-white z-10">{formatDateDisplay(d.date)}</td>
                         {displayedOutlets.map((outletId) => {
                           // displayedOutlets contains IDs — resolve to area key for data lookup
-                          const outletObj = outlets.find(o => (typeof o === 'string' ? o : o.id) === outletId);
-                          const area = outletObj ? (typeof outletObj === 'string' ? outletObj : outletObj.area) : outletId;
+                          const area = getAreaFromDisplayedOutlet(outletId);
                           return (
                             <td key={outletId} className="p-3 text-center">{Math.round(Number(d[area] || 0))}</td>
                           );
@@ -610,14 +618,13 @@ export default function DailyDamages() {
                   <tr className="bg-orange-50 font-semibold text-orange-700">
                     <td className="p-3 text-left sticky left-0 bg-orange-50 z-10">Grand Total</td>
                     {displayedOutlets.map((outletId) => {
-                      const outletObj = outlets.find(o => (typeof o === 'string' ? o : o.id) === outletId);
-                      const area = outletObj ? (typeof outletObj === 'string' ? outletObj : outletObj.area) : outletId;
+                      const area = getAreaFromDisplayedOutlet(outletId);
                       const total = filteredData.reduce((sum, d) => sum + Math.round(Number(d[area] || 0)), 0);
                       return <td key={outletId} className="p-3 text-center">{total}</td>;
                     })}
                     <td className="p-3 text-center sticky right-0 bg-orange-50 z-10">
                       {filteredData.reduce((sum, d) => {
-                        return sum + outlets.reduce((s, outlet) => {
+                        return sum + displayedOutletObjects.reduce((s, outlet) => {
                           const area = typeof outlet === 'string' ? outlet : outlet.area;
                           return s + Math.round(Number(d[area] || 0));
                         }, 0);
@@ -631,7 +638,7 @@ export default function DailyDamages() {
           </div>
 
           {/* ── GRAPH ANALYSIS (reads same filteredData + outlets) ── */}
-          <DamageAnalytics filteredData={filteredData} outlets={outlets} />
+          <DamageAnalytics filteredData={filteredData} outlets={displayedOutletObjects} />
 
           {/* Edit Modal */}
           {editModalOpen && (

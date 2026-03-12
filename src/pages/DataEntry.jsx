@@ -717,39 +717,6 @@ export default function DataEntry() {
               </div>
             )}
 
-            {/* Added By Info */}
-{supervisorZones.length > 0 && (
-  <div className="mb-4 rounded-xl bg-blue-50 border border-blue-200 px-4 py-3">
-    <p className="text-xs md:text-sm text-blue-700 font-semibold">
-      📝 Added by supervisor of {supervisorZones.map(z => `Zone ${z}`).join(", ")}
-    </p>
-  </div>
-)}
-
-            {/* ---- Delete Button (admin only) ---- */}
-            {isAdmin && hasDataForOutlet && (
-              <div className="mb-4">
-                <button
-                  onClick={handleDeleteDate}
-                  disabled={isDeleting}
-                  className={[
-                    "w-full py-2 px-4 rounded-lg text-sm font-semibold transition-colors",
-                    isDeleting
-                      ? "bg-gray-300 text-gray-500 cursor-not-allowed"
-                      : "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100",
-                  ].join(" ")}
-                >
-                  {isDeleting ? (
-                    <div className="flex items-center justify-center gap-2">
-                      <Spinner /> Deleting...
-                    </div>
-                  ) : (
-                    `🗑️ Delete Data for "${outlet}" on This Date`
-                  )}
-                </button>
-              </div>
-            )}
-
             {/* ---- Daily Sales + Daily Incentive ---- */}
 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
   <div>
