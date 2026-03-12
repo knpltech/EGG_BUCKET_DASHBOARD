@@ -750,65 +750,67 @@ export default function DataEntry() {
               </div>
             )}
 
-            {/* ---- NECC Rate + Daily Incentive ---- */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">
-                  NECC Rate
-                  <span className="ml-1 text-xs text-gray-400 font-normal">(per outlet)</span>
-                </label>
-                <input
-                  type="number" step="0.01" placeholder="NECC Rate for this outlet"
-                  className={inputCls(neccrateLocked)}
-                  value={neccrate} disabled={neccrateLocked || outletInactive}
-                  onChange={e => setNeccrate(e.target.value)}
-                />
-                {neccrateLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
-              </div>
+            {/* ---- Daily Sales + Daily Incentive ---- */}
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Daily Sales</label>
+    <input type="number" placeholder="Daily Sales" className={inputCls(salesLocked)}
+      value={sales} disabled={salesLocked || outletInactive} onChange={e => setSales(e.target.value)} />
+    {salesLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
+  </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Daily Incentive</label>
-                <input
-                  type="number" placeholder="Daily Incentive"
-                  className={inputCls(incentiveLocked)}
-                  value={incentive} disabled={incentiveLocked || outletInactive}
-                  onChange={e => setIncentive(e.target.value)}
-                />
-                {incentiveLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
-              </div>
-            </div>
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Daily Incentive</label>
+    <input
+      type="number" placeholder="Daily Incentive"
+      className={inputCls(incentiveLocked)}
+      value={incentive} disabled={incentiveLocked || outletInactive}
+      onChange={e => setIncentive(e.target.value)}
+    />
+    {incentiveLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
+  </div>
+</div>
 
-            {/* ---- 2-col grid ---- */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Daily Sales</label>
-                <input type="number" placeholder="Daily Sales" className={inputCls(salesLocked)}
-                  value={sales} disabled={salesLocked || outletInactive} onChange={e => setSales(e.target.value)} />
-                {salesLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
-              </div>
+{/* ---- NECC Rate + Daily Damages ---- */}
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">
+      NECC Rate
+      <span className="ml-1 text-xs text-gray-400 font-normal">(per outlet)</span>
+    </label>
+    <input
+      type="number" step="0.01" placeholder="NECC Rate for this outlet"
+      className={inputCls(neccrateLocked)}
+      value={neccrate} disabled={neccrateLocked || outletInactive}
+      onChange={e => setNeccrate(e.target.value)}
+    />
+    {neccrateLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
+  </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Daily Damages</label>
-                <input type="number" placeholder="Daily Damages" className={inputCls(damagesLocked)}
-                  value={damages} disabled={damagesLocked || outletInactive} onChange={e => setDamages(e.target.value)} />
-                {damagesLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
-              </div>
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Daily Damages</label>
+    <input type="number" placeholder="Daily Damages" className={inputCls(damagesLocked)}
+      value={damages} disabled={damagesLocked || outletInactive} onChange={e => setDamages(e.target.value)} />
+    {damagesLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
+  </div>
+</div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Digital Payment</label>
-                <input type="number" placeholder="Digital Payment" className={inputCls(digitalLocked)}
-                  value={digital} disabled={digitalLocked || outletInactive} onChange={e => setDigital(e.target.value)} />
-                {digitalLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
-              </div>
+{/* ---- Digital Payment + Cash Payment ---- */}
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Digital Payment</label>
+    <input type="number" placeholder="Digital Payment" className={inputCls(digitalLocked)}
+      value={digital} disabled={digitalLocked || outletInactive} onChange={e => setDigital(e.target.value)} />
+    {digitalLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
+  </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Cash Payment</label>
-                <input type="number" placeholder="Cash Payment" className={inputCls(cashLocked)}
-                  value={cash} disabled={cashLocked || outletInactive} onChange={e => setCash(e.target.value)} />
-                {cashLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
-              </div>
-            </div>
-
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Cash Payment</label>
+    <input type="number" placeholder="Cash Payment" className={inputCls(cashLocked)}
+      value={cash} disabled={cashLocked || outletInactive} onChange={e => setCash(e.target.value)} />
+    {cashLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
+  </div>
+</div>
             {/* ---- Summary Card ---- */}
             <div className="mt-5">
               <div className="bg-eggWhite p-4 rounded-xl shadow-sm border border-gray-100">
