@@ -1,15 +1,22 @@
 import express from "express";
-import { addCashPayment, getAllCashPayments, updateCashPayment } from "../controllers/cashPaymentsController.js";
+import {
+  addCashPayment,
+  getAllCashPayments,
+  updateCashPayment,
+  deleteCashPaymentsByDate,
+  deleteCashPaymentByOutletAndDate
+} from "../controllers/cashPaymentsController.js";
+import { verifyAdmin } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
-// Add a new cash payment entry
-router.post("/add", addCashPayment);
+// ── Admin-only delete routes (specific before generic) ──────────────────────
+router.delete("/date/:date/outlet/:outletId", verifyAdmin, deleteCashPaymentByOutletAndDate);
+router.delete("/date/:date", verifyAdmin, deleteCashPaymentsByDate);
 
-// Route to update a cash payment entry by ID
-router.patch("/:id", updateCashPayment);
-
-// Get all cash payment entries
+// ── Public / authenticated routes ───────────────────────────────────────────
 router.get("/all", getAllCashPayments);
+router.post("/add", addCashPayment);
+router.patch("/:id", updateCashPayment);
 
 export default router;

@@ -155,42 +155,50 @@ const normalizeDate = (d) => {
   return String(d).slice(0, 10);
 };
 
+/* ================= SPINNER ================= */
+const Spinner = () => (
+  <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+  </svg>
+);
+
 /* ================= MAIN COMPONENT ================= */
 export default function DataEntry() {
   const calendarRef = useRef(null);
 
   const [outlets, setOutlets] = useState([]);
-  // FIX: outlet state now stores the AREA name (o.area || o.name || o.id)
-  // because all display pages (DailyDamages, DigitalPayments, CashPayments)
-  // key their data by outlet.area. Using o.id here caused the key mismatch.
-  const [outlet, setOutlet] = useState("");        // outlet AREA key
+  const [outlet, setOutlet] = useState("");
   const [outletInactiveMsg, setOutletInactiveMsg] = useState("");
   const [outletInactive, setOutletInactive] = useState(false);
   const [date, setDate] = useState("");
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
-  // Raw data from all 5 APIs — used for calendar dot computation
-  const [allSalesData,   setAllSalesData]   = useState([]);
-  const [allCashData,    setAllCashData]    = useState([]);
-  const [allDigitalData, setAllDigitalData] = useState([]);
-  const [allDamagesData, setAllDamagesData] = useState([]);
-  const [allNeccData,    setAllNeccData]    = useState([]);
+  const [allSalesData,     setAllSalesData]     = useState([]);
+  const [allCashData,      setAllCashData]      = useState([]);
+  const [allDigitalData,   setAllDigitalData]   = useState([]);
+  const [allDamagesData,   setAllDamagesData]   = useState([]);
+  const [allNeccData,      setAllNeccData]      = useState([]);
   const [allIncentiveData, setAllIncentiveData] = useState([]);
-  const [incentive,setIncentive] = useState("");
+  const [incentive,        setIncentive]        = useState("");
 
-  // Per-field values & locks
-  const [neccrate,       setNeccrate]       = useState("");
-  const [neccrateLocked, setNeccrateLocked] = useState(false);
-  const [sales,          setSales]          = useState("");
-  const [salesLocked,    setSalesLocked]    = useState(false);
-  const [damages,        setDamages]        = useState("");
-  const [damagesLocked,  setDamagesLocked]  = useState(false);
-  const [cash,           setCash]           = useState("");
-  const [cashLocked,     setCashLocked]     = useState(false);
-  const [digital,        setDigital]        = useState("");
-  const [digitalLocked,  setDigitalLocked]  = useState(false);
-  const [incentiveLocked,setIncentiveLocked] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [supervisorInfo, setSupervisorInfo] = useState(null);
+
+  const [neccrate,        setNeccrate]        = useState("");
+  const [neccrateLocked,  setNeccrateLocked]  = useState(false);
+  const [sales,           setSales]           = useState("");
+  const [salesLocked,     setSalesLocked]     = useState(false);
+  const [damages,         setDamages]         = useState("");
+  const [damagesLocked,   setDamagesLocked]   = useState(false);
+  const [cash,            setCash]            = useState("");
+  const [cashLocked,      setCashLocked]      = useState(false);
+  const [digital,         setDigital]         = useState("");
+  const [digitalLocked,   setDigitalLocked]   = useState(false);
+  const [incentiveLocked, setIncentiveLocked] = useState(false);
+  const [isSubmitting,    setIsSubmitting]    = useState(false);
+  const [isDeleting,      setIsDeleting]      = useState(false);
+
+  const { isAdmin } = getRoleFlags();
 
   /* ---- click outside calendar ---- */
   useEffect(() => {
@@ -204,7 +212,7 @@ export default function DataEntry() {
   /* ================= LOAD OUTLETS ================= */
   useEffect(() => {
     const { isSupervisor, zone } = getRoleFlags();
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem("token");
     const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
     const url = (isSupervisor && zone) ? `${API}/outlets/zone/${zone}` : `${API}/outlets/all`;
     fetch(url, { headers })
@@ -216,32 +224,28 @@ export default function DataEntry() {
   /* ================= LOAD ALL COLLECTIONS ================= */
   const loadAllData = useCallback(async () => {
     try {
-
       const [sRes, cRes, dRes, dmRes, nRes, iRes] = await Promise.all([
         fetch(`${API}/dailysales/all`),
         fetch(`${API}/cash-payments/all`),
         fetch(`${API}/digital-payments/all`),
         fetch(`${API}/daily-damage/all`),
         fetch(`${API}/neccrate/all`),
-        fetch(`${API}/incentive/all`)
+        fetch(`${API}/incentive/all`),
       ]);
-
       const [sData, cData, dData, dmData, nData, iData] = await Promise.all([
-        sRes.ok ? sRes.json() : [],
-        cRes.ok ? cRes.json() : [],
-        dRes.ok ? dRes.json() : [],
+        sRes.ok  ? sRes.json()  : [],
+        cRes.ok  ? cRes.json()  : [],
+        dRes.ok  ? dRes.json()  : [],
         dmRes.ok ? dmRes.json() : [],
-        nRes.ok ? nRes.json() : [],
-        iRes.ok ? iRes.json() : []
+        nRes.ok  ? nRes.json()  : [],
+        iRes.ok  ? iRes.json()  : [],
       ]);
-
-      setAllSalesData(Array.isArray(sData) ? sData : []);
-      setAllCashData(Array.isArray(cData) ? cData : []);
+      setAllSalesData(Array.isArray(sData)  ? sData  : []);
+      setAllCashData(Array.isArray(cData)   ? cData  : []);
       setAllDigitalData(Array.isArray(dData) ? dData : []);
       setAllDamagesData(Array.isArray(dmData) ? dmData : []);
-      setAllNeccData(Array.isArray(nData) ? nData : []);
+      setAllNeccData(Array.isArray(nData)   ? nData  : []);
       setAllIncentiveData(Array.isArray(iData) ? iData : []);
-
     } catch (err) {
       console.error("Error loading all data:", err);
     }
@@ -250,43 +254,22 @@ export default function DataEntry() {
   useEffect(() => { loadAllData(); }, [loadAllData]);
 
   /* ================= CALENDAR DOT COMPUTATION ================= */
-  // FIX: All checks now use `outlet` as the AREA key — matching how backend
-  // stores data when submitted from the individual data entry pages.
   const { completedDates } = useMemo(() => {
     if (!outlet) return { completedDates: new Set() };
 
-    // FIX: sales/cash/digital use outlets[area], damages uses damages[area]
-    const hasInSales   = (date) => allSalesData.some(doc =>
-      normalizeDate(doc.date || doc.createdAt) === date &&
-      doc.outlets && doc.outlets[outlet] !== undefined
-    );
-    const hasInCash    = (date) => allCashData.some(doc =>
-      normalizeDate(doc.date || doc.createdAt) === date &&
-      doc.outlets && doc.outlets[outlet] !== undefined
-    );
-    const hasInDigital = (date) => allDigitalData.some(doc =>
-      normalizeDate(doc.date || doc.createdAt) === date &&
-      doc.outlets && doc.outlets[outlet] !== undefined
-    );
-    const hasInDamages = (date) => allDamagesData.some(doc =>
-      normalizeDate(doc.date || doc.createdAt) === date &&
-      doc.damages && doc.damages[outlet] !== undefined
-    );
-    const hasInNecc = (date) => allNeccData.some(doc => {
-      const docDate = normalizeDate(doc.date || doc.createdAt);
+    const hasInSales   = (d) => allSalesData.some(doc =>
+      normalizeDate(doc.date || doc.createdAt) === d && doc.outlets && doc.outlets[outlet] !== undefined);
+    const hasInCash    = (d) => allCashData.some(doc =>
+      normalizeDate(doc.date || doc.createdAt) === d && doc.outlets && doc.outlets[outlet] !== undefined);
+    const hasInDigital = (d) => allDigitalData.some(doc =>
+      normalizeDate(doc.date || doc.createdAt) === d && doc.outlets && doc.outlets[outlet] !== undefined);
+    const hasInDamages = (d) => allDamagesData.some(doc =>
+      normalizeDate(doc.date || doc.createdAt) === d && doc.damages && doc.damages[outlet] !== undefined);
+    const hasInNecc    = (d) => allNeccData.some(doc =>
+      normalizeDate(doc.date || doc.createdAt) === d && doc.outletId === outlet);
+    const hasInIncentive = (d) => allIncentiveData.some(doc =>
+      normalizeDate(doc.date || doc.createdAt) === d && doc.outlets && doc.outlets[outlet] !== undefined);
 
-      return (
-        docDate === date &&
-        doc.outletId === outlet
-      );
-    });
-    
-    const hasInIncentive = (date) => allIncentiveData.some(doc =>
-      normalizeDate(doc.date || doc.createdAt) === date &&
-      doc.outlets && doc.outlets[outlet] !== undefined
-    );
-
-    // Collect all dates that appear for this outlet across all 5 collections
     const allDates = new Set();
     allSalesData.forEach(doc => {
       if (doc.outlets && doc.outlets[outlet] !== undefined)
@@ -305,20 +288,45 @@ export default function DataEntry() {
         allDates.add(normalizeDate(doc.date || doc.createdAt));
     });
     allNeccData.forEach(doc => {
-      const d = normalizeDate(doc.date || doc.createdAt);
-      if (hasInNecc(d)) allDates.add(d);
+      if (doc.outletId === outlet)
+        allDates.add(normalizeDate(doc.date || doc.createdAt));
     });
 
     const completed = new Set();
-    allDates.forEach(date => {
-      const checks = [hasInSales(date), hasInCash(date), hasInDigital(date), hasInDamages(date), hasInNecc(date),hasInIncentive(date)];
-      if (checks.every(Boolean)) completed.add(date);
+    allDates.forEach(d => {
+      if ([hasInSales(d), hasInCash(d), hasInDigital(d), hasInDamages(d), hasInNecc(d), hasInIncentive(d)].every(Boolean))
+        completed.add(d);
     });
 
     return { completedDates: completed };
-  }, [outlet, date, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData]);
+  }, [outlet, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData]);
 
-  /* ================= LOCK CHECK WHEN OUTLET + DATE CHANGE ================= */
+  /* ================= SUPERVISOR INFO ================= */
+  useEffect(() => {
+    if (!date || !outlet) { setSupervisorInfo(null); return; }
+
+    const salesEntry = allSalesData.find(doc => normalizeDate(doc.date || doc.createdAt) === date);
+    if (salesEntry?.addedByPerOutlet?.[outlet]) { setSupervisorInfo(salesEntry.addedByPerOutlet[outlet]); return; }
+
+    const cashEntry = allCashData.find(doc => normalizeDate(doc.date || doc.createdAt) === date);
+    if (cashEntry?.addedByPerOutlet?.[outlet]) { setSupervisorInfo(cashEntry.addedByPerOutlet[outlet]); return; }
+
+    const digitalEntry = allDigitalData.find(doc => normalizeDate(doc.date || doc.createdAt) === date);
+    if (digitalEntry?.addedByPerOutlet?.[outlet]) { setSupervisorInfo(digitalEntry.addedByPerOutlet[outlet]); return; }
+
+    const damagesEntry = allDamagesData.find(doc => normalizeDate(doc.date || doc.createdAt) === date);
+    if (damagesEntry?.addedByPerOutlet?.[outlet]) { setSupervisorInfo(damagesEntry.addedByPerOutlet[outlet]); return; }
+
+    const neccEntry = allNeccData.find(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outletId === outlet);
+    if (neccEntry?.addedBy) { setSupervisorInfo(neccEntry.addedBy); return; }
+
+    const incentiveEntry = allIncentiveData.find(doc => normalizeDate(doc.date || doc.createdAt) === date);
+    if (incentiveEntry?.addedByPerOutlet?.[outlet]) { setSupervisorInfo(incentiveEntry.addedByPerOutlet[outlet]); return; }
+
+    setSupervisorInfo(null);
+  }, [date, outlet, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData]);
+
+  /* ================= LOCK CHECK ================= */
   useEffect(() => {
     if (!outlet || !date) {
       setNeccrate(""); setNeccrateLocked(false);
@@ -326,112 +334,117 @@ export default function DataEntry() {
       setDamages(""); setDamagesLocked(false);
       setCash(""); setCashLocked(false);
       setDigital(""); setDigitalLocked(false);
+      setIncentive(""); setIncentiveLocked(false);
       return;
     }
 
-    // FIX: All lookups now use `outlet` (the area key) consistently.
-    // This matches how data is stored: outlets[area] / damages[area].
-
-    // Daily Sales — stored under doc.outlets[area]
     const foundSales = allSalesData.find(doc =>
-      normalizeDate(doc.date || doc.createdAt) === date &&
-      doc.outlets && doc.outlets[outlet] !== undefined
-    );
+      normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
     if (foundSales) { setSales(foundSales.outlets[outlet]); setSalesLocked(true); }
     else { setSales(""); setSalesLocked(false); }
 
-    // Cash — stored under doc.outlets[area]
     const foundCash = allCashData.find(doc =>
-      normalizeDate(doc.date || doc.createdAt) === date &&
-      doc.outlets && doc.outlets[outlet] !== undefined
-    );
+      normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
     if (foundCash) { setCash(foundCash.outlets[outlet]); setCashLocked(true); }
     else { setCash(""); setCashLocked(false); }
 
-    // Digital — stored under doc.outlets[area]
     const foundDigital = allDigitalData.find(doc =>
-      normalizeDate(doc.date || doc.createdAt) === date &&
-      doc.outlets && doc.outlets[outlet] !== undefined
-    );
+      normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
     if (foundDigital) { setDigital(foundDigital.outlets[outlet]); setDigitalLocked(true); }
     else { setDigital(""); setDigitalLocked(false); }
 
-    // Damages — stored under doc.damages[area]
     const foundDamages = allDamagesData.find(doc =>
-      normalizeDate(doc.date || doc.createdAt) === date &&
-      doc.damages && doc.damages[outlet] !== undefined
-    );
+      normalizeDate(doc.date || doc.createdAt) === date && doc.damages && doc.damages[outlet] !== undefined);
     if (foundDamages) { setDamages(foundDamages.damages[outlet]); setDamagesLocked(true); }
     else { setDamages(""); setDamagesLocked(false); }
 
-    // NECC Rate — per outlet
-    // NECC Rate — per outlet
     const foundNecc = allNeccData.find(doc =>
-      normalizeDate(doc.date || doc.createdAt) === date &&
-      doc.outletId === outlet
-    );
+      normalizeDate(doc.date || doc.createdAt) === date && doc.outletId === outlet);
+    if (foundNecc) { setNeccrate(foundNecc.rateValue ?? ""); setNeccrateLocked(true); }
+    else { setNeccrate(""); setNeccrateLocked(false); }
 
-    if (foundNecc) {
-      setNeccrate(foundNecc.rateValue ?? "");
-      setNeccrateLocked(true);
-    } else {
-      setNeccrate("");
-      setNeccrateLocked(false);
-    }
-
-    // Incentive — stored under doc.outlets[area]
     const foundIncentive = allIncentiveData.find(doc =>
-      normalizeDate(doc.date || doc.createdAt) === date &&
-      doc.outlets && doc.outlets[outlet] !== undefined
-    );
-
-    if (foundIncentive) {
-      setIncentive(foundIncentive.outlets[outlet]);
-      setIncentiveLocked(true);
-    } else {
-      setIncentive("");
-      setIncentiveLocked(false);
-    }
-    
+      normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
+    if (foundIncentive) { setIncentive(foundIncentive.outlets[outlet]); setIncentiveLocked(true); }
+    else { setIncentive(""); setIncentiveLocked(false); }
 
   }, [outlet, date, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData]);
 
   /* ================= RESET ================= */
   const handleReset = () => {
-    if (!neccrateLocked) setNeccrate("");
-    if (!salesLocked)    setSales("");
-    if (!damagesLocked)  setDamages("");
-    if (!cashLocked)     setCash("");
-    if (!digitalLocked)  setDigital("");
+    if (!neccrateLocked)  setNeccrate("");
+    if (!salesLocked)     setSales("");
+    if (!damagesLocked)   setDamages("");
+    if (!cashLocked)      setCash("");
+    if (!digitalLocked)   setDigital("");
     if (!incentiveLocked) setIncentive("");
   };
 
+  /* ================= DELETE OUTLET DATA FOR DATE (admin only) ================= */
+  const handleDeleteDate = async () => {
+    if (!date || !outlet) return;
+
+    if (!window.confirm(
+      `Are you sure you want to delete all data for outlet "${outlet}" on ${formatDisplayDate(date)}?\n\nThis action cannot be undone.`
+    )) return;
+
+    const token = localStorage.getItem("token");
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+    setIsDeleting(true);
+    try {
+      const encoded = encodeURIComponent(outlet);
+      const endpoints = [
+        `${API}/dailysales/date/${date}/outlet/${encoded}`,
+        `${API}/cash-payments/date/${date}/outlet/${encoded}`,
+        `${API}/digital-payments/date/${date}/outlet/${encoded}`,
+        `${API}/daily-damage/date/${date}/outlet/${encoded}`,
+        `${API}/neccrate/date/${date}/outlet/${encoded}`,
+        `${API}/incentive/date/${date}/outlet/${encoded}`,
+      ];
+
+      await Promise.all(endpoints.map(url =>
+        fetch(url, { method: "DELETE", headers }).then(r => r.json()).catch(e => ({ error: e.message }))
+      ));
+
+      // Reset all fields and locks
+      setNeccrate(""); setNeccrateLocked(false);
+      setSales(""); setSalesLocked(false);
+      setDamages(""); setDamagesLocked(false);
+      setCash(""); setCashLocked(false);
+      setDigital(""); setDigitalLocked(false);
+      setIncentive(""); setIncentiveLocked(false);
+      setSupervisorInfo(null);
+
+      await loadAllData();
+      alert(`Data for "${outlet}" on ${formatDisplayDate(date)} deleted successfully ✅`);
+    } catch (err) {
+      console.error("❌ Error deleting data:", err);
+      alert("Failed to delete data. Please try again.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   /* ================= SUBMIT ================= */
-  // FIX: All API calls now use `outlet` (the area name) as the key.
-  // This is the same key used by DailyDamages, DigitalPayments, and CashPayments
-  // to read data from the backend — so data entered here will immediately
-  // show up correctly in those tables.
   const handleSubmit = async () => {
     if (!outlet || !date) { alert("Please select an outlet and date first."); return; }
 
     const allAlreadyLocked =
-      neccrateLocked &&
-      salesLocked &&
-      damagesLocked &&
-      cashLocked &&
-      digitalLocked &&
-      incentiveLocked;
+      neccrateLocked && salesLocked && damagesLocked &&
+      cashLocked && digitalLocked && incentiveLocked;
+
     if (allAlreadyLocked) {
       alert("All data for this outlet and date is already submitted. No changes to save.");
       return;
     }
 
     const missingFields = [];
-    if (!neccrateLocked && neccrate === "") missingFields.push("NECC Rate");
-    if (!salesLocked    && sales === "")    missingFields.push("Daily Sales");
-    if (!damagesLocked  && damages === "")  missingFields.push("Daily Damages");
-    if (!cashLocked     && cash === "")     missingFields.push("Cash Payment");
-    if (!digitalLocked  && digital === "")  missingFields.push("Digital Payment");
+    if (!neccrateLocked  && neccrate === "")  missingFields.push("NECC Rate");
+    if (!salesLocked     && sales === "")     missingFields.push("Daily Sales");
+    if (!damagesLocked   && damages === "")   missingFields.push("Daily Damages");
+    if (!cashLocked      && cash === "")      missingFields.push("Cash Payment");
+    if (!digitalLocked   && digital === "")   missingFields.push("Digital Payment");
     if (!incentiveLocked && incentive === "") missingFields.push("Daily Incentive");
 
     if (missingFields.length > 0) {
@@ -439,75 +452,55 @@ export default function DataEntry() {
       return;
     }
 
+    let user = null;
+    try { user = JSON.parse(localStorage.getItem("user")); } catch (e) {}
+
+    const addedByInfo = user ? {
+      username:  user.username || user.uid || "Unknown",
+      zone:      user.zoneId   || user.zone || "No Zone",
+      role:      user.role     || "unknown",
+      timestamp: new Date().toISOString(),
+    } : null;
 
     setIsSubmitting(true);
     const tasks = [];
     try {
-      // NECC Rate — keyed by outlet area name
       if (!neccrateLocked && neccrate !== "") {
         tasks.push(fetch(`${API}/neccrate/add`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          // FIX: send outlet (area) not raw id
-          body: JSON.stringify({ date, outletId: outlet, rate: Number(neccrate) }),
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ date, outletId: outlet, rate: Number(neccrate), addedBy: addedByInfo }),
         }));
       }
-
-      // Daily Sales — outlets[area]
       if (!salesLocked && sales !== "") {
         tasks.push(fetch(`${API}/dailysales/add`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ date, outlets: { [outlet]: Number(sales) }, total: Number(sales) }),
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ date, outlets: { [outlet]: Number(sales) }, total: Number(sales), addedBy: addedByInfo }),
         }));
       }
-
-      // Daily Damages — damages[area] (matches DailyDamages spread pattern)
       if (!damagesLocked && damages !== "") {
         tasks.push(fetch(`${API}/daily-damage/add-daily-damage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ date, damages: { [outlet]: Number(damages) }, total: Number(damages) }),
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ date, damages: { [outlet]: Number(damages) }, total: Number(damages), addedBy: addedByInfo }),
         }));
       }
-
       if (!incentiveLocked && incentive !== "") {
-
-        tasks.push(
-          fetch(`${API}/incentive/add`,{
-            method:"POST",
-            headers:{
-              "Content-Type":"application/json"
-            },
-            body:JSON.stringify({
-              date,
-              outlet,
-              value:Number(incentive)
-            })
-          })
-        );
-
+        tasks.push(fetch(`${API}/incentive/add`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ date, outlet, value: Number(incentive), addedBy: addedByInfo }),
+        }));
       }
-
-      // Cash Payments — outlets[area]
       if (!cashLocked && cash !== "") {
         tasks.push(fetch(`${API}/cash-payments/add`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ date, outlets: { [outlet]: Number(cash) } }),
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ date, outlets: { [outlet]: Number(cash) }, addedBy: addedByInfo }),
         }));
       }
-
-      // Digital Payments — outlets[area]
       if (!digitalLocked && digital !== "") {
         tasks.push(fetch(`${API}/digital-payments/add`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ date, outlets: { [outlet]: Number(digital) } }),
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ date, outlets: { [outlet]: Number(digital) }, addedBy: addedByInfo }),
         }));
       }
-
-      if (!incentiveLocked && incentive === "") missingFields.push("Daily Incentive");
 
       const results = await Promise.all(tasks);
       for (const r of results) {
@@ -516,18 +509,14 @@ export default function DataEntry() {
 
       alert("Data saved successfully ✅");
 
-      // Lock all just-submitted fields
-      if (!neccrateLocked && neccrate !== "") setNeccrateLocked(true);
-      if (!salesLocked    && sales !== "")    setSalesLocked(true);
-      if (!damagesLocked  && damages !== "")  setDamagesLocked(true);
-      if (!cashLocked     && cash !== "")     setCashLocked(true);
-      if (!digitalLocked  && digital !== "")  setDigitalLocked(true);
-      if (!incentiveLocked && incentive !== "")
-  setIncentiveLocked(true);
+      if (!neccrateLocked  && neccrate !== "")  setNeccrateLocked(true);
+      if (!salesLocked     && sales !== "")     setSalesLocked(true);
+      if (!damagesLocked   && damages !== "")   setDamagesLocked(true);
+      if (!cashLocked      && cash !== "")      setCashLocked(true);
+      if (!digitalLocked   && digital !== "")   setDigitalLocked(true);
+      if (!incentiveLocked && incentive !== "") setIncentiveLocked(true);
 
-      // Refresh all data so calendar dots and lock states update immediately
       await loadAllData();
-
     } catch (err) {
       console.error(err);
       alert(err.message || "Failed to submit data");
@@ -543,34 +532,34 @@ export default function DataEntry() {
   const cashNum    = Number(cash)     || 0;
   const damagesNum = Number(damages)  || 0;
 
-  const totalAmount    = useMemo(() => +(salesNum * neccNum).toFixed(2), [salesNum, neccNum]);
-  const totalRecv      = useMemo(() => +(digitalNum + cashNum), [digitalNum, cashNum]);
-  const closingBalance = useMemo(() => +(totalRecv - totalAmount), [totalRecv, totalAmount]);
+  const totalAmount    = useMemo(() => +(salesNum * neccNum).toFixed(2),       [salesNum, neccNum]);
+  const totalRecv      = useMemo(() => +(digitalNum + cashNum),                [digitalNum, cashNum]);
+  const closingBalance = useMemo(() => +(totalRecv - totalAmount),             [totalRecv, totalAmount]);
 
   const formatCurrency = (v) => `₹${Number(v || 0).toLocaleString()}`;
 
   const hasUnlockedValue =
-    (!neccrateLocked && neccrate !== "") ||
-    (!salesLocked    && sales !== "")    ||
-    (!damagesLocked  && damages !== "")  ||
-    (!cashLocked     && cash !== "")     ||
-    (!digitalLocked  && digital !== "");
+    (!neccrateLocked && neccrate !== "") || (!salesLocked && sales !== "") ||
+    (!damagesLocked  && damages !== "")  || (!cashLocked  && cash !== "")  ||
+    (!digitalLocked  && digital !== "")  || (!incentiveLocked && incentive !== "");
 
   const allAlreadyLocked =
-    neccrateLocked &&
-    salesLocked &&
-    damagesLocked &&
-    cashLocked &&
-    digitalLocked &&
-    incentiveLocked;
+    neccrateLocked && salesLocked && damagesLocked &&
+    cashLocked && digitalLocked && incentiveLocked;
+
   const allUnlockedFilled =
-    (neccrateLocked || neccrate !== "") &&
-    (salesLocked || sales !== "") &&
-    (damagesLocked || damages !== "") &&
-    (cashLocked || cash !== "") &&
-    (digitalLocked || digital !== "") &&
+    (neccrateLocked  || neccrate !== "")  &&
+    (salesLocked     || sales !== "")     &&
+    (damagesLocked   || damages !== "")   &&
+    (cashLocked      || cash !== "")      &&
+    (digitalLocked   || digital !== "")   &&
     (incentiveLocked || incentive !== "");
+
   const canSubmit = !allAlreadyLocked && allUnlockedFilled;
+
+  const hasDataForOutlet = supervisorInfo || allAlreadyLocked ||
+    salesLocked || cashLocked || digitalLocked ||
+    damagesLocked || neccrateLocked || incentiveLocked;
 
   const inputCls = (locked) => [
     "w-full border p-3 rounded-xl text-sm text-gray-800 md:text-base transition-colors",
@@ -598,7 +587,6 @@ export default function DataEntry() {
             value={outlet}
             onChange={e => {
               const val = e.target.value;
-              // FIX: find the outlet by area key (val IS the area now)
               const selected = outlets.find(o => (o.area || o.name || o.id) === val);
               if (selected && selected.status === "Inactive") {
                 setOutlet(val);
@@ -609,14 +597,11 @@ export default function DataEntry() {
               setOutletInactive(false);
               setOutletInactiveMsg("");
               setOutlet(val);
-              setDate(""); // reset date when outlet changes
+              setDate("");
             }}
           >
             <option value="">Select Outlet</option>
             {outlets.map(o => {
-              // FIX: use area as BOTH the option value AND display name.
-              // area is the key used across ALL pages (DailyDamages, DigitalPayments,
-              // CashPayments) to store and read outlet data.
               const area   = o.area || o.name || o.id;
               const status = o.status || "Active";
               return (
@@ -631,7 +616,7 @@ export default function DataEntry() {
           )}
         </div>
 
-        {/* ---- Date — DataCalendar picker ---- */}
+        {/* ---- Date Picker ---- */}
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Date</label>
           <div className="relative w-full z-30" ref={calendarRef}>
@@ -667,20 +652,56 @@ export default function DataEntry() {
           )}
         </div>
 
-        {/* ---- Fields (only show once outlet + date are selected) ---- */}
+        {/* ---- Fields ---- */}
         {outlet && date && (
           <>
+            {/* All data submitted banner */}
             {allAlreadyLocked && (
               <div className="mb-4 rounded-xl bg-green-50 border border-green-200 px-4 py-3 flex items-center gap-2">
                 <div className="text-green-600 text-lg">✅</div>
                 <div>
                   <p className="text-sm font-semibold text-green-700">All data submitted</p>
-                  <p className="text-xs text-green-600">All 5 fields for this outlet and date are already saved. No further edits allowed.</p>
+                  <p className="text-xs text-green-600">All fields for this outlet and date are already saved. No further edits allowed.</p>
                 </div>
               </div>
             )}
 
-            {/* ---- NECC Rate and Daily Incentive (side by side) ---- */}
+            {/* Added By Info */}
+            {supervisorInfo?.username && (
+              <div className="mb-4 rounded-xl bg-blue-50 border border-blue-200 px-4 py-3">
+                <p className="text-xs md:text-sm text-blue-700">
+                  <span className="font-semibold">
+                    📝 Added by supervisor of zone {supervisorInfo.zone || "Unknown"}
+                  </span>
+                </p>
+              </div>
+            )}
+
+            {/* ---- Delete Button (admin only) ---- */}
+            {isAdmin && hasDataForOutlet && (
+              <div className="mb-4">
+                <button
+                  onClick={handleDeleteDate}
+                  disabled={isDeleting}
+                  className={[
+                    "w-full py-2 px-4 rounded-lg text-sm font-semibold transition-colors",
+                    isDeleting
+                      ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                      : "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100",
+                  ].join(" ")}
+                >
+                  {isDeleting ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <Spinner /> Deleting...
+                    </div>
+                  ) : (
+                    `🗑️ Delete Data for "${outlet}" on This Date`
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* ---- NECC Rate + Daily Incentive ---- */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">
@@ -688,34 +709,23 @@ export default function DataEntry() {
                   <span className="ml-1 text-xs text-gray-400 font-normal">(per outlet)</span>
                 </label>
                 <input
-                  type="number"
-                  step="0.01"
-                  placeholder="NECC Rate for this outlet"
+                  type="number" step="0.01" placeholder="NECC Rate for this outlet"
                   className={inputCls(neccrateLocked)}
-                  value={neccrate}
-                  disabled={neccrateLocked || outletInactive}
+                  value={neccrate} disabled={neccrateLocked || outletInactive}
                   onChange={e => setNeccrate(e.target.value)}
                 />
                 {neccrateLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">
-                  Daily Incentive
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Daily Incentive</label>
                 <input
-                  type="number"
-                  placeholder="Daily Incentive"
+                  type="number" placeholder="Daily Incentive"
                   className={inputCls(incentiveLocked)}
-                  value={incentive}
-                  disabled={incentiveLocked}
-                  onChange={(e)=>setIncentive(e.target.value)}
+                  value={incentive} disabled={incentiveLocked || outletInactive}
+                  onChange={e => setIncentive(e.target.value)}
                 />
-                {incentiveLocked &&
-                <div className="text-xs text-green-700 mt-1">
-                ✓ Already entered
-                </div>
-                }
+                {incentiveLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
               </div>
             </div>
 
@@ -832,13 +842,7 @@ export default function DataEntry() {
                     ].join(" ")}
                   >
                     {isSubmitting ? (
-                      <>
-                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                        </svg>
-                        Saving...
-                      </>
+                      <><Spinner /> Saving...</>
                     ) : outletInactive ? "Outlet Inactive" : "Submit"}
                   </button>
                 </div>
@@ -847,7 +851,7 @@ export default function DataEntry() {
           </>
         )}
 
-        {/* Placeholder when outlet/date not selected */}
+        {/* Placeholder */}
         {(!outlet || !date) && (
           <div className="mt-6 rounded-xl border-2 border-dashed border-gray-200 py-10 text-center text-gray-400">
             <div className="text-3xl mb-2">📋</div>
