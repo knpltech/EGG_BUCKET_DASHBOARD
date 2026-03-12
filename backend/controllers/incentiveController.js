@@ -4,7 +4,7 @@ import { db } from "../config/firebase.js";
 export const addIncentive = async (req, res) => {
   try {
 
-    const { date, outlet, value } = req.body;
+    const { date, outlet, value, addedBy } = req.body;
 
     if (!date || !outlet || value === undefined) {
       return res.status(400).json({ error: "Missing fields" });
@@ -27,20 +27,48 @@ export const addIncentive = async (req, res) => {
 
       const newTotal = (data.total || 0) + Number(value);
 
-      await ref.update({
+      const updatedData = {
         [`outlets.${outlet}`]: Number(value),
         total: newTotal
-      });
+      };
+      
+      // Store addedBy info per outlet
+      if (addedBy) {
+        const addedByPerOutlet = data.addedByPerOutlet || {};
+        addedByPerOutlet[outlet] = {
+          username: addedBy.username,
+          zone: addedBy.zone,
+          role: addedBy.role,
+          timestamp: addedBy.timestamp
+        };
+        updatedData.addedByPerOutlet = addedByPerOutlet;
+      }
+
+      await ref.update(updatedData);
 
     } else {
 
-      await ref.set({
+      const docData = {
         date,
         outlets: {
           [outlet]: Number(value)
         },
         total: Number(value)
-      });
+      };
+      
+      // Store addedBy info per outlet
+      if (addedBy) {
+        docData.addedByPerOutlet = {
+          [outlet]: {
+            username: addedBy.username,
+            zone: addedBy.zone,
+            role: addedBy.role,
+            timestamp: addedBy.timestamp
+          }
+        };
+      }
+      
+      await ref.set(docData);
 
     }
 

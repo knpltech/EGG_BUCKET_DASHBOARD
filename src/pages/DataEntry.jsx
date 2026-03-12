@@ -178,6 +178,9 @@ export default function DataEntry() {
   const [allIncentiveData, setAllIncentiveData] = useState([]);
   const [incentive,setIncentive] = useState("");
 
+  // Track supervisor info for this specific outlet
+  const [supervisorInfo, setSupervisorInfo] = useState(null);
+
   // Per-field values & locks
   const [neccrate,       setNeccrate]       = useState("");
   const [neccrateLocked, setNeccrateLocked] = useState(false);
@@ -191,6 +194,8 @@ export default function DataEntry() {
   const [digitalLocked,  setDigitalLocked]  = useState(false);
   const [incentiveLocked,setIncentiveLocked] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const { isAdmin } = getRoleFlags();
 
   /* ---- click outside calendar ---- */
   useEffect(() => {
@@ -318,6 +323,61 @@ export default function DataEntry() {
     return { completedDates: completed };
   }, [outlet, date, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData]);
 
+  /* ================= FETCH SUPERVISOR INFO FOR SELECTED OUTLET + DATE ================= */
+  useEffect(() => {
+    if (!date || !outlet) {
+      setSupervisorInfo(null);
+      return;
+    }
+    
+    // Look for supervisor info for this specific outlet from any collection
+    // Check sales first
+    const salesEntry = allSalesData.find(doc => normalizeDate(doc.date || doc.createdAt) === date);
+    if (salesEntry && salesEntry.addedByPerOutlet && salesEntry.addedByPerOutlet[outlet]) {
+      setSupervisorInfo(salesEntry.addedByPerOutlet[outlet]);
+      return;
+    }
+    
+    // Check cash
+    const cashEntry = allCashData.find(doc => normalizeDate(doc.date || doc.createdAt) === date);
+    if (cashEntry && cashEntry.addedByPerOutlet && cashEntry.addedByPerOutlet[outlet]) {
+      setSupervisorInfo(cashEntry.addedByPerOutlet[outlet]);
+      return;
+    }
+    
+    // Check digital
+    const digitalEntry = allDigitalData.find(doc => normalizeDate(doc.date || doc.createdAt) === date);
+    if (digitalEntry && digitalEntry.addedByPerOutlet && digitalEntry.addedByPerOutlet[outlet]) {
+      setSupervisorInfo(digitalEntry.addedByPerOutlet[outlet]);
+      return;
+    }
+    
+    // Check damages
+    const damagesEntry = allDamagesData.find(doc => normalizeDate(doc.date || doc.createdAt) === date);
+    if (damagesEntry && damagesEntry.addedByPerOutlet && damagesEntry.addedByPerOutlet[outlet]) {
+      setSupervisorInfo(damagesEntry.addedByPerOutlet[outlet]);
+      return;
+    }
+    
+    // Check necc - this one has addedBy directly (per outlet)
+    const neccEntry = allNeccData.find(doc => 
+      normalizeDate(doc.date || doc.createdAt) === date && doc.outletId === outlet
+    );
+    if (neccEntry && neccEntry.addedBy) {
+      setSupervisorInfo(neccEntry.addedBy);
+      return;
+    }
+    
+    // Check incentive
+    const incentiveEntry = allIncentiveData.find(doc => normalizeDate(doc.date || doc.createdAt) === date);
+    if (incentiveEntry && incentiveEntry.addedByPerOutlet && incentiveEntry.addedByPerOutlet[outlet]) {
+      setSupervisorInfo(incentiveEntry.addedByPerOutlet[outlet]);
+      return;
+    }
+    
+    setSupervisorInfo(null);
+  }, [date, outlet, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData]);
+
   /* ================= LOCK CHECK WHEN OUTLET + DATE CHANGE ================= */
   useEffect(() => {
     if (!outlet || !date) {
@@ -406,6 +466,70 @@ export default function DataEntry() {
     if (!incentiveLocked) setIncentive("");
   };
 
+  /* ================= DELETE ALL DATA FOR DATE ================= */
+  const handleDeleteDate = async () => {
+    if (!date) {
+      return;
+    }
+    
+    if (!window.confirm(`Are you sure you want to delete ALL data for ${formatDisplayDate(date)}? This action cannot be undone.`)) {
+      return;
+    }
+    
+    setIsDeleting(true);
+    try {
+      const endpoints = [
+        `${API}/dailysales/date/${date}`,
+        `${API}/cash-payments/date/${date}`,
+        `${API}/digital-payments/date/${date}`,
+        `${API}/daily-damage/date/${date}`,
+        `${API}/neccrate/date/${date}`
+      ];
+      
+      console.log("🗑️ Deleting data for date:", date);
+      console.log("📡 Making DELETE requests to:", endpoints);
+      
+      const results = await Promise.all(endpoints.map(url =>
+        fetch(url, { method: "DELETE" })
+          .then(r => {
+            console.log(`Response from ${url}: status ${r.status}`);
+            return r.json();
+          })
+          .catch(e => {
+            console.error(`Error fetching ${url}:`, e);
+            return { error: e.message };
+          })
+      ));
+      
+      console.log("📨 Delete API responses:", results);
+      
+      // Log each endpoint's result
+      results.forEach((r, idx) => {
+        console.log(`${endpoints[idx]}: deleted ${r.count || 0} documents`);
+      });
+      
+      const totalDeleted = results.reduce((sum, r) => sum + (r.count || 0), 0);
+      console.log("✅ Total documents deleted:", totalDeleted);
+      
+      if (totalDeleted > 0) {
+        // Reset all fields
+        setNeccrate(""); setNeccrateLocked(false);
+        setSales(""); setSalesLocked(false);
+        setDamages(""); setDamagesLocked(false);
+        setCash(""); setCashLocked(false);
+        setDigital(""); setDigitalLocked(false);
+        setIncentive(""); setIncentiveLocked(false);
+        setSupervisorInfo(null);
+        // Refresh all data
+        await loadAllData();
+      }
+    } catch (err) {
+      console.error("❌ Error deleting data:", err);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   /* ================= SUBMIT ================= */
   // FIX: All API calls now use `outlet` (the area name) as the key.
   // This is the same key used by DailyDamages, DigitalPayments, and CashPayments
@@ -439,6 +563,20 @@ export default function DataEntry() {
       return;
     }
 
+    // Extract current user info from localStorage
+    let user = null;
+    try {
+      user = JSON.parse(localStorage.getItem("user"));
+    } catch (e) {
+      console.error("Error parsing user:", e);
+    }
+    
+    const addedByInfo = user ? {
+      username: user.username || user.uid || "Unknown",
+      zone: user.zoneId || user.zone || "No Zone",
+      role: user.role || "unknown",
+      timestamp: new Date().toISOString()
+    } : null;
 
     setIsSubmitting(true);
     const tasks = [];
@@ -449,7 +587,7 @@ export default function DataEntry() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           // FIX: send outlet (area) not raw id
-          body: JSON.stringify({ date, outletId: outlet, rate: Number(neccrate) }),
+          body: JSON.stringify({ date, outletId: outlet, rate: Number(neccrate), addedBy: addedByInfo }),
         }));
       }
 
@@ -458,7 +596,7 @@ export default function DataEntry() {
         tasks.push(fetch(`${API}/dailysales/add`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ date, outlets: { [outlet]: Number(sales) }, total: Number(sales) }),
+          body: JSON.stringify({ date, outlets: { [outlet]: Number(sales) }, total: Number(sales), addedBy: addedByInfo }),
         }));
       }
 
@@ -467,7 +605,7 @@ export default function DataEntry() {
         tasks.push(fetch(`${API}/daily-damage/add-daily-damage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ date, damages: { [outlet]: Number(damages) }, total: Number(damages) }),
+          body: JSON.stringify({ date, damages: { [outlet]: Number(damages) }, total: Number(damages), addedBy: addedByInfo }),
         }));
       }
 
@@ -482,7 +620,8 @@ export default function DataEntry() {
             body:JSON.stringify({
               date,
               outlet,
-              value:Number(incentive)
+              value:Number(incentive),
+              addedBy: addedByInfo
             })
           })
         );
@@ -494,7 +633,7 @@ export default function DataEntry() {
         tasks.push(fetch(`${API}/cash-payments/add`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ date, outlets: { [outlet]: Number(cash) } }),
+          body: JSON.stringify({ date, outlets: { [outlet]: Number(cash) }, addedBy: addedByInfo }),
         }));
       }
 
@@ -503,7 +642,7 @@ export default function DataEntry() {
         tasks.push(fetch(`${API}/digital-payments/add`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ date, outlets: { [outlet]: Number(digital) } }),
+          body: JSON.stringify({ date, outlets: { [outlet]: Number(digital) }, addedBy: addedByInfo }),
         }));
       }
 
@@ -677,6 +816,45 @@ export default function DataEntry() {
                   <p className="text-sm font-semibold text-green-700">All data submitted</p>
                   <p className="text-xs text-green-600">All 5 fields for this outlet and date are already saved. No further edits allowed.</p>
                 </div>
+              </div>
+            )}
+
+            {/* ---- Added By Information (visible to all) ---- */}
+            {supervisorInfo && supervisorInfo.username && (
+              <div className="mb-4 rounded-xl bg-blue-50 border border-blue-200 px-4 py-3">
+                <p className="text-xs md:text-sm text-blue-700">
+                  <span className="font-semibold">
+                    📝 Added by supervisor of zone {supervisorInfo.zone || 'Unknown'}
+                  </span>
+                </p>
+              </div>
+            )}
+
+            {/* ---- Delete Button (admin only, visible when data exists) ---- */}
+            {isAdmin && (supervisorInfo || allAlreadyLocked) && (
+              <div className="mb-4">
+                <button
+                  onClick={handleDeleteDate}
+                  disabled={isDeleting}
+                  className={[
+                    "w-full py-2 px-4 rounded-lg text-sm font-semibold transition-colors",
+                    isDeleting
+                      ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                      : "bg-red-50 text-red-600 border border-red-200 hover:bg-red-100"
+                  ].join(" ")}
+                >
+                  {isDeleting ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Deleting...
+                    </div>
+                  ) : (
+                    "🗑️ Delete All Data for This Date"
+                  )}
+                </button>
               </div>
             )}
 
