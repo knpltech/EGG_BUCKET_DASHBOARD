@@ -1,5 +1,4 @@
 import express from "express";
-import { verifyAdmin } from "../middleware/authMiddleware.js";
 import {
   addDailySales,
   getAllDailySales,
@@ -10,8 +9,8 @@ import {
 
 const router = express.Router();
 
-router.delete("/date/:date/outlet/:outletId", verifyAdmin, deleteDailySalesByOutletAndDate);
-router.delete("/date/:date", verifyAdmin, deleteDailySalesByDate);
+router.delete("/date/:date/outlet/:outletId", deleteDailySalesByOutletAndDate);
+router.delete("/date/:date", deleteDailySalesByDate);
 router.get("/all", getAllDailySales);
 router.post("/add", addDailySales);
 router.patch("/:id", updateDailySales);

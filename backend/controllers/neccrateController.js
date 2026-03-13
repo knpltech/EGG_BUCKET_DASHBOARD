@@ -52,21 +52,10 @@ export const updateNeccRate = async (req, res) => {
     const { id } = req.params;
     const { date, outletId, outlet, rate, remarks } = req.body;
     const outletValue = outletId || outlet;
-    if (!date || !outletValue || rate === undefined || rate === null) {
+    if (!date || !outletValue || !rate) {
       return res.status(400).json({ message: "Missing required field: date, outletId/outlet, or rate" });
     }
-    const numericRate = typeof rate === "number" ? rate : Number(String(rate).replace(/[^\d.]/g, ""));
-    if (isNaN(numericRate)) {
-      return res.status(400).json({ message: "Invalid rate value" });
-    }
-    const updateData = {
-      date,
-      outletId: outletValue,
-      outlet: outletValue,
-      rate: `₹${numericRate.toFixed(2)} per egg`,
-      rateValue: numericRate,
-      remarks: remarks || "—",
-    };
+    const updateData = { date, outletId: outletValue, outlet: outletValue, rate, remarks: remarks || "—" };
     const docRef = db.collection("neccRates").doc(id);
     await docRef.update(updateData);
     const updatedDoc = await docRef.get();

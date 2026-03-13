@@ -1,5 +1,4 @@
 import express from "express";
-import { verifyAdmin } from "../middleware/authMiddleware.js";
 import {
   addIncentive,
   getAllIncentives,
@@ -10,8 +9,8 @@ import {
 
 const router = express.Router();
 
-router.delete("/date/:date/outlet/:outletId", verifyAdmin, deleteIncentiveByOutletAndDate);
-router.delete("/date/:date", verifyAdmin, deleteIncentivesByDate);
+router.delete("/date/:date/outlet/:outletId", deleteIncentiveByOutletAndDate);
+router.delete("/date/:date", deleteIncentivesByDate);
 router.post("/add", addIncentive);
 router.get("/all", getAllIncentives);
 router.patch("/:id", updateIncentive);
