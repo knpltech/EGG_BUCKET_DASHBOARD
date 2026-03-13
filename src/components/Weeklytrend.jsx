@@ -93,7 +93,6 @@ function formatYAxis(value) {
 const Weeklytrend = ({ rows = [], outlets: allowedOutlets = [] }) => {
   const [chartData, setChartData] = useState([]);
   const [outletKeys, setOutletKeys] = useState([]);
-  const hasOutletRestriction = Array.isArray(allowedOutlets);
 
   // map id -> display name AND create reverse mapping (area -> id)
   const { nameMap, areaToIdMap } = useMemo(() => {
@@ -131,13 +130,12 @@ const Weeklytrend = ({ rows = [], outlets: allowedOutlets = [] }) => {
       days.push(d);
     }
 
-    // Use the provided outlet list as the source of truth.
-    // If a filtered page passes an empty array, the chart must stay empty instead of
-    // falling back to row keys from other zones.
+    // Use allowedOutlets as the source for outlet keys (so ALL outlets appear in chart)
+    // This ensures newly created outlets and those without sales also show up
     let outlets = [];
     if (Array.isArray(allowedOutlets) && allowedOutlets.length > 0) {
       outlets = allowedOutlets.map(o => (typeof o === 'string' ? o : o.id || o.area || o.name));
-    } else if (!hasOutletRestriction) {
+    } else {
       // Fallback: collect outlet names from rows if no allowedOutlets provided
       const outletSet = new Set();
       rows.forEach(r => {
@@ -190,7 +188,7 @@ const Weeklytrend = ({ rows = [], outlets: allowedOutlets = [] }) => {
     });
 
     setChartData(finalData);
-  }, [rows, allowedOutlets, nameMap, hasOutletRestriction]);
+  }, [rows, allowedOutlets, nameMap]);
 
   const COLORS = [
     "#f97316",
@@ -216,9 +214,9 @@ const Weeklytrend = ({ rows = [], outlets: allowedOutlets = [] }) => {
 
       {/* CHART */}
       <div className="flex-1">
-        {chartData.length === 0 || outletKeys.length === 0 ? (
+        {chartData.length === 0 ? (
           <p className="text-gray-400 text-sm text-center mt-16">
-            No outlets available for this view
+            No data available
           </p>
         ) : (
           <ResponsiveContainer width="100%" height="100%">

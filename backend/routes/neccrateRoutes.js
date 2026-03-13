@@ -1,5 +1,4 @@
 import express from "express";
-import { verifyAdmin } from "../middleware/authMiddleware.js";
 import {
   addNeccRate,
   getAllNeccRates,
@@ -10,8 +9,8 @@ import {
 
 const router = express.Router();
 
-router.delete("/date/:date/outlet/:outletId", verifyAdmin, deleteNeccRateByOutletAndDate);
-router.delete("/date/:date", verifyAdmin, deleteNeccRatesByDate);
+router.delete("/date/:date/outlet/:outletId", deleteNeccRateByOutletAndDate);
+router.delete("/date/:date", deleteNeccRatesByDate);
 router.get("/all", getAllNeccRates);
 router.post("/add", addNeccRate);
 router.patch("/:id", updateNeccRate);

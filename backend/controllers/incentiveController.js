@@ -112,7 +112,7 @@ export const deleteIncentiveByOutletAndDate = async (req, res) => {
     delete addedByPerOutlet[outletId];
     const newTotal = Object.values(outlets).reduce((sum, v) => sum + (Number(v) || 0), 0);
 
-    await ref.update({ outlets, addedByPerOutlet, total: newTotal, updatedAt: new Date() });
+    await ref.update({ outlets, addedByPerOutlet, total: newTotal });
     res.status(200).json({ message: `Outlet ${outletId} removed from incentive for ${date}`, count: 1 });
   } catch (err) {
     res.status(500).json({ error: err.message });
