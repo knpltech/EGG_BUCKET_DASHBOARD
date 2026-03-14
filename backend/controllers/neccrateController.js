@@ -5,10 +5,13 @@ export const addNeccRate = async (req, res) => {
   try {
     const { date, outletId, outlet, rate, remarks, addedBy } = req.body;
     const outletValue = outletId || outlet;
-    if (!date || !outletValue || !rate) {
+    if (!date || !outletValue || rate === undefined || rate === null) {
       return res.status(400).json({ message: "Missing required field: date, outletId/outlet, or rate" });
     }
     const numericRate = Number(rate);
+    if (!Number.isFinite(numericRate)) {
+      return res.status(400).json({ message: "Rate must be a valid number" });
+    }
     const docData = {
       date,
       outletId: outletValue,
@@ -52,10 +55,22 @@ export const updateNeccRate = async (req, res) => {
     const { id } = req.params;
     const { date, outletId, outlet, rate, remarks } = req.body;
     const outletValue = outletId || outlet;
-    if (!date || !outletValue || !rate) {
+    if (!date || !outletValue || rate === undefined || rate === null) {
       return res.status(400).json({ message: "Missing required field: date, outletId/outlet, or rate" });
     }
-    const updateData = { date, outletId: outletValue, outlet: outletValue, rate, remarks: remarks || "—" };
+    const numericRate = Number(rate);
+    if (!Number.isFinite(numericRate)) {
+      return res.status(400).json({ message: "Rate must be a valid number" });
+    }
+    const updateData = {
+      date,
+      outletId: outletValue,
+      outlet: outletValue,
+      rate: `₹${numericRate.toFixed(2)} per egg`,
+      rateValue: numericRate,
+      remarks: remarks || "—",
+      updatedAt: new Date(),
+    };
     const docRef = db.collection("neccRates").doc(id);
     await docRef.update(updateData);
     const updatedDoc = await docRef.get();
