@@ -80,10 +80,16 @@ export default function SignIn() {
           navigate('/');
         }
       } else {
-        alert(data.message || 'Invalid credentials');
+        const backendMessage = data?.error || data?.message || 'Invalid credentials';
+        if (response.status === 429 && data?.code === 'FIRESTORE_QUOTA_EXCEEDED') {
+          const retryText = data?.retryAfterSeconds ? ` Retry in ${data.retryAfterSeconds}s.` : '';
+          alert(`${backendMessage}${retryText}`);
+        } else {
+          alert(backendMessage);
+        }
       }
     } catch (err) {
-      alert('Server error');
+      alert(err?.message || 'Server error');
     } finally {
       setLoading(false);
     }

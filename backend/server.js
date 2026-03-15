@@ -3,7 +3,7 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
-import { db } from "./config/firebase.js"; // Import db for warmup
+import { db } from "./config/firebase.js";
 
 import authRoutes from "./routes/authRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
@@ -24,15 +24,17 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ✅ Warm up Firestore connection on startup (prevents cold start delays)
-(async () => {
-  try {
-    await db.collection("admin").limit(1).get();
-    console.log("✅ Firestore connection warmed up");
-  } catch (err) {
-    console.log("⚠️ Firestore warmup failed:", err.message);
-  }
-})();
+// Optional Firestore warmup. Keep disabled by default to avoid an extra read on startup.
+if (String(process.env.ENABLE_FIRESTORE_WARMUP || "").toLowerCase() === "true") {
+  (async () => {
+    try {
+      await db.collection("admin").limit(1).get();
+      console.log("✅ Firestore connection warmed up");
+    } catch (err) {
+      console.log("⚠️ Firestore warmup failed:", err.message);
+    }
+  })();
+}
 
 // ✅ API health check
 app.get("/api", (req, res) => {

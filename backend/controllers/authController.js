@@ -7,6 +7,22 @@ import bcrypt from "bcryptjs";
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) throw new Error("JWT_SECRET is not set");
 
+const isFirestoreQuotaError = (err) => {
+  if (!err) return false;
+  const code = String(err.code ?? "").toLowerCase();
+  const details = String(err.details || err.message || "").toLowerCase();
+  return (
+    code === "8" ||
+    code === "resource-exhausted" ||
+    details.includes("quota exceeded") ||
+    details.includes("resource_exhausted") ||
+    details.includes("resource exhausted") ||
+    details.includes("quota")
+  );
+};
+
+const LOGIN_QUOTA_RETRY_SECONDS = Number(process.env.LOGIN_QUOTA_RETRY_SECONDS || 60);
+
 
 export const loginUser = async (req, res) => {
   try {
@@ -112,6 +128,20 @@ return res.json({
 });
 
   }catch (err) { 
+    if (isFirestoreQuotaError(err)) {
+      console.error("loginUser firestore quota error:", err.message);
+      const retryAfter = Number.isFinite(LOGIN_QUOTA_RETRY_SECONDS) && LOGIN_QUOTA_RETRY_SECONDS > 0
+        ? Math.floor(LOGIN_QUOTA_RETRY_SECONDS)
+        : 60;
+      res.set("Retry-After", String(retryAfter));
+      return res.status(429).json({
+        success: false,
+        error: "Firestore quota exceeded. Please wait and retry.",
+        code: "FIRESTORE_QUOTA_EXCEEDED",
+        retryAfterSeconds: retryAfter,
+      });
+    }
+
     console.error("loginUser error:", err); 
     return res.status(500).json({ success: false, error: err.message }); 
   } 
