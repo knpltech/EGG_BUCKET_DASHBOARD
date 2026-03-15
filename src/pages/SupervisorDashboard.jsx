@@ -87,7 +87,7 @@ const getDamageValueForOutlet = (doc, outlet) => {
 const getTodaySalesTotal = (rows, outlets, today) => {
   const doc = getLatestDayDoc(rows, today);
   if (!doc) return 0;
-  if (!Array.isArray(outlets) || outlets.length === 0) return Number(doc.total) || 0;
+  if (!Array.isArray(outlets) || outlets.length === 0) return 0;
 
   return outlets.reduce((sum, outlet) => sum + getSalesValueForOutlet(doc, outlet), 0);
 };
@@ -95,7 +95,7 @@ const getTodaySalesTotal = (rows, outlets, today) => {
 const getTodayDamageTotal = (rows, outlets, today) => {
   const doc = getLatestDayDoc(rows, today);
   if (!doc) return 0;
-  if (!Array.isArray(outlets) || outlets.length === 0) return Number(doc.total) || 0;
+  if (!Array.isArray(outlets) || outlets.length === 0) return 0;
 
   return outlets.reduce((sum, outlet) => sum + getDamageValueForOutlet(doc, outlet), 0);
 };
@@ -174,6 +174,15 @@ export default function SupervisorDashboard() {
     return normalizedUserZones.map(formatZoneLabel).join(", ");
   }, [normalizedUserZones]);
 
+  const supervisorUsername = useMemo(() => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user"));
+      return user?.username ? `@${user.username}` : "";
+    } catch {
+      return "";
+    }
+  }, []);
+
   useEffect(() => {
     const today = getLocalIsoDate();
 
@@ -248,6 +257,11 @@ export default function SupervisorDashboard() {
           <h1 className="text-3xl font-bold mb-4">
             Supervisor Dashboard{zoneTitle ? ` - ${zoneTitle}` : ""}
           </h1>
+          {supervisorUsername ? (
+            <p className="mb-4 inline-flex items-center rounded-full border border-orange-200 bg-orange-50 px-4 py-1 text-base font-bold tracking-wide text-orange-700 shadow-sm">
+              {supervisorUsername}
+            </p>
+          ) : null}
           <p className="mb-6 text-gray-600">Today&apos;s overview for your assigned zone outlets.</p>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -270,8 +284,8 @@ export default function SupervisorDashboard() {
             </Link>
             <Link to="/supervisor/dailysales" className="rounded-xl bg-orange-100 p-6 shadow hover:bg-orange-200 transition flex flex-col items-center">
               <span className="text-2xl mb-2">📊</span>
-              <span className="font-semibold text-lg">Daily Sales</span>
-              <span className="text-xs text-gray-500 mt-1">Enter and view daily sales</span>
+              <span className="font-semibold text-lg">Daily Sales Quantity</span>
+              <span className="text-xs text-gray-500 mt-1">Enter and view daily sales quantity</span>
             </Link>
             <Link to="/supervisor/digital-payments" className="rounded-xl bg-orange-100 p-6 shadow hover:bg-orange-200 transition flex flex-col items-center">
               <span className="text-2xl mb-2">💳</span>

@@ -114,6 +114,35 @@ const Dailysales = () => {
     return sorted;
   }, [rows, fromDate, toDate]);
 
+  const visibleOutlets = useMemo(() => (isSupervisor ? formOutlets : outlets), [isSupervisor, formOutlets, outlets]);
+
+  const getOutletSaleValue = useCallback((row, outletRef) => {
+    const outletObj = typeof outletRef === "object" ? outletRef : null;
+    const outletId = outletObj?.id || outletRef;
+    const outletArea = outletObj?.area || outletObj?.name;
+    const values = row?.outlets || {};
+    if (values[outletId] !== undefined) return Number(values[outletId]) || 0;
+    if (outletArea && values[outletArea] !== undefined) return Number(values[outletArea]) || 0;
+    return 0;
+  }, []);
+
+  const scopedRows = useMemo(() => {
+    if (!Array.isArray(filteredRows)) return [];
+    const refs = Array.isArray(visibleOutlets) ? visibleOutlets : [];
+
+    return filteredRows.map((row) => {
+      const scopedOutlets = {};
+      refs.forEach((outletRef) => {
+        const outletObj = typeof outletRef === "object" ? outletRef : null;
+        const outletId = outletObj?.id || outletRef;
+        scopedOutlets[outletId] = getOutletSaleValue(row, outletRef);
+      });
+
+      const scopedTotal = Object.values(scopedOutlets).reduce((sum, v) => sum + (Number(v) || 0), 0);
+      return { ...row, outlets: scopedOutlets, total: scopedTotal };
+    });
+  }, [filteredRows, visibleOutlets, getOutletSaleValue]);
+
   /* ================= EDIT (ADMIN ONLY) ================= */
   const handleEditClick = (row) => {
     if (!isAdmin) return;
@@ -226,7 +255,7 @@ const Dailysales = () => {
           <Dailyheader
             title={"Daily Sales Quantity"}
             subtitle={"Manage and track daily egg sales across all outlets."}
-            dailySalesData={filteredRows}
+            dailySalesData={scopedRows}
             fromDate={fromDate}
             toDate={toDate}
             setFromDate={setFromDate}
@@ -238,9 +267,9 @@ const Dailysales = () => {
 
         {(isAdmin || isViewer || isDataAgent || isSupervisor) && outlets.length > 0 && (
           <DailyTable
-            rows={filteredRows}
-            outlets={(isSupervisor ? formOutlets : outlets).map(o => typeof o === 'string' ? o : o.id)}
-            allOutlets={outlets}
+            rows={scopedRows}
+            outlets={visibleOutlets.map(o => typeof o === 'string' ? o : o.id)}
+            allOutlets={visibleOutlets}
             onEdit={isAdmin ? handleEditClick : null}
           />
         )}
@@ -279,7 +308,7 @@ const Dailysales = () => {
 
         {(isAdmin || isSupervisor || isViewer) && outlets.length > 0 && (
           <div className="mt-10">
-            <Weeklytrend rows={rows} outlets={formOutlets} />
+            <Weeklytrend rows={scopedRows} outlets={visibleOutlets} />
           </div>
         )}
       </div>

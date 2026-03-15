@@ -3,7 +3,6 @@ import { useState, useEffect } from "react";
 import logo from "../assets/Logo.png";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faUserPlus } from "@fortawesome/free-solid-svg-icons";
-import { faIndianRupeeSign } from "@fortawesome/free-solid-svg-icons";
 import { faMoneyBillWave } from "@fortawesome/free-solid-svg-icons";
 import { faGift } from "@fortawesome/free-solid-svg-icons";
 import {
@@ -105,8 +104,8 @@ export default function Sidebar({ supervisor }) {
               {open && "Incentive"}
             </Link>
             <Link to="/supervisor/dailysales" className={linkClass("/supervisor/dailysales")}> 
-              <FontAwesomeIcon icon={faIndianRupeeSign} />
-              {open && "Daily Sales"}
+              <FontAwesomeIcon icon={faEgg} />
+              {open && "Daily Sales Quantity"}
             </Link>
             <Link to="/supervisor/digital-payments" className={linkClass("/supervisor/digital-payments")}> 
               <FontAwesomeIcon icon={faWallet} />
@@ -146,7 +145,7 @@ export default function Sidebar({ supervisor }) {
               {open && "Incentive"}
             </Link>
             <Link to="/admin/dailysales" className={linkClass("/admin/dailysales")}> 
-              <FontAwesomeIcon icon={faIndianRupeeSign} />
+              <FontAwesomeIcon icon={faEgg} />
               {open && "Daily Sales Quantity"}
             </Link>
             <Link to="/admin/digital-payments" className={linkClass("/admin/digital-payments")}> 
@@ -182,7 +181,7 @@ export default function Sidebar({ supervisor }) {
               {open && "NECC Rate"}
             </Link>
             <Link to="/admin/dailysales" className={linkClass("/admin/dailysales")}> 
-              <FontAwesomeIcon icon={faIndianRupeeSign} />
+              <FontAwesomeIcon icon={faEgg} />
               {open && "Daily Sales"}
             </Link>
             <Link to="/admin/digital-payments" className={linkClass("/admin/digital-payments")}> 
@@ -240,7 +239,7 @@ export default function Sidebar({ supervisor }) {
             )}
             {(dataAgentRoles.includes("daily_sales")) && (
               <Link to="/admin/dailysales" className={linkClass("/admin/dailysales")}> 
-                <FontAwesomeIcon icon={faIndianRupeeSign} />
+                <FontAwesomeIcon icon={faEgg} />
                 {open && "Daily Sales Quantity"}
               </Link>
             )}

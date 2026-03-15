@@ -57,7 +57,6 @@ export default function SignIn() {
         if (role === 'admin' && !userZoneId) {
           userZoneId = "Zone 1";
         }
-        console.log('Login - Server zoneId:', data.user.zoneId, '| Server zone:', data.user.zone, '| Form zone:', zone, '| Using:', userZoneId);
         // Persist token for authenticated requests
         if (data.token) {
           localStorage.setItem('token', data.token);
@@ -80,12 +79,12 @@ export default function SignIn() {
           navigate('/');
         }
       } else {
-        const backendMessage = data?.error || data?.message || 'Invalid credentials';
         if (response.status === 429 && data?.code === 'FIRESTORE_QUOTA_EXCEEDED') {
+          const backendMessage = data?.error || data?.message || 'Service unavailable. Please try again.';
           const retryText = data?.retryAfterSeconds ? ` Retry in ${data.retryAfterSeconds}s.` : '';
           alert(`${backendMessage}${retryText}`);
         } else {
-          alert(backendMessage);
+          alert('Invalid credentials');
         }
       }
     } catch (err) {

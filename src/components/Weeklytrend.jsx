@@ -130,20 +130,11 @@ const Weeklytrend = ({ rows = [], outlets: allowedOutlets = [] }) => {
       days.push(d);
     }
 
-    // Use allowedOutlets as the source for outlet keys (so ALL outlets appear in chart)
-    // This ensures newly created outlets and those without sales also show up
+    // Use allowedOutlets as the only source for outlet keys.
+    // When this list is empty (e.g., supervisor has no outlets), chart should show no outlet bars.
     let outlets = [];
     if (Array.isArray(allowedOutlets) && allowedOutlets.length > 0) {
       outlets = allowedOutlets.map(o => (typeof o === 'string' ? o : o.id || o.area || o.name));
-    } else {
-      // Fallback: collect outlet names from rows if no allowedOutlets provided
-      const outletSet = new Set();
-      rows.forEach(r => {
-        if (r.outlets) {
-          Object.keys(r.outlets).forEach(o => outletSet.add(o));
-        }
-      });
-      outlets = Array.from(outletSet);
     }
 
     setOutletKeys(outlets);

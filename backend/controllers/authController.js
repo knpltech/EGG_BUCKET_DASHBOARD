@@ -44,7 +44,7 @@ export const loginUser = async (req, res) => {
 
     const userSnap = await db.collection(collection).doc(username).get();
     if (!userSnap.exists)
-      return res.status(404).json({ success: false, error: "User not found" });
+      return res.status(401).json({ success: false, error: "Invalid credentials" });
 
     const user = userSnap.data();
 
@@ -54,10 +54,7 @@ export const loginUser = async (req, res) => {
       // Normalize zone comparison (handle "Zone 1" vs "zone 1" vs "1")
       const normalizeZone = (z) => z ? String(z).toLowerCase().replace('zone', '').trim() : null;
       if (zone && userZone && normalizeZone(zone) !== normalizeZone(userZone)) {
-        return res.status(401).json({ 
-          success: false, 
-          error: `Zone mismatch. You are assigned to ${userZone}, not ${zone}` 
-        });
+        return res.status(401).json({ success: false, error: "Invalid credentials" });
       }
     }
 
@@ -66,10 +63,7 @@ export const loginUser = async (req, res) => {
       const userZone = user.zoneId || user.zone;
       const normalizeZone = (z) => z ? String(z).toLowerCase().replace('zone', '').trim() : null;
       if (zone && userZone && normalizeZone(zone) !== normalizeZone(userZone)) {
-        return res.status(401).json({ 
-          success: false, 
-          error: `Zone mismatch. You are assigned to ${userZone}, not ${zone}` 
-        });
+        return res.status(401).json({ success: false, error: "Invalid credentials" });
       }
     }
 
@@ -78,21 +72,21 @@ export const loginUser = async (req, res) => {
       role === "admin" &&
       !(user.role === "Admin" || (Array.isArray(user.roles) && user.roles.includes("admin")))
     ) {
-      return res.status(401).json({ success: false, error: "Admin access denied" });
+      return res.status(401).json({ success: false, error: "Invalid credentials" });
     }
 
     if (
       role === "dataagent" &&
       !(user.role === "DataAgent" || (Array.isArray(user.roles) && user.roles.includes("dataagent")))
     ) {
-      return res.status(401).json({ success: false, error: "DataAgent access denied" });
+      return res.status(401).json({ success: false, error: "Invalid credentials" });
     }
 
     if (
       role === "viewer" &&
       !(user.role === "Viewer" || (Array.isArray(user.roles) && user.roles.includes("viewer")))
     ) {
-      return res.status(401).json({ success: false, error: "Viewer access denied" });
+      return res.status(401).json({ success: false, error: "Invalid credentials" });
     }
 
 
@@ -101,7 +95,7 @@ export const loginUser = async (req, res) => {
     if (!valid) {
       return res.status(401).json({
         success: false,
-        error: "Invalid password",
+        error: "Invalid credentials",
       });
     }
 
