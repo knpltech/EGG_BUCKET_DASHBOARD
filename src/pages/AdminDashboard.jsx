@@ -1,7 +1,7 @@
 const API_URL = import.meta.env.VITE_API_URL;
 
 import { useEffect, useState } from "react";
-import { getRoleFlags } from "../utils/role";
+import { getRoleFlags, normalizeZone } from "../utils/role";
 import { fetchZoneWiseRevenue } from "../context/reportsApi";
 
 const formatCurrency = (value) => {
@@ -106,6 +106,39 @@ const getTodayDamageTotal = (rows, outlets, today) => {
   return outlets.reduce((sum, outlet) => sum + getDamageValueForOutlet(doc, outlet), 0);
 };
 
+// Zone number strings ("1"…"5") — same format normalizeZone() returns
+const ZONE_NUMBERS = ["1", "2", "3", "4", "5"];
+const ZONES = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"];
+
+// ── helpers mirrored from SupervisorDashboard ──────────────────────
+const normalizeTextKey = (value) => {
+  if (value == null) return null;
+  return String(value).trim().toLowerCase();
+};
+
+const buildOutletIdentitySet = (outlets = []) => {
+  const keys = new Set();
+  outlets.forEach((outlet) => {
+    const idKey   = normalizeTextKey(outlet?.id);
+    const nameKey = normalizeTextKey(outlet?.name);
+    const areaKey = normalizeTextKey(outlet?.area);
+    if (idKey)   keys.add(idKey);
+    if (nameKey) keys.add(nameKey);
+    if (areaKey) keys.add(areaKey);
+  });
+  return keys;
+};
+
+const isNeccDocForOutlets = (doc, outletIdentitySet) => {
+  if (!outletIdentitySet || outletIdentitySet.size === 0) return false;
+  const outletIdKey = normalizeTextKey(doc?.outletId);
+  const outletKey   = normalizeTextKey(doc?.outlet);
+  return Boolean(
+    (outletIdKey && outletIdentitySet.has(outletIdKey)) ||
+    (outletKey   && outletIdentitySet.has(outletKey))
+  );
+};
+
 export default function AdminDashboard() {
   const { isAdmin, zone } = getRoleFlags();
   const [totalOutlets, setTotalOutlets] = useState(0);
@@ -120,6 +153,10 @@ export default function AdminDashboard() {
     "Zone 5": { cash: 0, digital: 0, total: 0 },
   });
   const [revenueLoading, setRevenueLoading] = useState(true);
+  const [zoneStats, setZoneStats] = useState(
+    Object.fromEntries(ZONES.map((z) => [z, { eggs: 0, outlets: 0, damage: 0, necc: "₹0.00" }]))
+  );
+  const [zoneStatsLoading, setZoneStatsLoading] = useState(true);
 
   useEffect(() => {
     const today = getLocalIsoDate();
@@ -146,76 +183,97 @@ export default function AdminDashboard() {
       }
     };
 
-    const fetchEggsToday = async (outlets) => {
-      try {
-        const res = await fetch(`${API_URL}/dailysales/all`);
-        const sales = await res.json();
-        setEggsToday(getTodaySalesTotal(sales, outlets, today));
-      } catch {
-        setEggsToday(0);
-      }
-    };
+    const computeZoneStats = (outlets, salesRows, damageRows, neccRates) => {
+      const stats = Object.fromEntries(ZONES.map((z) => [z, { eggs: 0, outlets: 0, damage: 0, necc: "₹0.00" }]));
 
-    const fetchNeccRate = async () => {
-      try {
-        const res = await fetch(`${API_URL}/neccrate/all`);
-        const rates = await res.json();
-        if (!Array.isArray(rates) || rates.length === 0) {
-          setNeccRate("₹0.00");
-          return;
+      ZONE_NUMBERS.forEach((zoneNum) => {
+        const zoneLabel = `Zone ${zoneNum}`;
+
+        // Filter active outlets for this zone — mirrors SupervisorDashboard's normalizeZone comparison
+        const zoneOutlets = Array.isArray(outlets)
+          ? outlets.filter((o) => o.status === "Active" && normalizeZone(o.zoneId || o.zone || o.zoneNumber) === zoneNum)
+          : [];
+
+        const outletIdentitySet = buildOutletIdentitySet(zoneOutlets);
+
+        stats[zoneLabel].outlets = zoneOutlets.length;
+        // Guard: if no outlets in this zone, always show 0 (never fall back to doc.total)
+        stats[zoneLabel].eggs   = zoneOutlets.length === 0 ? 0 : getTodaySalesTotal(Array.isArray(salesRows)  ? salesRows  : [], zoneOutlets, today);
+        stats[zoneLabel].damage = zoneOutlets.length === 0 ? 0 : getTodayDamageTotal(Array.isArray(damageRows) ? damageRows : [], zoneOutlets, today);
+
+        // NECC rate — same logic as SupervisorDashboard (case-insensitive outlet matching)
+        if (Array.isArray(neccRates) && neccRates.length > 0) {
+          const todayZoneRates = neccRates.filter((rate) => {
+            const isToday = normalizeDate(rate.date || rate.createdAt) === today;
+            return isToday && isNeccDocForOutlets(rate, outletIdentitySet);
+          });
+
+          if (todayZoneRates.length > 0) {
+            const latest = todayZoneRates.reduce((a, b) =>
+              getDocTimestamp(a) >= getDocTimestamp(b) ? a : b
+            );
+            let rateNum = 0;
+            if (latest.rateValue !== undefined) rateNum = Number(latest.rateValue);
+            else if (latest.rate) {
+              const match = String(latest.rate).replace(/,/g, "").match(/([\d.]+)/);
+              if (match) rateNum = Number(match[1]);
+            }
+            if (Number.isFinite(rateNum) && rateNum > 0) stats[zoneLabel].necc = `₹${rateNum.toFixed(2)}`;
+          }
         }
+      });
 
-        const todayRates = rates.filter((rate) => normalizeDate(rate.date || rate.createdAt) === today);
-        const pool = todayRates.length > 0 ? todayRates : rates;
-        const latest = pool.reduce((a, b) =>
-          getDocTimestamp(a) >= getDocTimestamp(b) ? a : b
-        );
-
-        let rateNum = 0;
-        if (latest.rateValue !== undefined) {
-          rateNum = Number(latest.rateValue);
-        } else if (latest.rate) {
-          const match = String(latest.rate).replace(/,/g, "").match(/([\d.]+)/);
-          if (match) rateNum = Number(match[1]);
-        }
-
-        if (!Number.isFinite(rateNum)) rateNum = 0;
-        setNeccRate(`₹${rateNum.toFixed(2)}`);
-      } catch {
-        setNeccRate("₹0.00");
-      }
-    };
-
-    const fetchDamagesToday = async (outlets) => {
-      try {
-        const res = await fetch(`${API_URL}/daily-damage/all`);
-        const rows = await res.json();
-        setDamagesToday(getTodayDamageTotal(rows, outlets, today));
-      } catch {
-        setDamagesToday(0);
-      }
-    };
-
-    const fetchRevenue = async () => {
-      try {
-        setRevenueLoading(true);
-        const data = await fetchZoneWiseRevenue();
-        if (data.success) setZoneRevenue(data.zoneRevenue);
-      } catch {
-        console.error("Failed to fetch zone revenue");
-      } finally {
-        setRevenueLoading(false);
-      }
+      return stats;
     };
 
     const loadDashboard = async () => {
-      const outlets = await updateOutlets();
-      await Promise.all([
-        fetchEggsToday(outlets),
-        fetchNeccRate(),
-        fetchDamagesToday(outlets),
-        fetchRevenue(),
-      ]);
+      try {
+        const outlets = await updateOutlets();
+
+        const [salesRes, damageRes, neccRes] = await Promise.all([
+          fetch(`${API_URL}/dailysales/all`),
+          fetch(`${API_URL}/daily-damage/all`),
+          fetch(`${API_URL}/neccrate/all`),
+        ]);
+        const [salesRows, damageRows, neccRates] = await Promise.all([
+          salesRes.json(),
+          damageRes.json(),
+          neccRes.json(),
+        ]);
+
+        // Overall stats
+        setEggsToday(getTodaySalesTotal(Array.isArray(salesRows) ? salesRows : [], outlets, today));
+        setDamagesToday(getTodayDamageTotal(Array.isArray(damageRows) ? damageRows : [], outlets, today));
+
+        if (Array.isArray(neccRates) && neccRates.length > 0) {
+          const todayRates = neccRates.filter((r) => normalizeDate(r.date || r.createdAt) === today);
+          const pool = todayRates.length > 0 ? todayRates : neccRates;
+          const latest = pool.reduce((a, b) => getDocTimestamp(a) >= getDocTimestamp(b) ? a : b);
+          let rateNum = 0;
+          if (latest.rateValue !== undefined) rateNum = Number(latest.rateValue);
+          else if (latest.rate) {
+            const match = String(latest.rate).replace(/,/g, "").match(/([\d.]+)/);
+            if (match) rateNum = Number(match[1]);
+          }
+          if (!Number.isFinite(rateNum)) rateNum = 0;
+          setNeccRate(`₹${rateNum.toFixed(2)}`);
+        } else {
+          setNeccRate("₹0.00");
+        }
+
+        // Zone stats (reuse already-fetched data, no extra API calls)
+        setZoneStats(computeZoneStats(outlets, salesRows, damageRows, neccRates));
+
+        // Revenue (separate — uses cash/digital payments)
+        setRevenueLoading(true);
+        const revenueData = await fetchZoneWiseRevenue();
+        if (revenueData.success) setZoneRevenue(revenueData.zoneRevenue);
+      } catch (err) {
+        console.error("Dashboard load error:", err);
+      } finally {
+        setRevenueLoading(false);
+        setZoneStatsLoading(false);
+      }
     };
 
     loadDashboard();
@@ -245,7 +303,7 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
         <StatCard title="Total Eggs Distributed Today" value={eggsToday} icon="🥚" />
         <StatCard title="Total Outlets" value={totalOutlets} icon="🏪" />
-        <StatCard title="Damages Today" value={damagesToday} icon="📉" />
+        <StatCard title="Total Eggs Damages Today" value={damagesToday} icon="📉" />
         <StatCard title="Today's NECC Rate" value={neccRate} icon="📈" />
       </div>
 
@@ -263,6 +321,90 @@ export default function AdminDashboard() {
                 <h3 className="font-semibold text-orange-600 mb-4">{zoneName}</h3>
                 <div className="text-3xl font-bold text-orange-600">
                   {formatCurrency(zoneData.total)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <h2 className="text-xl font-bold mb-4">Eggs Distributed Today by Supervisor Zone</h2>
+      <div className="bg-white rounded-xl shadow-md p-6 mb-10">
+        {zoneStatsLoading ? (
+          <p className="text-gray-500 text-center py-10">Loading zone data...</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            {ZONES.map((zoneName) => (
+              <div
+                key={zoneName}
+                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center"
+              >
+                <h3 className="font-semibold text-orange-600 mb-4">{zoneName}</h3>
+                <div className="text-3xl font-bold text-orange-600">
+                  {(zoneStats[zoneName]?.eggs ?? 0).toLocaleString("en-IN")}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <h2 className="text-xl font-bold mb-4">Total Outlets by Supervisor Zone</h2>
+      <div className="bg-white rounded-xl shadow-md p-6 mb-10">
+        {zoneStatsLoading ? (
+          <p className="text-gray-500 text-center py-10">Loading zone data...</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            {ZONES.map((zoneName) => (
+              <div
+                key={zoneName}
+                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center"
+              >
+                <h3 className="font-semibold text-orange-600 mb-4">{zoneName}</h3>
+                <div className="text-3xl font-bold text-orange-600">
+                  {zoneStats[zoneName]?.outlets ?? 0}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <h2 className="text-xl font-bold mb-4">Damages Today by Supervisor Zone</h2>
+      <div className="bg-white rounded-xl shadow-md p-6 mb-10">
+        {zoneStatsLoading ? (
+          <p className="text-gray-500 text-center py-10">Loading zone data...</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            {ZONES.map((zoneName) => (
+              <div
+                key={zoneName}
+                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center"
+              >
+                <h3 className="font-semibold text-orange-600 mb-4">{zoneName}</h3>
+                <div className="text-3xl font-bold text-orange-600">
+                  {(zoneStats[zoneName]?.damage ?? 0).toLocaleString("en-IN")}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <h2 className="text-xl font-bold mb-4">Today&apos;s NECC Rate by Supervisor Zone</h2>
+      <div className="bg-white rounded-xl shadow-md p-6 mb-10">
+        {zoneStatsLoading ? (
+          <p className="text-gray-500 text-center py-10">Loading zone data...</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            {ZONES.map((zoneName) => (
+              <div
+                key={zoneName}
+                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center"
+              >
+                <h3 className="font-semibold text-orange-600 mb-4">{zoneName}</h3>
+                <div className="text-3xl font-bold text-orange-600">
+                  {zoneStats[zoneName]?.necc ?? "₹0.00"}
                 </div>
               </div>
             ))}
