@@ -8,6 +8,114 @@ const config = {
 
 const API_BASE_URL = config.apiBaseUrl;
 
+const getLocalIsoDate = (value = new Date()) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+};
+
+const normalizeDate = (value) => {
+  try {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+      if (/^\d{2}-\d{2}-\d{4}$/.test(trimmed)) {
+        const [day, month, year] = trimmed.split('-');
+        return `${year}-${month}-${day}`;
+      }
+    }
+
+    if (value && typeof value === 'object' && typeof value.toDate === 'function') {
+      return getLocalIsoDate(value.toDate());
+    }
+
+    if (value && typeof value === 'object' && value._seconds !== undefined) {
+      return getLocalIsoDate(new Date(value._seconds * 1000));
+    }
+
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return getLocalIsoDate(parsed);
+  } catch {}
+
+  return String(value ?? '').slice(0, 10);
+};
+
+const getDocTimestamp = (doc) => {
+  const value = doc?.updatedAt || doc?.createdAt || doc?.date;
+
+  if (value && typeof value === 'object' && typeof value.toDate === 'function') {
+    return value.toDate().getTime();
+  }
+
+  if (value && typeof value === 'object' && value._seconds !== undefined) {
+    return value._seconds * 1000;
+  }
+
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const normalizeZoneLabel = (zone) => {
+  if (!zone) return null;
+  const raw = String(zone).trim();
+  const numberMatch = raw.match(/(\d+)/);
+  return numberMatch ? `Zone ${numberMatch[1]}` : raw;
+};
+
+const createEmptyZoneRevenue = () => ({
+  'Zone 1': { cash: 0, digital: 0, total: 0 },
+  'Zone 2': { cash: 0, digital: 0, total: 0 },
+  'Zone 3': { cash: 0, digital: 0, total: 0 },
+  'Zone 4': { cash: 0, digital: 0, total: 0 },
+  'Zone 5': { cash: 0, digital: 0, total: 0 },
+});
+
+const getPaymentValueForOutlet = (doc, outlet) => {
+  const values = doc?.outlets;
+  if (!values || typeof values !== 'object' || Array.isArray(values)) return 0;
+
+  const keys = [outlet.id, outlet.area, outlet.name].filter(Boolean);
+  for (const key of keys) {
+    if (values[key] !== undefined) return Number(values[key]) || 0;
+  }
+
+  return 0;
+};
+
+const buildZoneTotalsFromPayments = (rows, outlets, paymentType, today, zoneRevenue) => {
+  const activeOutlets = Array.isArray(outlets)
+    ? outlets.filter((outlet) => outlet && outlet.status === 'Active')
+    : [];
+
+  const zoneOutletsMap = new Map();
+  activeOutlets.forEach((outlet) => {
+    const zoneKey = normalizeZoneLabel(outlet.zoneId || outlet.zone || outlet.zoneNumber);
+    if (!zoneKey) return;
+    if (!zoneRevenue[zoneKey]) zoneRevenue[zoneKey] = { cash: 0, digital: 0, total: 0 };
+    if (!zoneOutletsMap.has(zoneKey)) zoneOutletsMap.set(zoneKey, []);
+    zoneOutletsMap.get(zoneKey).push(outlet);
+  });
+
+  const dayRows = Array.isArray(rows)
+    ? rows
+        .filter((doc) => normalizeDate(doc.date || doc.createdAt) === today)
+        .sort((a, b) => getDocTimestamp(a) - getDocTimestamp(b))
+    : [];
+
+  zoneOutletsMap.forEach((zoneOutlets, zoneKey) => {
+    const latestValues = new Map();
+
+    dayRows.forEach((doc) => {
+      zoneOutlets.forEach((outlet) => {
+        latestValues.set(outlet.id, getPaymentValueForOutlet(doc, outlet));
+      });
+    });
+
+    zoneRevenue[zoneKey][paymentType] = Array.from(latestValues.values()).reduce((sum, value) => sum + value, 0);
+  });
+};
+
 /**
  * Fetch aggregated reports data for a specific outlet
  * This fetches combined data from daily sales, payments, and NECC rates
@@ -130,9 +238,7 @@ export const exportReports = async (outletId, format = 'excel', filters = {}) =>
  */
 export const fetchTodayRevenue = async () => {
   try {
-    // Get today's date in YYYY-MM-DD format
-    const today = new Date();
-    const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const dateStr = getLocalIsoDate();
 
     // Fetch both cash and digital payments
     const [cashResponse, digitalResponse] = await Promise.all([
@@ -155,10 +261,10 @@ export const fetchTodayRevenue = async () => {
 
     // Sum across all documents for today, not just the first one.
     const todaysCash = Array.isArray(cashPayments)
-      ? cashPayments.filter(p => p.date === dateStr)
+      ? cashPayments.filter(p => normalizeDate(p.date || p.createdAt) === dateStr)
       : [];
     const todaysDigital = Array.isArray(digitalPayments)
-      ? digitalPayments.filter(p => p.date === dateStr)
+      ? digitalPayments.filter(p => normalizeDate(p.date || p.createdAt) === dateStr)
       : [];
 
     const cashTotal = todaysCash.reduce((sum, entry) => sum + (Number(entry?.total) || 0), 0);
@@ -190,28 +296,7 @@ export const fetchTodayRevenue = async () => {
  */
 export const fetchZoneWiseRevenue = async () => {
   try {
-    const today = new Date();
-    const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-
-    const normalizeZoneLabel = (zone) => {
-      if (!zone) return null;
-      const raw = String(zone).trim();
-      const numberMatch = raw.match(/(\d+)/);
-      return numberMatch ? `Zone ${numberMatch[1]}` : raw;
-    };
-
-    const normalizeOutletKey = (value) => {
-      if (!value) return null;
-      return String(value).trim().toUpperCase();
-    };
-
-    const createEmptyZoneRevenue = () => ({
-      'Zone 1': { cash: 0, digital: 0, total: 0 },
-      'Zone 2': { cash: 0, digital: 0, total: 0 },
-      'Zone 3': { cash: 0, digital: 0, total: 0 },
-      'Zone 4': { cash: 0, digital: 0, total: 0 },
-      'Zone 5': { cash: 0, digital: 0, total: 0 },
-    });
+    const dateStr = getLocalIsoDate();
 
     // Fetch cash, digital payments, and outlets for real zone mapping
     const [cashResponse, digitalResponse, outletsResponse] = await Promise.all([
@@ -237,65 +322,9 @@ export const fetchZoneWiseRevenue = async () => {
     const digitalPayments = await digitalResponse.json();
     const outlets = await outletsResponse.json();
 
-    // Aggregate all payment documents for today, not just the first one.
-    const todaysCash = Array.isArray(cashPayments)
-      ? cashPayments.filter(p => p.date === dateStr)
-      : [];
-    const todaysDigital = Array.isArray(digitalPayments)
-      ? digitalPayments.filter(p => p.date === dateStr)
-      : [];
-
     const zoneRevenue = createEmptyZoneRevenue();
-
-    const outletToZone = new Map();
-    if (Array.isArray(outlets)) {
-      outlets.forEach((outlet) => {
-        const zoneKey = normalizeZoneLabel(outlet.zoneId || outlet.zone || outlet.zoneNumber);
-        if (!zoneKey) return;
-        if (!zoneRevenue[zoneKey]) {
-          zoneRevenue[zoneKey] = { cash: 0, digital: 0, total: 0 };
-        }
-
-        [outlet.id, outlet.area, outlet.name].forEach((key) => {
-          const normalized = normalizeOutletKey(key);
-          if (normalized) outletToZone.set(normalized, zoneKey);
-        });
-      });
-    }
-
-    const addPaymentTotals = (paymentDoc, paymentType) => {
-      const outletsObj = paymentDoc?.outlets;
-      if (!outletsObj || typeof outletsObj !== 'object') return;
-
-      const addedByZoneMap = new Map();
-      const addedByPerOutlet = paymentDoc?.addedByPerOutlet;
-      if (addedByPerOutlet && typeof addedByPerOutlet === 'object') {
-        Object.entries(addedByPerOutlet).forEach(([outletKey, addedBy]) => {
-          const zoneKey = normalizeZoneLabel(addedBy?.zone);
-          const normalizedOutlet = normalizeOutletKey(outletKey);
-          if (zoneKey && normalizedOutlet) {
-            if (!zoneRevenue[zoneKey]) {
-              zoneRevenue[zoneKey] = { cash: 0, digital: 0, total: 0 };
-            }
-            addedByZoneMap.set(normalizedOutlet, zoneKey);
-          }
-        });
-      }
-
-      Object.entries(outletsObj).forEach(([outlet, amount]) => {
-        const amountNum = parseFloat(amount) || 0;
-        if (amountNum === 0) return;
-
-        const normalizedOutlet = normalizeOutletKey(outlet);
-        const zoneKey = outletToZone.get(normalizedOutlet) || addedByZoneMap.get(normalizedOutlet);
-        if (!zoneKey) return;
-
-        zoneRevenue[zoneKey][paymentType] += amountNum;
-      });
-    };
-
-    todaysCash.forEach(paymentDoc => addPaymentTotals(paymentDoc, 'cash'));
-    todaysDigital.forEach(paymentDoc => addPaymentTotals(paymentDoc, 'digital'));
+    buildZoneTotalsFromPayments(cashPayments, outlets, 'cash', dateStr, zoneRevenue);
+    buildZoneTotalsFromPayments(digitalPayments, outlets, 'digital', dateStr, zoneRevenue);
 
     // Calculate totals
     Object.keys(zoneRevenue).forEach(zone => {
