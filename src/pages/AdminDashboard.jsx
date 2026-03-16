@@ -1,6 +1,6 @@
 const API_URL = import.meta.env.VITE_API_URL;
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getRoleFlags, normalizeZone } from "../utils/role";
 import { fetchZoneWiseRevenue } from "../context/reportsApi";
 
@@ -18,6 +18,118 @@ const getLocalIsoDate = (value = new Date()) => {
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
   return local.toISOString().slice(0, 10);
 };
+
+const formatDateDMY = (iso) => {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
+  return `${day}-${month}-${year}`;
+};
+
+function CalendarIcon({ className = "" }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+      <circle cx="8.5" cy="14.5" r="1" />
+      <circle cx="12" cy="14.5" r="1" />
+      <circle cx="15.5" cy="14.5" r="1" />
+    </svg>
+  );
+}
+
+function BaseCalendar({ rows = [], selectedDate, onSelectDate, showDots = false }) {
+  const today = new Date();
+  const initialDate = selectedDate ? new Date(selectedDate) : today;
+  const [viewMonth, setViewMonth] = useState(initialDate.getMonth());
+  const [viewYear, setViewYear] = useState(initialDate.getFullYear());
+
+  useEffect(() => {
+    if (!selectedDate) return;
+    const date = new Date(selectedDate);
+    if (!Number.isNaN(date.getTime())) {
+      setViewMonth(date.getMonth());
+      setViewYear(date.getFullYear());
+    }
+  }, [selectedDate]);
+
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const firstDay = new Date(viewYear, viewMonth, 1).getDay();
+  const buildIso = (year, month, day) =>
+    `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const hasEntryForDate = (iso) => Array.isArray(rows) && rows.some((row) => row?.date === iso);
+
+  const weeks = [];
+  let day = 1 - firstDay;
+  for (let w = 0; w < 6; w++) {
+    const week = [];
+    for (let i = 0; i < 7; i++, day++) week.push(day < 1 || day > daysInMonth ? null : day);
+    weeks.push(week);
+  }
+
+  const goPrevMonth = () => setViewMonth((month) => {
+    if (month === 0) {
+      setViewYear((year) => year - 1);
+      return 11;
+    }
+    return month - 1;
+  });
+  const goNextMonth = () => setViewMonth((month) => {
+    if (month === 11) {
+      setViewYear((year) => year + 1);
+      return 0;
+    }
+    return month + 1;
+  });
+  const yearOptions = [];
+  for (let year = viewYear - 3; year <= viewYear + 3; year++) yearOptions.push(year);
+
+  return (
+    <div className="w-72 rounded-2xl border border-gray-100 bg-white shadow-xl">
+      <div className="flex items-center justify-between px-4 pt-3 pb-2">
+        <button type="button" onClick={goPrevMonth} className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100">‹</button>
+        <div className="flex items-center gap-2">
+          <select className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 leading-none focus:outline-none focus:ring-1 focus:ring-orange-400" value={viewMonth} onChange={(e) => setViewMonth(Number(e.target.value))}>
+            {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((month, index) => (
+              <option key={month} value={index}>{month.slice(0, 3)}</option>
+            ))}
+          </select>
+          <select className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 leading-none focus:outline-none focus:ring-1 focus:ring-orange-400" value={viewYear} onChange={(e) => setViewYear(Number(e.target.value))}>
+            {yearOptions.map((year) => <option key={year} value={year}>{year}</option>)}
+          </select>
+        </div>
+        <button type="button" onClick={goNextMonth} className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100">›</button>
+      </div>
+      <div className="mt-1 grid grid-cols-7 gap-y-1 px-4 text-center text-[11px] font-medium text-gray-400">
+        <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+      </div>
+      <div className="mt-1 grid grid-cols-7 gap-y-1 px-3 pb-3 text-center text-xs">
+        {weeks.map((week, weekIndex) =>
+          week.map((weekDay, dayIndex) => {
+            if (!weekDay) return <div key={`${weekIndex}-${dayIndex}`} />;
+            const iso = buildIso(viewYear, viewMonth, weekDay);
+            const isSelected = selectedDate === iso;
+            const isToday = today.getFullYear() === viewYear && today.getMonth() === viewMonth && today.getDate() === weekDay;
+            const hasEntry = showDots && hasEntryForDate(iso);
+
+            return (
+              <button key={`${weekIndex}-${dayIndex}`} type="button" onClick={() => onSelectDate(iso)} className={showDots ? "flex flex-col items-center gap-1" : "flex h-8 items-center justify-center"}>
+                <div className={`flex h-7 w-7 items-center justify-center rounded-full ${isSelected ? "bg-green-500 text-white" : isToday ? "border border-green-500 text-green-600" : "text-gray-700 hover:bg-gray-100"}`}>
+                  {weekDay}
+                </div>
+                {showDots && <div className={`h-1.5 w-1.5 rounded-full ${hasEntry ? "bg-green-500" : "bg-red-400"}`} />}
+              </button>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
 
 const normalizeDate = (value) => {
   try {
@@ -150,7 +262,9 @@ const createEmptyZoneStats = () =>
 
 export default function AdminDashboard() {
   const { isAdmin, zone } = getRoleFlags();
+  const calendarRef = useRef(null);
   const [selectedDate, setSelectedDate] = useState(getLocalIsoDate());
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [totalOutlets, setTotalOutlets] = useState(0);
   const [eggsToday, setEggsToday] = useState(0);
   const [neccRate, setNeccRate] = useState("₹0.00");
@@ -159,6 +273,17 @@ export default function AdminDashboard() {
   const [revenueLoading, setRevenueLoading] = useState(true);
   const [zoneStats, setZoneStats] = useState(createEmptyZoneStats);
   const [zoneStatsLoading, setZoneStatsLoading] = useState(true);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (calendarRef.current && !calendarRef.current.contains(event.target)) {
+        setIsCalendarOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     const computeZoneStats = (outlets, salesRows, damageRows, neccRates) => {
@@ -302,35 +427,32 @@ export default function AdminDashboard() {
       </div>
 
       <div className="mb-8 flex justify-end">
-        <div className="flex w-full flex-col gap-2 sm:max-w-xs">
+        <div className="relative flex w-full flex-col gap-2 sm:max-w-xs" ref={calendarRef}>
           <label htmlFor="admin-dashboard-date" className="text-sm font-semibold text-gray-700 sm:text-right">
             Select date
           </label>
-          <div className="relative">
-            <input
+          <div className="relative z-30">
+            <button
               id="admin-dashboard-date"
-              type="date"
-              value={selectedDate}
-              max={getLocalIsoDate()}
-              onChange={(event) => setSelectedDate(event.target.value)}
-              className="w-full rounded-lg border border-yellow-300 bg-white py-3 pl-11 pr-4 text-gray-700 shadow-sm outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-200"
-            />
-            <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-orange-500">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                className="h-5 w-5"
-                aria-hidden="true"
-              >
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                <line x1="16" y1="2" x2="16" y2="6" />
-                <line x1="8" y1="2" x2="8" y2="6" />
-                <line x1="3" y1="10" x2="21" y2="10" />
-              </svg>
-            </span>
+              type="button"
+              onClick={() => setIsCalendarOpen((open) => !open)}
+              className="flex min-w-[150px] w-full items-center justify-between rounded-xl border border-gray-200 bg-eggWhite px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm"
+            >
+              <span>{selectedDate ? formatDateDMY(selectedDate) : "dd-mm-yyyy"}</span>
+              <CalendarIcon className="h-4 w-4 text-gray-500" />
+            </button>
+            {isCalendarOpen && (
+              <div className="absolute right-0 top-full mt-2 z-50">
+                <BaseCalendar
+                  selectedDate={selectedDate}
+                  onSelectDate={(iso) => {
+                    setSelectedDate(iso);
+                    setIsCalendarOpen(false);
+                  }}
+                  showDots={false}
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>
