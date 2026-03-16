@@ -44,6 +44,7 @@ const Neccrate = () => {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editRow,       setEditRow]       = useState({});  // { date, outletKey, rate, remarks, docId }
   const [editValues,    setEditValues]    = useState({});
+  const [isEditSaving,  setIsEditSaving]  = useState(false);
   const [fromDate,      setFromDate]      = useState("");
   const [toDate,        setToDate]        = useState("");
 
@@ -254,6 +255,7 @@ const Neccrate = () => {
   };
 
   const handleEditSave = async () => {
+    if (isEditSaving) return;
     const { date, dateData } = editRow;
     const token = localStorage.getItem('token');
     const authHeaders = {
@@ -293,6 +295,7 @@ const Neccrate = () => {
       }
     });
 
+    setIsEditSaving(true);
     try {
       const results = await Promise.all([...patchTasks, ...postTasks]);
       for (const r of results) {
@@ -304,8 +307,14 @@ const Neccrate = () => {
       setEditValues({});
     } catch (err) {
       alert("Error saving entries: " + err.message);
+    } finally {
+      setIsEditSaving(false);
     }
   };
+
+  const editTotal = useMemo(() => {
+    return Object.values(editValues).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  }, [editValues]);
 
   const totalCols = 1 + outletColumns.length + 1 + (isAdmin ? 1 : 0); // Date + outlets + Total + Edit
 
@@ -428,8 +437,8 @@ const Neccrate = () => {
 
             <div className="space-y-3">
               {outletColumns.map(key => (
-                <div key={key} className="flex items-center gap-3">
-                  <label className="w-36 text-xs font-medium text-gray-700 shrink-0 uppercase">
+                <div key={key} className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <label className="w-full sm:w-36 text-xs font-medium text-gray-700 shrink-0 uppercase">
                     {getOutletName(key)}
                   </label>
                   <input
@@ -443,18 +452,33 @@ const Neccrate = () => {
               ))}
             </div>
 
+            <div className="mt-4 flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
+              <span className="text-xs font-semibold text-gray-600">Total</span>
+              <span className="text-sm font-bold text-orange-600">{editTotal.toLocaleString("en-IN")}</span>
+            </div>
+
             <div className="flex justify-end gap-2 mt-6">
               <button
-                onClick={() => { setEditModalOpen(false); setEditRow({}); setEditValues({}); }}
-                className="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 text-xs font-medium hover:bg-gray-200"
+                onClick={() => { setEditModalOpen(false); setEditRow({}); setEditValues({}); setIsEditSaving(false); }}
+                disabled={isEditSaving}
+                className="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 text-xs font-medium hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
               <button
                 onClick={handleEditSave}
-                className="px-5 py-2 rounded-xl bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600"
+                disabled={isEditSaving}
+                className="px-5 py-2 rounded-xl bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center"
               >
-                Save
+                {isEditSaving ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Saving...
+                  </>
+                ) : "Save"}
               </button>
             </div>
           </div>
