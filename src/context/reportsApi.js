@@ -291,12 +291,13 @@ export const fetchTodayRevenue = async () => {
 };
 
 /**
- * Fetch today's revenue broken down by supervisor zones
+ * Fetch revenue broken down by supervisor zones for a specific date
+ * @param {string} selectedDate - ISO date string (YYYY-MM-DD)
  * @returns {Promise<Object>} Object with zone-wise revenue data
  */
-export const fetchZoneWiseRevenue = async () => {
+export const fetchZoneWiseRevenue = async (selectedDate = getLocalIsoDate()) => {
   try {
-    const dateStr = getLocalIsoDate();
+    const dateStr = selectedDate || getLocalIsoDate();
 
     // Fetch cash, digital payments, and outlets for real zone mapping
     const [cashResponse, digitalResponse, outletsResponse] = await Promise.all([

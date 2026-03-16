@@ -80,37 +80,35 @@ const getDamageValueForOutlet = (doc, outlet) => {
   return 0;
 };
 
-const getLatestDayDoc = (rows, today) => {
+const getLatestDayDoc = (rows, selectedDate) => {
   if (!Array.isArray(rows)) return null;
 
   const dayRows = rows
-    .filter((doc) => normalizeDate(doc.date || doc.createdAt) === today)
+    .filter((doc) => normalizeDate(doc.date || doc.createdAt) === selectedDate)
     .sort((a, b) => getDocTimestamp(b) - getDocTimestamp(a));
 
   return dayRows[0] || null;
 };
 
-const getTodaySalesTotal = (rows, outlets, today) => {
-  const doc = getLatestDayDoc(rows, today);
+const getSalesTotal = (rows, outlets, selectedDate) => {
+  const doc = getLatestDayDoc(rows, selectedDate);
   if (!doc) return 0;
   if (!Array.isArray(outlets) || outlets.length === 0) return Number(doc.total) || 0;
 
   return outlets.reduce((sum, outlet) => sum + getSalesValueForOutlet(doc, outlet), 0);
 };
 
-const getTodayDamageTotal = (rows, outlets, today) => {
-  const doc = getLatestDayDoc(rows, today);
+const getDamageTotal = (rows, outlets, selectedDate) => {
+  const doc = getLatestDayDoc(rows, selectedDate);
   if (!doc) return 0;
   if (!Array.isArray(outlets) || outlets.length === 0) return Number(doc.total) || 0;
 
   return outlets.reduce((sum, outlet) => sum + getDamageValueForOutlet(doc, outlet), 0);
 };
 
-// Zone number strings ("1"…"5") — same format normalizeZone() returns
 const ZONE_NUMBERS = ["1", "2", "3", "4", "5"];
 const ZONES = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"];
 
-// ── helpers mirrored from SupervisorDashboard ──────────────────────
 const normalizeTextKey = (value) => {
   if (value == null) return null;
   return String(value).trim().toLowerCase();
@@ -119,10 +117,10 @@ const normalizeTextKey = (value) => {
 const buildOutletIdentitySet = (outlets = []) => {
   const keys = new Set();
   outlets.forEach((outlet) => {
-    const idKey   = normalizeTextKey(outlet?.id);
+    const idKey = normalizeTextKey(outlet?.id);
     const nameKey = normalizeTextKey(outlet?.name);
     const areaKey = normalizeTextKey(outlet?.area);
-    if (idKey)   keys.add(idKey);
+    if (idKey) keys.add(idKey);
     if (nameKey) keys.add(nameKey);
     if (areaKey) keys.add(areaKey);
   });
@@ -132,35 +130,79 @@ const buildOutletIdentitySet = (outlets = []) => {
 const isNeccDocForOutlets = (doc, outletIdentitySet) => {
   if (!outletIdentitySet || outletIdentitySet.size === 0) return false;
   const outletIdKey = normalizeTextKey(doc?.outletId);
-  const outletKey   = normalizeTextKey(doc?.outlet);
+  const outletKey = normalizeTextKey(doc?.outlet);
   return Boolean(
     (outletIdKey && outletIdentitySet.has(outletIdKey)) ||
-    (outletKey   && outletIdentitySet.has(outletKey))
+      (outletKey && outletIdentitySet.has(outletKey))
   );
 };
 
+const createEmptyZoneRevenue = () => ({
+  "Zone 1": { cash: 0, digital: 0, total: 0 },
+  "Zone 2": { cash: 0, digital: 0, total: 0 },
+  "Zone 3": { cash: 0, digital: 0, total: 0 },
+  "Zone 4": { cash: 0, digital: 0, total: 0 },
+  "Zone 5": { cash: 0, digital: 0, total: 0 },
+});
+
+const createEmptyZoneStats = () =>
+  Object.fromEntries(ZONES.map((zoneName) => [zoneName, { eggs: 0, outlets: 0, damage: 0, necc: "₹0.00" }]));
+
 export default function AdminDashboard() {
   const { isAdmin, zone } = getRoleFlags();
+  const [selectedDate, setSelectedDate] = useState(getLocalIsoDate());
   const [totalOutlets, setTotalOutlets] = useState(0);
   const [eggsToday, setEggsToday] = useState(0);
   const [neccRate, setNeccRate] = useState("₹0.00");
   const [damagesToday, setDamagesToday] = useState(0);
-  const [zoneRevenue, setZoneRevenue] = useState({
-    "Zone 1": { cash: 0, digital: 0, total: 0 },
-    "Zone 2": { cash: 0, digital: 0, total: 0 },
-    "Zone 3": { cash: 0, digital: 0, total: 0 },
-    "Zone 4": { cash: 0, digital: 0, total: 0 },
-    "Zone 5": { cash: 0, digital: 0, total: 0 },
-  });
+  const [zoneRevenue, setZoneRevenue] = useState(createEmptyZoneRevenue);
   const [revenueLoading, setRevenueLoading] = useState(true);
-  const [zoneStats, setZoneStats] = useState(
-    Object.fromEntries(ZONES.map((z) => [z, { eggs: 0, outlets: 0, damage: 0, necc: "₹0.00" }]))
-  );
+  const [zoneStats, setZoneStats] = useState(createEmptyZoneStats);
   const [zoneStatsLoading, setZoneStatsLoading] = useState(true);
 
   useEffect(() => {
-    const today = getLocalIsoDate();
-    let activeOutlets = [];
+    const computeZoneStats = (outlets, salesRows, damageRows, neccRates) => {
+      const stats = createEmptyZoneStats();
+
+      ZONE_NUMBERS.forEach((zoneNum) => {
+        const zoneLabel = `Zone ${zoneNum}`;
+        const zoneOutlets = Array.isArray(outlets)
+          ? outlets.filter((outlet) => outlet.status === "Active" && normalizeZone(outlet.zoneId || outlet.zone || outlet.zoneNumber) === zoneNum)
+          : [];
+
+        const outletIdentitySet = buildOutletIdentitySet(zoneOutlets);
+
+        stats[zoneLabel].outlets = zoneOutlets.length;
+        stats[zoneLabel].eggs = zoneOutlets.length === 0 ? 0 : getSalesTotal(Array.isArray(salesRows) ? salesRows : [], zoneOutlets, selectedDate);
+        stats[zoneLabel].damage = zoneOutlets.length === 0 ? 0 : getDamageTotal(Array.isArray(damageRows) ? damageRows : [], zoneOutlets, selectedDate);
+
+        if (Array.isArray(neccRates) && neccRates.length > 0) {
+          const selectedZoneRates = neccRates.filter((rate) => {
+            const isSelectedDate = normalizeDate(rate.date || rate.createdAt) === selectedDate;
+            return isSelectedDate && isNeccDocForOutlets(rate, outletIdentitySet);
+          });
+
+          if (selectedZoneRates.length > 0) {
+            const latest = selectedZoneRates.reduce((a, b) =>
+              getDocTimestamp(a) >= getDocTimestamp(b) ? a : b
+            );
+
+            let rateNum = 0;
+            if (latest.rateValue !== undefined) rateNum = Number(latest.rateValue);
+            else if (latest.rate) {
+              const match = String(latest.rate).replace(/,/g, "").match(/([\d.]+)/);
+              if (match) rateNum = Number(match[1]);
+            }
+
+            if (Number.isFinite(rateNum) && rateNum > 0) {
+              stats[zoneLabel].necc = `₹${rateNum.toFixed(2)}`;
+            }
+          }
+        }
+      });
+
+      return stats;
+    };
 
     const updateOutlets = async () => {
       try {
@@ -171,62 +213,19 @@ export default function AdminDashboard() {
             : `${API_URL}/outlets/all`;
         const res = await fetch(url);
         const list = await res.json();
-        activeOutlets = Array.isArray(list) ? list.filter((outlet) => outlet.status === "Active") : [];
-        setTotalOutlets(
-          activeOutlets.length
-        );
+        const activeOutlets = Array.isArray(list) ? list.filter((outlet) => outlet.status === "Active") : [];
+        setTotalOutlets(activeOutlets.length);
         return activeOutlets;
       } catch {
         setTotalOutlets(0);
-        activeOutlets = [];
         return [];
       }
     };
 
-    const computeZoneStats = (outlets, salesRows, damageRows, neccRates) => {
-      const stats = Object.fromEntries(ZONES.map((z) => [z, { eggs: 0, outlets: 0, damage: 0, necc: "₹0.00" }]));
-
-      ZONE_NUMBERS.forEach((zoneNum) => {
-        const zoneLabel = `Zone ${zoneNum}`;
-
-        // Filter active outlets for this zone — mirrors SupervisorDashboard's normalizeZone comparison
-        const zoneOutlets = Array.isArray(outlets)
-          ? outlets.filter((o) => o.status === "Active" && normalizeZone(o.zoneId || o.zone || o.zoneNumber) === zoneNum)
-          : [];
-
-        const outletIdentitySet = buildOutletIdentitySet(zoneOutlets);
-
-        stats[zoneLabel].outlets = zoneOutlets.length;
-        // Guard: if no outlets in this zone, always show 0 (never fall back to doc.total)
-        stats[zoneLabel].eggs   = zoneOutlets.length === 0 ? 0 : getTodaySalesTotal(Array.isArray(salesRows)  ? salesRows  : [], zoneOutlets, today);
-        stats[zoneLabel].damage = zoneOutlets.length === 0 ? 0 : getTodayDamageTotal(Array.isArray(damageRows) ? damageRows : [], zoneOutlets, today);
-
-        // NECC rate — same logic as SupervisorDashboard (case-insensitive outlet matching)
-        if (Array.isArray(neccRates) && neccRates.length > 0) {
-          const todayZoneRates = neccRates.filter((rate) => {
-            const isToday = normalizeDate(rate.date || rate.createdAt) === today;
-            return isToday && isNeccDocForOutlets(rate, outletIdentitySet);
-          });
-
-          if (todayZoneRates.length > 0) {
-            const latest = todayZoneRates.reduce((a, b) =>
-              getDocTimestamp(a) >= getDocTimestamp(b) ? a : b
-            );
-            let rateNum = 0;
-            if (latest.rateValue !== undefined) rateNum = Number(latest.rateValue);
-            else if (latest.rate) {
-              const match = String(latest.rate).replace(/,/g, "").match(/([\d.]+)/);
-              if (match) rateNum = Number(match[1]);
-            }
-            if (Number.isFinite(rateNum) && rateNum > 0) stats[zoneLabel].necc = `₹${rateNum.toFixed(2)}`;
-          }
-        }
-      });
-
-      return stats;
-    };
-
     const loadDashboard = async () => {
+      setRevenueLoading(true);
+      setZoneStatsLoading(true);
+
       try {
         const outlets = await updateOutlets();
 
@@ -235,41 +234,48 @@ export default function AdminDashboard() {
           fetch(`${API_URL}/daily-damage/all`),
           fetch(`${API_URL}/neccrate/all`),
         ]);
+
         const [salesRows, damageRows, neccRates] = await Promise.all([
           salesRes.json(),
           damageRes.json(),
           neccRes.json(),
         ]);
 
-        // Overall stats
-        setEggsToday(getTodaySalesTotal(Array.isArray(salesRows) ? salesRows : [], outlets, today));
-        setDamagesToday(getTodayDamageTotal(Array.isArray(damageRows) ? damageRows : [], outlets, today));
+        setEggsToday(getSalesTotal(Array.isArray(salesRows) ? salesRows : [], outlets, selectedDate));
+        setDamagesToday(getDamageTotal(Array.isArray(damageRows) ? damageRows : [], outlets, selectedDate));
 
         if (Array.isArray(neccRates) && neccRates.length > 0) {
-          const todayRates = neccRates.filter((r) => normalizeDate(r.date || r.createdAt) === today);
-          const pool = todayRates.length > 0 ? todayRates : neccRates;
-          const latest = pool.reduce((a, b) => getDocTimestamp(a) >= getDocTimestamp(b) ? a : b);
-          let rateNum = 0;
-          if (latest.rateValue !== undefined) rateNum = Number(latest.rateValue);
-          else if (latest.rate) {
-            const match = String(latest.rate).replace(/,/g, "").match(/([\d.]+)/);
-            if (match) rateNum = Number(match[1]);
+          const selectedDateRates = neccRates.filter((rate) => normalizeDate(rate.date || rate.createdAt) === selectedDate);
+
+          if (selectedDateRates.length === 0) {
+            setNeccRate("₹0.00");
+          } else {
+            const latest = selectedDateRates.reduce((a, b) => (getDocTimestamp(a) >= getDocTimestamp(b) ? a : b));
+
+            let rateNum = 0;
+            if (latest.rateValue !== undefined) rateNum = Number(latest.rateValue);
+            else if (latest.rate) {
+              const match = String(latest.rate).replace(/,/g, "").match(/([\d.]+)/);
+              if (match) rateNum = Number(match[1]);
+            }
+
+            setNeccRate(Number.isFinite(rateNum) ? `₹${rateNum.toFixed(2)}` : "₹0.00");
           }
-          if (!Number.isFinite(rateNum)) rateNum = 0;
-          setNeccRate(`₹${rateNum.toFixed(2)}`);
         } else {
           setNeccRate("₹0.00");
         }
 
-        // Zone stats (reuse already-fetched data, no extra API calls)
         setZoneStats(computeZoneStats(outlets, salesRows, damageRows, neccRates));
 
-        // Revenue (separate — uses cash/digital payments)
-        setRevenueLoading(true);
-        const revenueData = await fetchZoneWiseRevenue();
-        if (revenueData.success) setZoneRevenue(revenueData.zoneRevenue);
+        const revenueData = await fetchZoneWiseRevenue(selectedDate);
+        setZoneRevenue(revenueData.success ? revenueData.zoneRevenue : createEmptyZoneRevenue());
       } catch (err) {
         console.error("Dashboard load error:", err);
+        setEggsToday(0);
+        setDamagesToday(0);
+        setNeccRate("₹0.00");
+        setZoneRevenue(createEmptyZoneRevenue());
+        setZoneStats(createEmptyZoneStats());
       } finally {
         setRevenueLoading(false);
         setZoneStatsLoading(false);
@@ -277,19 +283,14 @@ export default function AdminDashboard() {
     };
 
     loadDashboard();
-
-    window.addEventListener("egg:outlets-updated", updateOutlets);
-    return () => {
-      window.removeEventListener("egg:outlets-updated", updateOutlets);
-    };
-  }, [zone, isAdmin]);
+  }, [isAdmin, selectedDate, zone]);
 
   return (
     <div className="min-h-screen bg-eggBg px-4 py-6 md:px-8 flex flex-col">
       <div className="bg-white rounded-xl shadow px-6 py-4 mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-gray-800">Dashboard Overview</h1>
-          <p className="text-sm text-gray-500">Welcome back! Here&apos;s what&apos;s happening today.</p>
+          <p className="text-sm text-gray-500">Welcome back! Here&apos;s what&apos;s happening for the selected date.</p>
         </div>
       </div>
 
@@ -300,14 +301,48 @@ export default function AdminDashboard() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-        <StatCard title="Total Eggs Distributed Today" value={eggsToday} icon="🥚" />
-        <StatCard title="Total Outlets" value={totalOutlets} icon="🏪" />
-        <StatCard title="Total Eggs Damages Today" value={damagesToday} icon="📉" />
-        <StatCard title="Today's NECC Rate" value={neccRate} icon="📈" />
+      <div className="mb-8 flex justify-end">
+        <div className="flex w-full flex-col gap-2 sm:max-w-xs">
+          <label htmlFor="admin-dashboard-date" className="text-sm font-semibold text-gray-700 sm:text-right">
+            Select date
+          </label>
+          <div className="relative">
+            <input
+              id="admin-dashboard-date"
+              type="date"
+              value={selectedDate}
+              max={getLocalIsoDate()}
+              onChange={(event) => setSelectedDate(event.target.value)}
+              className="w-full rounded-lg border border-yellow-300 bg-white py-3 pl-11 pr-4 text-gray-700 shadow-sm outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-200"
+            />
+            <span className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-orange-500">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                className="h-5 w-5"
+                aria-hidden="true"
+              >
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+            </span>
+          </div>
+        </div>
       </div>
 
-      <h2 className="text-xl font-bold mb-4">Today&apos;s Revenue by Supervisor Zone</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+        <StatCard title="Total Eggs Distributed" value={eggsToday} icon="🥚" />
+        <StatCard title="Total Outlets" value={totalOutlets} icon="🏪" />
+        <StatCard title="Total Egg Damages" value={damagesToday} icon="📉" />
+        <StatCard title="NECC Rate" value={neccRate} icon="📈" />
+      </div>
+
+      <h2 className="text-xl font-bold mb-4">Revenue by Supervisor Zone</h2>
       <div className="bg-white rounded-xl shadow-md p-6 mb-10">
         {revenueLoading ? (
           <p className="text-gray-500 text-center py-10">Loading revenue data...</p>
@@ -328,7 +363,7 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      <h2 className="text-xl font-bold mb-4">Eggs Distributed Today by Supervisor Zone</h2>
+      <h2 className="text-xl font-bold mb-4">Eggs Distributed by Supervisor Zone</h2>
       <div className="bg-white rounded-xl shadow-md p-6 mb-10">
         {zoneStatsLoading ? (
           <p className="text-gray-500 text-center py-10">Loading zone data...</p>
@@ -349,7 +384,7 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      <h2 className="text-xl font-bold mb-4">Damages Today by Supervisor Zone</h2>
+      <h2 className="text-xl font-bold mb-4">Damages by Supervisor Zone</h2>
       <div className="bg-white rounded-xl shadow-md p-6 mb-10">
         {zoneStatsLoading ? (
           <p className="text-gray-500 text-center py-10">Loading zone data...</p>
@@ -370,7 +405,7 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      <h2 className="text-xl font-bold mb-4">Today&apos;s NECC Rate by Supervisor Zone</h2>
+      <h2 className="text-xl font-bold mb-4">NECC Rate by Supervisor Zone</h2>
       <div className="bg-white rounded-xl shadow-md p-6 mb-10">
         {zoneStatsLoading ? (
           <p className="text-gray-500 text-center py-10">Loading zone data...</p>
