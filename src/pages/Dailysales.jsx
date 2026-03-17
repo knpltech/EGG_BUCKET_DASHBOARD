@@ -255,11 +255,20 @@ const Dailysales = () => {
   };
 
   const addrow = async (newrow) => {
+    let user = null;
+    try { user = JSON.parse(localStorage.getItem("user")); } catch {}
+    const addedBy = user ? {
+      username: user.username || user.uid || "Unknown",
+      zone: user.zoneId || user.zone || "No Zone",
+      role: user.role || "unknown",
+      timestamp: new Date().toISOString(),
+    } : null;
+
     try {
       const response = await fetch(`${API_URL}/dailysales/add`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newrow),
+        body: JSON.stringify({ ...newrow, addedBy }),
       });
       if (!response.ok) {
         alert("Failed to add entry");

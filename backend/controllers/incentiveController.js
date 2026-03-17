@@ -1,4 +1,5 @@
 import { db } from "../config/firebase.js";
+import { validateSupervisorSameDayEntry } from "../utils/entryCutoff.js";
 
 /* ADD INCENTIVE */
 export const addIncentive = async (req, res) => {
@@ -7,6 +8,15 @@ export const addIncentive = async (req, res) => {
 
     if (!date || !outlet || value === undefined) {
       return res.status(400).json({ error: "Missing fields" });
+    }
+
+    const entryValidation = validateSupervisorSameDayEntry(date, addedBy);
+    if (!entryValidation.allowed) {
+      return res.status(403).json({
+        message: entryValidation.message,
+        today: entryValidation.todayIso,
+        timezone: entryValidation.timezone,
+      });
     }
 
     const ref = db.collection("incentive").doc(date);

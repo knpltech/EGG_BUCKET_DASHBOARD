@@ -293,9 +293,19 @@ export default function DigitalPayments() {
     if (isSaving || !entryDate || hasEntry) { if (hasEntry) alert("Already entered for your outlets on this date"); return; }
     const outletAmounts = {};
     formOutlets.forEach((o) => { const area = o.area || o; outletAmounts[area] = Number(entryValues[area]) || 0; });
+
+    let user = null;
+    try { user = JSON.parse(localStorage.getItem("user")); } catch {}
+    const addedBy = user ? {
+      username: user.username || user.uid || "Unknown",
+      zone: user.zoneId || user.zone || "No Zone",
+      role: user.role || "unknown",
+      timestamp: new Date().toISOString(),
+    } : null;
+
     setIsSaving(true);
     try {
-      const response = await fetch(`${API_URL}/digital-payments/add`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date: entryDate, outlets: outletAmounts }) });
+      const response = await fetch(`${API_URL}/digital-payments/add`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date: entryDate, outlets: outletAmounts, addedBy }) });
       if (!response.ok) { alert('Failed to add payment'); return; }
       const res = await fetch(`${API_URL}/digital-payments/all`);
       const data = await res.json();

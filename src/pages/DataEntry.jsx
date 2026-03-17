@@ -25,7 +25,7 @@ const CalendarIcon = ({ className = "" }) => (
 );
 
 /* ================= DATA CALENDAR ================= */
-const DataCalendar = ({ completedDates, selectedDate, onSelectDate }) => {
+const DataCalendar = ({ completedDates, selectedDate, onSelectDate, isDateDisabled }) => {
   const today = new Date();
   const initialDate = selectedDate ? new Date(selectedDate) : today;
 
@@ -118,19 +118,21 @@ const DataCalendar = ({ completedDates, selectedDate, onSelectDate }) => {
             const isComplete = completedDates.has(iso);
             const isSelected = selectedIso === iso;
             const isToday = today.getFullYear() === viewYear && today.getMonth() === viewMonth && today.getDate() === d;
+            const disabled = typeof isDateDisabled === "function" ? isDateDisabled(iso) : false;
 
             return (
               <button
                 key={`${wIdx}-${idx}`}
                 type="button"
-                onClick={() => onSelectDate(iso)}
+                onClick={() => { if (!disabled) onSelectDate(iso); }}
+                disabled={disabled}
                 className="flex flex-col items-center gap-1"
               >
                 <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs
-                  ${isSelected ? "bg-green-500 text-white" : isToday ? "border border-green-500 text-green-600" : "text-gray-700 hover:bg-gray-100"}`}>
+                  ${disabled ? "bg-gray-100 text-gray-300 cursor-not-allowed" : isSelected ? "bg-green-500 text-white" : isToday ? "border border-green-500 text-green-600" : "text-gray-700 hover:bg-gray-100"}`}>
                   {d}
                 </div>
-                <div className={`h-1.5 w-1.5 rounded-full ${isComplete ? "bg-green-500" : "bg-red-400 opacity-50"}`} />
+                <div className={`h-1.5 w-1.5 rounded-full ${disabled ? "bg-gray-200" : isComplete ? "bg-green-500" : "bg-red-400 opacity-50"}`} />
               </button>
             );
           })
@@ -199,7 +201,14 @@ export default function DataEntry() {
   const [isSubmitting,    setIsSubmitting]    = useState(false);
   const [isDeleting,      setIsDeleting]      = useState(false);
 
-  const { isAdmin } = getRoleFlags();
+  const { isAdmin, isSupervisor } = getRoleFlags();
+  const todayIso = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  }, []);
 
   /* ---- click outside calendar ---- */
   useEffect(() => {
@@ -481,6 +490,11 @@ export default function DataEntry() {
   const handleSubmit = async () => {
     if (!outlet || !date) { alert("Please select an outlet and date first."); return; }
 
+    if (isSupervisor && date !== todayIso) {
+      alert("Entry locked. Supervisors can submit only today's data.");
+      return;
+    }
+
     const allAlreadyLocked =
       neccrateLocked && salesLocked && damagesLocked &&
       cashLocked && digitalLocked && incentiveLocked;
@@ -612,6 +626,11 @@ export default function DataEntry() {
     salesLocked || cashLocked || digitalLocked ||
     damagesLocked || neccrateLocked || incentiveLocked;
 
+  const isSupervisorDateBlocked = useCallback((isoDate) => {
+    if (!isSupervisor) return false;
+    return isoDate !== todayIso;
+  }, [isSupervisor, todayIso]);
+
   const inputCls = (locked) => [
     "w-full border p-3 rounded-xl text-sm text-gray-800 md:text-base transition-colors",
     locked || outletInactive
@@ -694,10 +713,14 @@ export default function DataEntry() {
                   completedDates={completedDates}
                   selectedDate={date}
                   onSelectDate={(iso) => { setDate(iso); setIsCalendarOpen(false); }}
+                  isDateDisabled={isSupervisorDateBlocked}
                 />
               </div>
             )}
           </div>
+          {isSupervisor && (
+            <p className="text-xs text-amber-600 mt-1">Supervisors can submit only today&apos;s date. Previous dates are locked after 12:00 AM.</p>
+          )}
           {!outlet && (
             <p className="text-xs text-orange-500 mt-1">Please select an outlet to enable date selection.</p>
           )}

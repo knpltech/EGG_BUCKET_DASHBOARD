@@ -1,4 +1,5 @@
 import { db } from "../config/firebase.js";
+import { validateSupervisorSameDayEntry } from "../utils/entryCutoff.js";
 
 // Add a new DailyDamage entry to Firestore
 // If an entry already exists for the date, merge the damages instead of creating a new one
@@ -7,6 +8,15 @@ export const addDailyDamage = async (req, res) => {
     const { date, damages, total, addedBy } = req.body;
     if (!date || !damages || typeof damages !== 'object') {
       return res.status(400).json({ message: "Missing or invalid required fields" });
+    }
+
+    const entryValidation = validateSupervisorSameDayEntry(date, addedBy);
+    if (!entryValidation.allowed) {
+      return res.status(403).json({
+        message: entryValidation.message,
+        today: entryValidation.todayIso,
+        timezone: entryValidation.timezone,
+      });
     }
 
     const damagesWithDup = {};

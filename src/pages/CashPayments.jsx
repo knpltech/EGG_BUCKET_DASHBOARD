@@ -469,12 +469,21 @@ export default function CashPayments() {
       outletAmounts[area] = Number(entryValues[area]) || 0;
     });
 
+    let user = null;
+    try { user = JSON.parse(localStorage.getItem("user")); } catch {}
+    const addedBy = user ? {
+      username: user.username || user.uid || "Unknown",
+      zone: user.zoneId || user.zone || "No Zone",
+      role: user.role || "unknown",
+      timestamp: new Date().toISOString(),
+    } : null;
+
     setIsSaving(true);
     try {
       const response = await fetch(`${API_URL}/cash-payments/add`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: entryDate, outlets: outletAmounts }),
+        body: JSON.stringify({ date: entryDate, outlets: outletAmounts, addedBy }),
       });
 
       if (!response.ok) {

@@ -1,4 +1,5 @@
 import { db } from "../config/firebase.js";
+import { validateSupervisorSameDayEntry } from "../utils/entryCutoff.js";
 
 // Add a new NECC rate entry to Firestore
 export const addNeccRate = async (req, res) => {
@@ -8,6 +9,16 @@ export const addNeccRate = async (req, res) => {
     if (!date || !outletValue || rate === undefined || rate === null) {
       return res.status(400).json({ message: "Missing required field: date, outletId/outlet, or rate" });
     }
+
+    const entryValidation = validateSupervisorSameDayEntry(date, addedBy);
+    if (!entryValidation.allowed) {
+      return res.status(403).json({
+        message: entryValidation.message,
+        today: entryValidation.todayIso,
+        timezone: entryValidation.timezone,
+      });
+    }
+
     const numericRate = Number(rate);
     if (!Number.isFinite(numericRate)) {
       return res.status(400).json({ message: "Rate must be a valid number" });
