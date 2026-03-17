@@ -41,26 +41,42 @@ const normalizeDate = (value) => {
 
 const getDocTimestamp = (doc) => {
   const value = doc?.updatedAt || doc?.createdAt || doc?.date;
-
   if (value && typeof value === "object" && typeof value.toDate === "function") {
     return value.toDate().getTime();
   }
-
   if (value && typeof value === "object" && value._seconds !== undefined) {
     return value._seconds * 1000;
   }
-
   const parsed = new Date(value).getTime();
   return Number.isNaN(parsed) ? 0 : parsed;
 };
 
+const getNeccRateNumber = (doc) => {
+  if (!doc) return 0;
+  if (doc.rateValue !== undefined) {
+    const value = Number(doc.rateValue);
+    if (Number.isFinite(value)) return value;
+  }
+  if (doc.rate) {
+    const match = String(doc.rate).replace(/,/g, "").match(/([\d.]+)/);
+    if (match) return Number(match[1]) || 0;
+  }
+  return 0;
+};
+
+const getAverageNeccRate = (docs = []) => {
+  const numeric = docs
+    .map((doc) => getNeccRateNumber(doc))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  if (!numeric.length) return 0;
+  return numeric.reduce((sum, value) => sum + value, 0) / numeric.length;
+};
+
 const getLatestDayDoc = (rows, today) => {
   if (!Array.isArray(rows)) return null;
-
   const dayRows = rows
     .filter((doc) => normalizeDate(doc.date || doc.createdAt) === today)
     .sort((a, b) => getDocTimestamp(b) - getDocTimestamp(a));
-
   return dayRows[0] || null;
 };
 
@@ -68,7 +84,6 @@ const getSalesValueForOutlet = (doc, outlet) => {
   const outletId = outlet?.id || outlet;
   const area = outlet?.area || outlet?.name || outletId;
   const values = doc?.outlets;
-
   if (!values || typeof values !== "object" || Array.isArray(values)) return 0;
   if (values[outletId] !== undefined) return Number(values[outletId]) || 0;
   if (area && values[area] !== undefined) return Number(values[area]) || 0;
@@ -78,7 +93,6 @@ const getSalesValueForOutlet = (doc, outlet) => {
 const getDamageValueForOutlet = (doc, outlet) => {
   const area = outlet?.area || outlet?.name || outlet?.id || outlet;
   const values = doc?.damages;
-
   if (!values || typeof values !== "object" || Array.isArray(values)) return 0;
   if (area && values[area] !== undefined) return Number(values[area]) || 0;
   return 0;
@@ -88,7 +102,6 @@ const getTodaySalesTotal = (rows, outlets, today) => {
   const doc = getLatestDayDoc(rows, today);
   if (!doc) return 0;
   if (!Array.isArray(outlets) || outlets.length === 0) return 0;
-
   return outlets.reduce((sum, outlet) => sum + getSalesValueForOutlet(doc, outlet), 0);
 };
 
@@ -96,23 +109,17 @@ const getTodayDamageTotal = (rows, outlets, today) => {
   const doc = getLatestDayDoc(rows, today);
   if (!doc) return 0;
   if (!Array.isArray(outlets) || outlets.length === 0) return 0;
-
   return outlets.reduce((sum, outlet) => sum + getDamageValueForOutlet(doc, outlet), 0);
 };
 
 const extractSupervisorZones = (user) => {
   if (!user || typeof user !== "object") return [];
   const rawZones = [];
-
   if (Array.isArray(user.zoneIds)) rawZones.push(...user.zoneIds);
   if (Array.isArray(user.zones)) rawZones.push(...user.zones);
   if (Array.isArray(user.assignedZones)) rawZones.push(...user.assignedZones);
-
   rawZones.push(user.zoneId, user.zone, user.zoneNumber);
-
-  return Array.from(
-    new Set(rawZones.map((z) => normalizeZone(z)).filter(Boolean))
-  );
+  return Array.from(new Set(rawZones.map((z) => normalizeZone(z)).filter(Boolean)));
 };
 
 const isOutletInSupervisorZones = (outlet, normalizedZones) => {
@@ -206,6 +213,7 @@ export default function SupervisorDashboard() {
 
         const activeOutlets = zoneOutlets.filter((outlet) => outlet.status === "Active");
         const outletIdentitySet = buildOutletIdentitySet(activeOutlets);
+
         setTotalOutlets(activeOutlets.length);
         setEggsToday(getTodaySalesTotal(salesRaw, activeOutlets, today));
         setDamagesToday(getTodayDamageTotal(damagesRaw, activeOutlets, today));
@@ -215,27 +223,11 @@ export default function SupervisorDashboard() {
         } else {
           const todayZoneRates = ratesRaw.filter((rate) => {
             const isToday = normalizeDate(rate.date || rate.createdAt) === today;
-            if (!isToday) return false;
-            return isNeccDocForOutlets(rate, outletIdentitySet);
+            return isToday && isNeccDocForOutlets(rate, outletIdentitySet);
           });
 
-          if (todayZoneRates.length === 0) {
-            setNeccRate("₹0.00");
-            return;
-          }
-
-          const latest = todayZoneRates.reduce((a, b) => (getDocTimestamp(a) >= getDocTimestamp(b) ? a : b));
-
-          let rateNum = 0;
-          if (latest.rateValue !== undefined) {
-            rateNum = Number(latest.rateValue);
-          } else if (latest.rate) {
-            const match = String(latest.rate).replace(/,/g, "").match(/([\d.]+)/);
-            if (match) rateNum = Number(match[1]);
-          }
-
-          if (!Number.isFinite(rateNum)) rateNum = 0;
-          setNeccRate(`₹${rateNum.toFixed(2)}`);
+          const averageRate = getAverageNeccRate(todayZoneRates);
+          setNeccRate(`₹${averageRate.toFixed(2)}`);
         }
       } catch {
         setEggsToday(0);

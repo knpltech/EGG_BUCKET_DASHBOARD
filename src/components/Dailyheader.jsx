@@ -275,26 +275,23 @@ const Dailyheader = ({ title, subtitle, dailySalesData = [], fromDate, toDate, s
   };
 
   return (
-    <div className="mb-4 pt-6 px-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 
-      {/* TITLE */}
       <div>
-        <h1 className="text-2xl font-bold">{title}</h1>
-        <p className="text-gray-600 text-sm">
+        <h1 className="text-2xl md:text-3xl font-semibold text-gray-900">{title}</h1>
+        <p className="mt-1 text-sm md:text-base text-gray-500">
           {subtitle}
         </p>
       </div>
 
-      {/* ACTIONS */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2">
 
-        {/* FROM DATE */}
         <div className="relative z-30" ref={fromCalendarRef}>
           <button
             onClick={() => {
               setOpenCal(openCal === "from" ? null : "from");
             }}
-            className="border px-3 py-2 rounded-lg text-sm flex gap-2 items-center"
+            className="flex min-w-[140px] sm:min-w-[150px] items-center justify-between rounded-xl border border-gray-200 bg-eggWhite px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm"
           >
             {fromDate ? formatDateDMY(fromDate) : "From Date"}
             <CalendarIcon className="h-4 w-4" />
@@ -319,7 +316,7 @@ const Dailyheader = ({ title, subtitle, dailySalesData = [], fromDate, toDate, s
             onClick={() => {
               setOpenCal(openCal === "to" ? null : "to");
             }}
-            className="border px-3 py-2 rounded-lg text-sm flex gap-2 items-center"
+            className="flex min-w-[140px] sm:min-w-[150px] items-center justify-between rounded-xl border border-gray-200 bg-eggWhite px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm"
           >
             {toDate ? formatDateDMY(toDate) : "To Date"}
             <CalendarIcon className="h-4 w-4" />
@@ -338,29 +335,27 @@ const Dailyheader = ({ title, subtitle, dailySalesData = [], fromDate, toDate, s
           )}
         </div>
 
-        {/* QUICK BUTTONS */}
-        <button className="border px-4 py-2 rounded-lg text-sm hover:bg-gray-50" onClick={() => handleQuickRange("thisMonth")}>
+        <button className="rounded-full border border-gray-200 bg-eggWhite px-4 py-2 text-xs md:text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50" onClick={() => handleQuickRange("thisMonth")}>
           This Month
         </button>
 
-        <button className="border px-4 py-2 rounded-lg text-sm hover:bg-gray-50" onClick={() => handleQuickRange("lastMonth")}>
+        <button className="rounded-full border border-gray-200 bg-eggWhite px-4 py-2 text-xs md:text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50" onClick={() => handleQuickRange("lastMonth")}>
           Last Month
         </button>
 
-        <button className="border px-4 py-2 rounded-lg text-sm hover:bg-gray-50" onClick={() => handleQuickRange("thisWeek")}>
+        <button className="rounded-full border border-gray-200 bg-eggWhite px-4 py-2 text-xs md:text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50" onClick={() => handleQuickRange("thisWeek")}>
           This Week
         </button>
 
-        <button className="border px-4 py-2 rounded-lg text-sm hover:bg-gray-50" onClick={() => handleQuickRange("lastWeek")}>
+        <button className="rounded-full border border-gray-200 bg-eggWhite px-4 py-2 text-xs md:text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50" onClick={() => handleQuickRange("lastWeek")}>
           Last Week
         </button>
 
-        {/* DOWNLOAD */}
         <button
           onClick={() => (onExport ? onExport() : handleDownload())}
-          className="bg-orange-500 text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-orange-600"
+          className="inline-flex items-center rounded-full bg-[#ff7518] px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90"
         >
-          Download
+          Export Report
         </button>
       </div>
     </div>

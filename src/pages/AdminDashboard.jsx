@@ -4,6 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { getRoleFlags, normalizeZone } from "../utils/role";
 import { fetchZoneWiseRevenue } from "../context/reportsApi";
 
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
 const formatCurrency = (value) => {
   if (value == null || Number.isNaN(Number(value))) return "₹0";
   return "₹" + Number(value).toLocaleString("en-IN", {
@@ -22,10 +27,7 @@ const getLocalIsoDate = (value = new Date()) => {
 const formatDateDMY = (iso) => {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = date.getFullYear();
-  return `${day}-${month}-${year}`;
+  return `${String(date.getDate()).padStart(2, "0")}-${String(date.getMonth() + 1).padStart(2, "0")}-${date.getFullYear()}`;
 };
 
 function CalendarIcon({ className = "" }) {
@@ -78,6 +80,7 @@ function BaseCalendar({ rows = [], selectedDate, onSelectDate, showDots = false 
     }
     return month - 1;
   });
+
   const goNextMonth = () => setViewMonth((month) => {
     if (month === 11) {
       setViewYear((year) => year + 1);
@@ -85,6 +88,7 @@ function BaseCalendar({ rows = [], selectedDate, onSelectDate, showDots = false 
     }
     return month + 1;
   });
+
   const yearOptions = [];
   for (let year = viewYear - 3; year <= viewYear + 3; year++) yearOptions.push(year);
 
@@ -94,7 +98,7 @@ function BaseCalendar({ rows = [], selectedDate, onSelectDate, showDots = false 
         <button type="button" onClick={goPrevMonth} className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100">‹</button>
         <div className="flex items-center gap-2">
           <select className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-700 leading-none focus:outline-none focus:ring-1 focus:ring-orange-400" value={viewMonth} onChange={(e) => setViewMonth(Number(e.target.value))}>
-            {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((month, index) => (
+            {MONTHS.map((month, index) => (
               <option key={month} value={index}>{month.slice(0, 3)}</option>
             ))}
           </select>
@@ -159,24 +163,41 @@ const normalizeDate = (value) => {
 
 const getDocTimestamp = (doc) => {
   const value = doc?.updatedAt || doc?.createdAt || doc?.date;
-
   if (value && typeof value === "object" && typeof value.toDate === "function") {
     return value.toDate().getTime();
   }
-
   if (value && typeof value === "object" && value._seconds !== undefined) {
     return value._seconds * 1000;
   }
-
   const parsed = new Date(value).getTime();
   return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const getNeccRateNumber = (doc) => {
+  if (!doc) return 0;
+  if (doc.rateValue !== undefined) {
+    const value = Number(doc.rateValue);
+    if (Number.isFinite(value)) return value;
+  }
+  if (doc.rate !== undefined) {
+    const match = String(doc.rate).replace(/,/g, "").match(/([\d.]+)/);
+    if (match) return Number(match[1]) || 0;
+  }
+  return 0;
+};
+
+const getAverageNeccRate = (docs = []) => {
+  const numeric = docs
+    .map((doc) => getNeccRateNumber(doc))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  if (!numeric.length) return 0;
+  return numeric.reduce((sum, value) => sum + value, 0) / numeric.length;
 };
 
 const getSalesValueForOutlet = (doc, outlet) => {
   const outletId = outlet?.id || outlet;
   const area = outlet?.area || outlet?.name || outletId;
   const values = doc?.outlets;
-
   if (!values || typeof values !== "object" || Array.isArray(values)) return 0;
   if (values[outletId] !== undefined) return Number(values[outletId]) || 0;
   if (area && values[area] !== undefined) return Number(values[area]) || 0;
@@ -186,7 +207,6 @@ const getSalesValueForOutlet = (doc, outlet) => {
 const getDamageValueForOutlet = (doc, outlet) => {
   const area = outlet?.area || outlet?.name || outlet?.id || outlet;
   const values = doc?.damages;
-
   if (!values || typeof values !== "object" || Array.isArray(values)) return 0;
   if (area && values[area] !== undefined) return Number(values[area]) || 0;
   return 0;
@@ -194,11 +214,9 @@ const getDamageValueForOutlet = (doc, outlet) => {
 
 const getLatestDayDoc = (rows, selectedDate) => {
   if (!Array.isArray(rows)) return null;
-
   const dayRows = rows
     .filter((doc) => normalizeDate(doc.date || doc.createdAt) === selectedDate)
     .sort((a, b) => getDocTimestamp(b) - getDocTimestamp(a));
-
   return dayRows[0] || null;
 };
 
@@ -206,7 +224,6 @@ const getSalesTotal = (rows, outlets, selectedDate) => {
   const doc = getLatestDayDoc(rows, selectedDate);
   if (!doc) return 0;
   if (!Array.isArray(outlets) || outlets.length === 0) return Number(doc.total) || 0;
-
   return outlets.reduce((sum, outlet) => sum + getSalesValueForOutlet(doc, outlet), 0);
 };
 
@@ -214,7 +231,6 @@ const getDamageTotal = (rows, outlets, selectedDate) => {
   const doc = getLatestDayDoc(rows, selectedDate);
   if (!doc) return 0;
   if (!Array.isArray(outlets) || outlets.length === 0) return Number(doc.total) || 0;
-
   return outlets.reduce((sum, outlet) => sum + getDamageValueForOutlet(doc, outlet), 0);
 };
 
@@ -245,7 +261,7 @@ const isNeccDocForOutlets = (doc, outletIdentitySet) => {
   const outletKey = normalizeTextKey(doc?.outlet);
   return Boolean(
     (outletIdKey && outletIdentitySet.has(outletIdKey)) ||
-      (outletKey && outletIdentitySet.has(outletKey))
+    (outletKey && outletIdentitySet.has(outletKey))
   );
 };
 
@@ -280,7 +296,6 @@ export default function AdminDashboard() {
         setIsCalendarOpen(false);
       }
     };
-
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
@@ -296,7 +311,6 @@ export default function AdminDashboard() {
           : [];
 
         const outletIdentitySet = buildOutletIdentitySet(zoneOutlets);
-
         stats[zoneLabel].outlets = zoneOutlets.length;
         stats[zoneLabel].eggs = zoneOutlets.length === 0 ? 0 : getSalesTotal(Array.isArray(salesRows) ? salesRows : [], zoneOutlets, selectedDate);
         stats[zoneLabel].damage = zoneOutlets.length === 0 ? 0 : getDamageTotal(Array.isArray(damageRows) ? damageRows : [], zoneOutlets, selectedDate);
@@ -308,19 +322,9 @@ export default function AdminDashboard() {
           });
 
           if (selectedZoneRates.length > 0) {
-            const latest = selectedZoneRates.reduce((a, b) =>
-              getDocTimestamp(a) >= getDocTimestamp(b) ? a : b
-            );
-
-            let rateNum = 0;
-            if (latest.rateValue !== undefined) rateNum = Number(latest.rateValue);
-            else if (latest.rate) {
-              const match = String(latest.rate).replace(/,/g, "").match(/([\d.]+)/);
-              if (match) rateNum = Number(match[1]);
-            }
-
-            if (Number.isFinite(rateNum) && rateNum > 0) {
-              stats[zoneLabel].necc = `₹${rateNum.toFixed(2)}`;
+            const averageRate = getAverageNeccRate(selectedZoneRates);
+            if (Number.isFinite(averageRate) && averageRate > 0) {
+              stats[zoneLabel].necc = `₹${averageRate.toFixed(2)}`;
             }
           }
         }
@@ -353,7 +357,6 @@ export default function AdminDashboard() {
 
       try {
         const outlets = await updateOutlets();
-
         const [salesRes, damageRes, neccRes] = await Promise.all([
           fetch(`${API_URL}/dailysales/all`),
           fetch(`${API_URL}/daily-damage/all`),
@@ -369,28 +372,16 @@ export default function AdminDashboard() {
         setEggsToday(getSalesTotal(Array.isArray(salesRows) ? salesRows : [], outlets, selectedDate));
         setDamagesToday(getDamageTotal(Array.isArray(damageRows) ? damageRows : [], outlets, selectedDate));
 
-        if (Array.isArray(neccRates) && neccRates.length > 0) {
-          const selectedDateRates = neccRates.filter((rate) => normalizeDate(rate.date || rate.createdAt) === selectedDate);
+        const computedZoneStats = computeZoneStats(outlets, salesRows, damageRows, neccRates);
+        setZoneStats(computedZoneStats);
 
-          if (selectedDateRates.length === 0) {
-            setNeccRate("₹0.00");
-          } else {
-            const latest = selectedDateRates.reduce((a, b) => (getDocTimestamp(a) >= getDocTimestamp(b) ? a : b));
-
-            let rateNum = 0;
-            if (latest.rateValue !== undefined) rateNum = Number(latest.rateValue);
-            else if (latest.rate) {
-              const match = String(latest.rate).replace(/,/g, "").match(/([\d.]+)/);
-              if (match) rateNum = Number(match[1]);
-            }
-
-            setNeccRate(Number.isFinite(rateNum) ? `₹${rateNum.toFixed(2)}` : "₹0.00");
-          }
-        } else {
-          setNeccRate("₹0.00");
-        }
-
-        setZoneStats(computeZoneStats(outlets, salesRows, damageRows, neccRates));
+        const zoneAverageValues = Object.values(computedZoneStats)
+          .map((zoneStat) => Number(String(zoneStat.necc || "").replace(/[^\d.]/g, "")))
+          .filter((value) => Number.isFinite(value) && value > 0);
+        const averageZoneRate = zoneAverageValues.length
+          ? zoneAverageValues.reduce((sum, value) => sum + value, 0) / zoneAverageValues.length
+          : 0;
+        setNeccRate(`₹${averageZoneRate.toFixed(2)}`);
 
         const revenueData = await fetchZoneWiseRevenue(selectedDate);
         setZoneRevenue(revenueData.success ? revenueData.zoneRevenue : createEmptyZoneRevenue());
@@ -471,35 +462,9 @@ export default function AdminDashboard() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             {Object.entries(zoneRevenue).map(([zoneName, zoneData]) => (
-              <div
-                key={zoneName}
-                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center"
-              >
+              <div key={zoneName} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center">
                 <h3 className="font-semibold text-orange-600 mb-4">{zoneName}</h3>
-                <div className="text-3xl font-bold text-orange-600">
-                  {formatCurrency(zoneData.total)}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <h2 className="text-xl font-bold mb-4">Today&apos;s Cash Payments by Supervisor Zone</h2>
-      <div className="bg-white rounded-xl shadow-md p-6 mb-10">
-        {revenueLoading ? (
-          <p className="text-gray-500 text-center py-10">Loading cash payment data...</p>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            {ZONES.map((zoneName) => (
-              <div
-                key={zoneName}
-                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center"
-              >
-                <h3 className="font-semibold text-orange-600 mb-4">{zoneName}</h3>
-                <div className="text-3xl font-bold text-orange-600">
-                  {formatCurrency(zoneRevenue[zoneName]?.cash ?? 0)}
-                </div>
+                <div className="text-3xl font-bold text-orange-600">{formatCurrency(zoneData.total)}</div>
               </div>
             ))}
           </div>
@@ -513,14 +478,9 @@ export default function AdminDashboard() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             {ZONES.map((zoneName) => (
-              <div
-                key={zoneName}
-                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center"
-              >
+              <div key={zoneName} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center">
                 <h3 className="font-semibold text-orange-600 mb-4">{zoneName}</h3>
-                <div className="text-3xl font-bold text-orange-600">
-                  {(zoneStats[zoneName]?.eggs ?? 0).toLocaleString("en-IN")}
-                </div>
+                <div className="text-3xl font-bold text-orange-600">{(zoneStats[zoneName]?.eggs ?? 0).toLocaleString("en-IN")}</div>
               </div>
             ))}
           </div>
@@ -534,14 +494,9 @@ export default function AdminDashboard() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             {ZONES.map((zoneName) => (
-              <div
-                key={zoneName}
-                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center"
-              >
+              <div key={zoneName} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center">
                 <h3 className="font-semibold text-orange-600 mb-4">{zoneName}</h3>
-                <div className="text-3xl font-bold text-orange-600">
-                  {(zoneStats[zoneName]?.damage ?? 0).toLocaleString("en-IN")}
-                </div>
+                <div className="text-3xl font-bold text-orange-600">{(zoneStats[zoneName]?.damage ?? 0).toLocaleString("en-IN")}</div>
               </div>
             ))}
           </div>
@@ -555,14 +510,9 @@ export default function AdminDashboard() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             {ZONES.map((zoneName) => (
-              <div
-                key={zoneName}
-                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center"
-              >
+              <div key={zoneName} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center">
                 <h3 className="font-semibold text-orange-600 mb-4">{zoneName}</h3>
-                <div className="text-3xl font-bold text-orange-600">
-                  {zoneStats[zoneName]?.necc ?? "₹0.00"}
-                </div>
+                <div className="text-3xl font-bold text-orange-600">{zoneStats[zoneName]?.necc ?? "₹0.00"}</div>
               </div>
             ))}
           </div>
@@ -576,14 +526,9 @@ export default function AdminDashboard() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             {ZONES.map((zoneName) => (
-              <div
-                key={zoneName}
-                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center"
-              >
+              <div key={zoneName} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center">
                 <h3 className="font-semibold text-orange-600 mb-4">{zoneName}</h3>
-                <div className="text-3xl font-bold text-orange-600">
-                  {zoneStats[zoneName]?.outlets ?? 0}
-                </div>
+                <div className="text-3xl font-bold text-orange-600">{zoneStats[zoneName]?.outlets ?? 0}</div>
               </div>
             ))}
           </div>
