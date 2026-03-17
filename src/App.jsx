@@ -131,7 +131,19 @@ function App() {
             <Route path="/dashboard" element={<DataAgentDashboard />} />
             
             {/* VIEWER ROUTES */}
-            <Route path="/viewer/dashboard" element={<ViewerData/>}/>
+            <Route
+              path="/viewer/dashboard"
+              element={
+                <ProtectedRoute
+                  element={
+                    <AdminLayoutWithPanel>
+                      <AdminDashboard />
+                    </AdminLayoutWithPanel>
+                  }
+                  requiredRole={null}
+                />
+              }
+            />
             <Route path="/viewer/data" element={<ViewerData/>}/>
 
             
