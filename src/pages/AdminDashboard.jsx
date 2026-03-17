@@ -277,7 +277,8 @@ const createEmptyZoneStats = () =>
   Object.fromEntries(ZONES.map((zoneName) => [zoneName, { eggs: 0, outlets: 0, damage: 0, necc: "₹0.00" }]));
 
 export default function AdminDashboard() {
-  const { isAdmin, zone } = getRoleFlags();
+  const { isAdmin, isViewer, zone } = getRoleFlags();
+  const hasGlobalDashboardScope = isAdmin || isViewer;
   const calendarRef = useRef(null);
   const [selectedDate, setSelectedDate] = useState(getLocalIsoDate());
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
@@ -335,7 +336,7 @@ export default function AdminDashboard() {
 
     const updateOutlets = async () => {
       try {
-        const url = isAdmin
+        const url = hasGlobalDashboardScope
           ? `${API_URL}/outlets/all`
           : zone
             ? `${API_URL}/outlets/zone/${zone}`
@@ -399,7 +400,7 @@ export default function AdminDashboard() {
     };
 
     loadDashboard();
-  }, [isAdmin, selectedDate, zone]);
+  }, [hasGlobalDashboardScope, selectedDate, zone]);
 
   return (
     <div className="min-h-screen bg-eggBg px-4 py-6 md:px-8 flex flex-col">
@@ -497,6 +498,24 @@ export default function AdminDashboard() {
               <div key={zoneName} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center">
                 <h3 className="font-semibold text-orange-600 mb-4">{zoneName}</h3>
                 <div className="text-3xl font-bold text-orange-600">{(zoneStats[zoneName]?.damage ?? 0).toLocaleString("en-IN")}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <h2 className="text-xl font-bold mb-4">Cash Payments by Supervisor Zone</h2>
+      <div className="bg-white rounded-xl shadow-md p-6 mb-10">
+        {revenueLoading ? (
+          <p className="text-gray-500 text-center py-10">Loading cash payment data...</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            {ZONES.map((zoneName) => (
+              <div key={zoneName} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center">
+                <h3 className="font-semibold text-orange-600 mb-4">{zoneName}</h3>
+                <div className="text-3xl font-bold text-orange-600">
+                  {formatCurrency(zoneRevenue[zoneName]?.cash ?? 0)}
+                </div>
               </div>
             ))}
           </div>

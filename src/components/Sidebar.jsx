@@ -176,6 +176,10 @@ export default function Sidebar({ supervisor }) {
         )}
         {isViewer && (
           <>
+            <Link to="/viewer/dashboard" className={linkClass("/viewer/dashboard")}>
+              <FontAwesomeIcon icon={faTableCells} />
+              {open && "Dashboard"}
+            </Link>
             <Link to="/admin/damages" className={linkClass("/admin/damages")}> 
               <FontAwesomeIcon icon={faExclamationTriangle} />
               {open && "Daily Damages"}
@@ -183,6 +187,10 @@ export default function Sidebar({ supervisor }) {
             <Link to="/admin/neccrate" className={linkClass("/admin/neccrate")}> 
               <FontAwesomeIcon icon={faEgg} />
               {open && "NECC Rate"}
+            </Link>
+            <Link to="/admin/incentive" className={linkClass("/admin/incentive")}>
+              <FontAwesomeIcon icon={faGift} />
+              {open && "Incentive"}
             </Link>
             <Link to="/admin/dailysales" className={linkClass("/admin/dailysales")}> 
               <FontAwesomeIcon icon={faEgg} />
@@ -195,6 +203,10 @@ export default function Sidebar({ supervisor }) {
             <Link to="/admin/cash-payments" className={linkClass("/admin/cash-payments")}> 
               <FontAwesomeIcon icon={faMoneyBillWave} />
               {open && "Cash Payments"}
+            </Link>
+            <Link to="/admin/daily-revenue" className={linkClass("/admin/daily-revenue")}>
+              <FontAwesomeIcon icon={faDollarSign} />
+              {open && "Daily Revenue"}
             </Link>
               <Link to="/admin/reports" className={linkClass("/admin/reports")}> 
             <FontAwesomeIcon icon={faChartLine} />

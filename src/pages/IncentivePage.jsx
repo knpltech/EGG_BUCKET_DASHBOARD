@@ -12,6 +12,7 @@ const Incentive = () => {
 
   const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
   const showTable = isAdmin || isViewer || isDataAgent || isSupervisor;
+  const isReadOnly = isViewer;
 
   const [rows,setRows] = useState([]);
   const [outlets,setOutlets] = useState([]);
@@ -69,7 +70,7 @@ const [isEditSaving,setIsEditSaving] = useState(false);
 
 const handleEditClick = (row)=>{
 
-  if(!isAdmin) return;
+  if(!isAdmin || isReadOnly) return;
 
   const values = {};
 
@@ -96,6 +97,7 @@ const editTotal = useMemo(()=>Object.values(editValues).reduce((sum,value)=>sum 
 /* ================= SAVE EDIT ================= */
 
 const handleEditSave = async()=>{
+  if (!isAdmin || isReadOnly) return;
   if(isEditSaving) return;
 
   if(!editRow.id){
@@ -264,7 +266,7 @@ const handleEditSave = async()=>{
           <>
             <Dailyheader
               title={"Incentive Entry"}
-              subtitle={"Manage and track daily incentive entries."}
+              subtitle={isReadOnly ? "View daily incentive entries." : "Manage and track daily incentive entries."}
               dailySalesData={filteredRows}
               fromDate={fromDate}
               toDate={toDate}
@@ -274,16 +276,22 @@ const handleEditSave = async()=>{
               onExport={handleDownload}
             />
 
+            {isReadOnly && (
+              <div className="mb-4 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-800">
+                Viewer access is read-only on this page. Editing incentive values is disabled.
+              </div>
+            )}
+
             <DailyTable
               rows={filteredRows}
               outlets={displayedOutlets.map(o=> typeof o==="string" ? o : o.id)}
               allOutlets={outlets}
-              onEdit={isAdmin ? handleEditClick : null}
+              onEdit={isAdmin && !isReadOnly ? handleEditClick : null}
             />
           </>
         )}
 
-        {isAdmin && editModalOpen && (
+        {isAdmin && !isReadOnly && editModalOpen && (
 
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30 p-4">
 

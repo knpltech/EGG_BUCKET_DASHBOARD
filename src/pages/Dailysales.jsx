@@ -14,6 +14,7 @@ const OUTLETS_KEY = "egg_outlets_v1";
 const Dailysales = () => {
   const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
   const showForms = isAdmin || isDataAgent;
+  const isReadOnly = isViewer;
 
   const [rows, setRows] = useState([]);
   const [outlets, setOutlets] = useState([]);
@@ -185,7 +186,7 @@ const Dailysales = () => {
   }, [filteredRows, visibleOutlets, getOutletSaleValue]);
 
   const handleEditClick = (row) => {
-    if (!isAdmin) return;
+    if (!isAdmin || isReadOnly) return;
 
     const fullRow = { ...row };
     if (!row.id) {
@@ -217,6 +218,7 @@ const Dailysales = () => {
   }, [editValues]);
 
   const handleEditSave = async () => {
+    if (!isAdmin || isReadOnly) return;
     if (isEditSaving) return;
     if (!editRow.id) {
       alert("No ID found. Cannot update.");
@@ -319,8 +321,8 @@ const Dailysales = () => {
 
         {(isAdmin || isViewer || isDataAgent || isSupervisor) && outlets.length > 0 && (
           <Dailyheader
-            title={"Daily Sales Quantity"}
-            subtitle={"Manage and track daily egg sales across all outlets."}
+            title={"Daily Sales Entry"}
+            subtitle={isReadOnly ? "View daily sales entries." : "Manage and track daily sales entries."}
             dailySalesData={scopedRows}
             fromDate={fromDate}
             toDate={toDate}
@@ -336,11 +338,11 @@ const Dailysales = () => {
             rows={scopedRows}
             outlets={visibleOutlets.map((o) => (typeof o === "string" ? o : o.id))}
             allOutlets={visibleOutlets}
-            onEdit={isAdmin ? handleEditClick : null}
+            onEdit={isAdmin && !isReadOnly ? handleEditClick : null}
           />
         )}
 
-        {isAdmin && editModalOpen && outlets.length > 0 && (
+        {isAdmin && !isReadOnly && editModalOpen && outlets.length > 0 && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30 p-4">
             <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
               <h2 className="font-semibold mb-4 text-lg">Edit Daily Sales ({editRow.date})</h2>
