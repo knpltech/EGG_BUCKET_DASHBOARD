@@ -20,6 +20,14 @@ const formatDisplayDate = (iso) => {
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 };
 
+const getAverageForValues = (values = []) => {
+  const numeric = values
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  if (!numeric.length) return 0;
+  return numeric.reduce((sum, value) => sum + value, 0) / numeric.length;
+};
+
 /** Parse a rate value that may be a number, "₹34.00 per egg" string, or anything else */
 const parseRate = (doc) => {
   // If rate is already a plain number, it's the most recent value (set directly by edit)
@@ -316,7 +324,7 @@ const Neccrate = () => {
     return Object.values(editValues).reduce((sum, value) => sum + (Number(value) || 0), 0);
   }, [editValues]);
 
-  const totalCols = 1 + outletColumns.length + 1 + (isAdmin ? 1 : 0); // Date + outlets + Total + Edit
+  const totalCols = 1 + outletColumns.length + 1 + (isAdmin ? 1 : 0); // Date + outlets + Average + Edit
 
   /* ---- UI ---- */
   return (
@@ -373,7 +381,7 @@ const Neccrate = () => {
                       {getOutletName(key)}
                     </th>
                   ))}
-                  <th className="px-5 py-3 font-semibold text-orange-500 whitespace-nowrap">Total</th>
+                  <th className="px-5 py-3 font-semibold text-orange-500 whitespace-nowrap">Average</th>
                   {isAdmin && <th className="px-5 py-3 font-semibold text-orange-500 whitespace-nowrap">Edit</th>}
                 </tr>
               </thead>
@@ -386,7 +394,9 @@ const Neccrate = () => {
                   </tr>
                 ) : filteredDates.map(date => {
                   const dateData = pivotMap[date] || {};
-                  const rowTotal = outletColumns.reduce((sum, key) => sum + (Number(dateData[key]?.rate) || 0), 0);
+                  const rowAverage = getAverageForValues(
+                    outletColumns.map((key) => dateData[key]?.rate)
+                  );
 
                   return (
                     <tr key={date} className="hover:bg-orange-50/30 transition-colors">
@@ -402,7 +412,7 @@ const Neccrate = () => {
                         </td>
                       ))}
                       <td className="px-5 py-4 font-semibold text-orange-500 whitespace-nowrap">
-                        {rowTotal.toLocaleString("en-IN")}
+                        {rowAverage.toLocaleString("en-IN", { maximumFractionDigits: 2, minimumFractionDigits: rowAverage % 1 ? 2 : 0 })}
                       </td>
                       {isAdmin && (
                         <td className="px-5 py-4 whitespace-nowrap">
@@ -454,7 +464,7 @@ const Neccrate = () => {
 
             <div className="mt-4 flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
               <span className="text-xs font-semibold text-gray-600">Total</span>
-              <span className="text-sm font-bold text-orange-600">{editTotal.toLocaleString("en-IN")}</span>
+              <span className="text-sm font-bold text-orange-600">{editTotal.toLocaleString("en-IN", { maximumFractionDigits: 2, minimumFractionDigits: editTotal % 1 ? 2 : 0 })}</span>
             </div>
 
             <div className="flex justify-end gap-2 mt-6">

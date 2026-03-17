@@ -264,7 +264,7 @@ const handleEditSave = async()=>{
           <>
             <Dailyheader
               title={"Incentive Entry"}
-              subtitle={"Manage and track daily incentive entries across all outlets."}
+              subtitle={"Manage and track daily incentive entries."}
               dailySalesData={filteredRows}
               fromDate={fromDate}
               toDate={toDate}

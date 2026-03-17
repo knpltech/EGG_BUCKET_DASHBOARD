@@ -2,6 +2,15 @@ const API_URL = import.meta.env.VITE_API_URL;
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import Topbar from "../components/Topbar";
 import Dailyheader from "../components/Dailyheader";
@@ -23,6 +32,45 @@ const formatDateDMY = (iso) => {
   if (Number.isNaN(date.getTime())) return iso;
   return `${String(date.getDate()).padStart(2, "0")}-${String(date.getMonth() + 1).padStart(2, "0")}-${date.getFullYear()}`;
 };
+
+function RevenueAnalytics({ rows }) {
+  const chartData = useMemo(() => {
+    return rows.map((row) => ({
+      date: formatDateDMY(row.date),
+      total: Number(row.total) || 0,
+    }));
+  }, [rows]);
+
+  if (!chartData.length) return null;
+
+  return (
+    <div className="mt-10">
+      <h1 className="text-2xl font-bold mb-6">Daily Revenue Analytics</h1>
+
+      <div className="ml-4 bg-white shadow rounded-xl p-6">
+        <h2 className="font-semibold mb-4">Revenue Trend by Date</h2>
+        <div style={{ width: "100%", height: 260 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="date" />
+              <YAxis />
+              <Tooltip formatter={(value) => `₹${Number(value).toLocaleString("en-IN")}`} />
+              <Line
+                type="monotone"
+                dataKey="total"
+                stroke="#f97316"
+                strokeWidth={3}
+                dot={{ r: 5 }}
+                activeDot={{ r: 7 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function DailyRevenue() {
   const [rows, setRows] = useState([]);
@@ -169,6 +217,8 @@ export default function DailyRevenue() {
           allOutlets={outlets}
           showRupee={true}
         />
+
+        <RevenueAnalytics rows={filteredRows} />
       </div>
     </div>
   );
