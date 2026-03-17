@@ -156,6 +156,10 @@ export default function Sidebar({ supervisor }) {
               <FontAwesomeIcon icon={faMoneyBillWave} />
               {open && "Cash Payments"}
             </Link>
+            <Link to="/admin/daily-revenue" className={linkClass("/admin/daily-revenue")}> 
+              <FontAwesomeIcon icon={faDollarSign} />
+              {open && "Daily Revenue"}
+            </Link>
             <Link to="/admin/distribution" className={linkClass("/admin/distribution")}> 
               <FontAwesomeIcon icon={faUsers} />
               {open && "Add Supervisor"}

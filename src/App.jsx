@@ -13,6 +13,7 @@ import DigitalPayments from "./pages/DigitalPayments";
 import Outlets from "./pages/Outlets";
 import Users from "./pages/Users";
 import IncentivePage from "./pages/IncentivePage";
+import DailyRevenue from "./pages/DailyRevenue";
 import Reports from "./pages/Reports";
 import { Navigate } from "react-router-dom";
 
@@ -76,6 +77,10 @@ function App() {
             <Route
               path="/admin/incentive"
               element={<ProtectedRoute element={<AdminLayoutWithPanel><IncentivePage /></AdminLayoutWithPanel>} requiredRole="incentive" />}
+            />
+            <Route
+              path="/admin/daily-revenue"
+              element={<ProtectedRoute element={<AdminLayoutWithPanel><DailyRevenue /></AdminLayoutWithPanel>} requiredRole={null} />}
             />
             <Route
               path="/admin/dailysales"
