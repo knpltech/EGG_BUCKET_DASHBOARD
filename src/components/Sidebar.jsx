@@ -91,6 +91,10 @@ export default function Sidebar({ supervisor }) {
               <FontAwesomeIcon icon={faPenToSquare} />
               {open && "Data Entry"}
             </Link>
+            <Link to="/supervisor/inventory" className={linkClass("/supervisor/inventory")}> 
+              <FontAwesomeIcon icon={faStore} />
+              {open && "Inventory"}
+            </Link>
             <Link to="/supervisor/damages" className={linkClass("/supervisor/damages")}> 
               <FontAwesomeIcon icon={faExclamationTriangle} />
               {open && "Daily Damages"}
@@ -131,6 +135,10 @@ export default function Sidebar({ supervisor }) {
             <Link to="/admin/data-entry" className={linkClass("/admin/data-entry")}> 
               <FontAwesomeIcon icon={faPenToSquare} />
               {open && "Data Entry"}
+            </Link>
+            <Link to="/admin/inventory" className={linkClass("/admin/inventory")}> 
+              <FontAwesomeIcon icon={faStore} />
+              {open && "Inventory"}
             </Link>
             <Link to="/admin/damages" className={linkClass("/admin/damages")}> 
               <FontAwesomeIcon icon={faExclamationTriangle} />

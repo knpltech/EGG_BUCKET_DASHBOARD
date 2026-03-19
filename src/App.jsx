@@ -25,6 +25,7 @@ import AdminLayoutWithPanel from "./layouts/AdminLayoutWithPanel";
 import ViewerData from "./pages/ViewerData";
 import SupervisorLayout from "./layouts/SupervisorLayout";
 import DataEntry from "./pages/DataEntry";
+import ZoneStockEntry from "./pages/ZoneStockEntry";
 
 function ProtectedRoute({ element, requiredRole }) {
   let user = null;
@@ -114,6 +115,10 @@ function App() {
               path="/admin/data-entry"
               element={<ProtectedRoute element={<AdminLayoutWithPanel><DataEntry /></AdminLayoutWithPanel>} requiredRole={null} />}
             />
+            <Route
+              path="/admin/inventory"
+              element={<ProtectedRoute element={<AdminLayoutWithPanel><ZoneStockEntry /></AdminLayoutWithPanel>} requiredRole={null} />}
+            />
 
             {/* SUPERVISOR ROUTES */}
             <Route path="/supervisor/dashboard" element={<ProtectedRoute element={<SupervisorDashboard />} requiredRole="supervisor" />} />
@@ -124,6 +129,7 @@ function App() {
             <Route path="/supervisor/cash-payments" element={<ProtectedRoute element={<SupervisorLayout><CashPayments supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
             <Route path="/supervisor/reports" element={<ProtectedRoute element={<SupervisorLayout><Reports supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
             <Route path="/supervisor/data-entry" element={<ProtectedRoute element={<SupervisorLayout><DataEntry supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
+            <Route path="/supervisor/inventory" element={<ProtectedRoute element={<SupervisorLayout><ZoneStockEntry /></SupervisorLayout>} requiredRole="supervisor" />} />
             <Route path="/supervisor/incentive" element={<ProtectedRoute element={<SupervisorLayout><IncentivePage supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
 
             {/* DATA AGENT ROUTES */}

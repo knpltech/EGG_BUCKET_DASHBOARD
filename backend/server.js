@@ -18,6 +18,7 @@ import outletRoutes from "./routes/outletRoutes.js";
 import reportsRoutes from "./routes/reportsRoutes.js"; // ← ADD THIS LINE
 import supervisorRoutes from "./routes/supervisorRoutes.js";
 import dataEntryRoutes from "./routes/dataEntryRoutes.js";
+import zoneStockRoutes from "./routes/zoneStockRoutes.js";
 
 const app = express();
 
@@ -55,6 +56,7 @@ app.use("/api/outlets", outletRoutes);
 app.use("/api/reports", reportsRoutes); // ← ADD THIS LINE
 app.use("/api/supervisor", supervisorRoutes);
 app.use("/api/data-entry", dataEntryRoutes);
+app.use("/api/zone-stock", zoneStockRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () =>
