@@ -44,6 +44,18 @@ const toNumber = (value) => {
   return Number.isFinite(numeric) ? numeric : 0;
 };
 
+const getEntryWindowState = (now = new Date()) => {
+  const currentDate = getLocalIsoDate(now);
+  const currentHour = now.getHours();
+  const isBeforeNoon = currentHour < 12;
+
+  return {
+    currentDate,
+    isBeforeNoon,
+    cutoffLabel: "12:00 PM",
+  };
+};
+
 const formatDate = (iso) => {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
@@ -88,7 +100,9 @@ const getLatestDayDoc = (rows, selectedDate) => {
 
 export default function ZoneStockEntry() {
   const { isAdmin, isSupervisor, zone } = getRoleFlags();
-  const [selectedDate, setSelectedDate] = useState(getLocalIsoDate());
+  const [now, setNow] = useState(() => new Date());
+  const entryWindow = useMemo(() => getEntryWindowState(now), [now]);
+  const [selectedDate, setSelectedDate] = useState(entryWindow.currentDate);
   const [selectedZone, setSelectedZone] = useState("");
   const [stockIn, setStockIn] = useState("0");
 
@@ -99,7 +113,6 @@ export default function ZoneStockEntry() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   const user = useMemo(() => {
     try {
@@ -120,6 +133,14 @@ export default function ZoneStockEntry() {
       setSelectedZone(availableZones[0]);
     }
   }, [availableZones, selectedZone]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNow(new Date());
+    }, 60000);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   const loadAll = useCallback(async () => {
     setIsLoading(true);
@@ -179,8 +200,14 @@ export default function ZoneStockEntry() {
 
   const zoneHistory = useMemo(() => {
     if (!selectedZone) return [];
-    return zoneStockRows
-      .filter((row) => row?.zone === selectedZone)
+    return Array.from(
+      new Map(
+        zoneStockRows
+          .filter((row) => row?.zone === selectedZone)
+          .sort((a, b) => getDocTimestamp(b) - getDocTimestamp(a))
+          .map((row) => [normalizeDate(row.date), row])
+      ).values()
+    )
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
   }, [zoneStockRows, selectedZone]);
 
@@ -209,11 +236,22 @@ export default function ZoneStockEntry() {
   const stockInNumber = toNumber(stockIn);
   const closingStock = openingStock + stockInNumber - selectedDateSales - selectedDateDamages;
 
-  const canSave = Boolean(selectedZone && selectedDate);
+  const isTodaySelected = selectedDate === entryWindow.currentDate;
+  const isLockedEntry = Boolean(existingForDate);
+  const isDateEditable = entryWindow.isBeforeNoon && isTodaySelected && !isLockedEntry;
+  const canSave = Boolean(selectedZone && selectedDate && isDateEditable);
+
+  const saveDisabledReason = useMemo(() => {
+    if (!selectedZone || !selectedDate) return "Please select zone and date.";
+    if (!entryWindow.isBeforeNoon) return `Inventory entry is allowed only before ${entryWindow.cutoffLabel}.`;
+    if (!isTodaySelected) return "Inventory entry can only be created for today's date.";
+    if (isLockedEntry) return "An inventory entry already exists for this date and is locked.";
+    return "";
+  }, [selectedZone, selectedDate, entryWindow, isTodaySelected, isLockedEntry]);
 
   const handleSave = async () => {
     if (!canSave) {
-      alert("Please select zone and date");
+      alert(saveDisabledReason || "Entry is locked for this date");
       return;
     }
 
@@ -251,41 +289,11 @@ export default function ZoneStockEntry() {
       }
 
       await loadAll();
-      alert("Zone stock entry saved successfully");
+      alert("Zone stock entry saved successfully. This date is now locked.");
     } catch (error) {
       alert(error?.message || "Failed to save entry");
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!isAdmin || !existingForDate) return;
-
-    if (!window.confirm(`Delete entry for ${selectedZone} on ${selectedDate}?`)) return;
-
-    const token = localStorage.getItem("token");
-    setIsDeleting(true);
-    try {
-      const response = await fetch(
-        `${API_URL}/zone-stock/zone/${encodeURIComponent(selectedZone)}/date/${encodeURIComponent(selectedDate)}`,
-        {
-          method: "DELETE",
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        }
-      );
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || "Failed to delete entry");
-      }
-
-      await loadAll();
-      alert("Entry deleted");
-    } catch (error) {
-      alert(error?.message || "Failed to delete entry");
-    } finally {
-      setIsDeleting(false);
     }
   };
 
@@ -340,6 +348,9 @@ export default function ZoneStockEntry() {
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
+                min={entryWindow.currentDate}
+                max={entryWindow.currentDate}
+                disabled={!entryWindow.isBeforeNoon || isLockedEntry}
                 className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
               />
             </div>
@@ -359,7 +370,13 @@ export default function ZoneStockEntry() {
                 min="0"
                 value={stockIn}
                 onChange={(e) => setStockIn(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                readOnly={!isDateEditable}
+                className={[
+                  "w-full rounded-xl border px-3 py-2.5 text-sm",
+                  isDateEditable
+                    ? "border-gray-200 focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    : "border-gray-200 bg-gray-50 text-gray-500",
+                ].join(" ")}
               />
             </div>
             <div>
@@ -401,7 +418,7 @@ export default function ZoneStockEntry() {
                     : "bg-emerald-500 hover:bg-emerald-600",
                 ].join(" ")}
               >
-                {isSaving ? "Saving..." : existingForDate ? "Update Entry" : "Save Entry"}
+                {isSaving ? "Saving..." : "Save Entry"}
               </button>
             </div>
           </div>
@@ -409,24 +426,9 @@ export default function ZoneStockEntry() {
           <p className="mt-3 text-xs text-gray-500">
             Sales and Damages are auto-calculated from zone-wise Daily Sales and Daily Damages data.
           </p>
-
-          {isAdmin && existingForDate ? (
-            <div className="mt-3">
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={isDeleting}
-                className={[
-                  "rounded-lg border px-3 py-1.5 text-xs font-semibold",
-                  isDeleting
-                    ? "cursor-not-allowed border-gray-200 text-gray-400"
-                    : "border-red-200 text-red-600 hover:bg-red-50",
-                ].join(" ")}
-              >
-                {isDeleting ? "Deleting..." : "Delete This Date Entry"}
-              </button>
-            </div>
-          ) : null}
+          <p className={`mt-2 text-xs font-medium ${saveDisabledReason ? "text-red-600" : "text-emerald-600"}`}>
+            {saveDisabledReason || `Entries are allowed only for today before ${entryWindow.cutoffLabel}, and each date can be saved only once.`}
+          </p>
         </div>
 
         <div className="rounded-2xl border border-gray-200 bg-white p-4 md:p-6 shadow-sm">
