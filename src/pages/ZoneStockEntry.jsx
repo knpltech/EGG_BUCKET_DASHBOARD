@@ -274,7 +274,7 @@ export default function ZoneStockEntry() {
   const isTodaySelected = selectedDate === entryWindow.currentDate;
   const isLockedEntry = Boolean(existingForDate);
   const hasMissingSalesEntries = missingSalesOutlets.length > 0;
-  const canCreateEntry = entryWindow.isBeforeNoon && isTodaySelected && !isLockedEntry;
+  const canCreateEntry = entryWindow.isBeforeNoon && isTodaySelected && !isLockedEntry && !hasMissingSalesEntries;
   const isDateEditable = entryWindow.isBeforeNoon && isTodaySelected && !isLockedEntry;
   const canSave = Boolean(selectedZone && selectedDate && canCreateEntry);
 
@@ -283,8 +283,11 @@ export default function ZoneStockEntry() {
     if (!entryWindow.isBeforeNoon) return `Inventory entry is allowed only before ${entryWindow.cutoffLabel}.`;
     if (!isTodaySelected) return "Inventory entry can only be created for today's date.";
     if (isLockedEntry) return "An inventory entry already exists for this date and is locked.";
+    if (hasMissingSalesEntries) {
+      return `Complete sales entries for all outlets first: ${missingSalesOutlets.map((outlet) => outlet.area || outlet.name || outlet.id).join(", ")}.`;
+    }
     return "";
-  }, [selectedZone, selectedDate, isLockedEntry, entryWindow, isTodaySelected]);
+  }, [selectedZone, selectedDate, isLockedEntry, entryWindow, isTodaySelected, hasMissingSalesEntries, missingSalesOutlets]);
 
   const handleSave = async () => {
     if (!canSave) {
@@ -434,7 +437,7 @@ export default function ZoneStockEntry() {
             Opening Stock = Previous Day Closing Stock, Closing Stock = Opening + Stock In - Sales - Damages.
           </p>
           <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold uppercase tracking-wide text-red-700">
-            Complete sales data first whenever possible. If some outlets are closed for holidays and sales are missed, inventory can still be entered and missing sales will not block it.
+            Inventory must be entered only after completing all sales data entries, without exception.
           </p>
         </div>
 
@@ -548,7 +551,7 @@ export default function ZoneStockEntry() {
           </p>
           {hasMissingSalesEntries ? (
             <p className="mt-2 text-xs font-medium text-amber-700">
-              Missing sales entries for this zone: {missingSalesOutlets.map((outlet) => outlet.area || outlet.name || outlet.id).join(", ")}. Inventory entry is still allowed for holiday-closed outlets.
+              Missing sales entries for this zone: {missingSalesOutlets.map((outlet) => outlet.area || outlet.name || outlet.id).join(", ")}.
             </p>
           ) : null}
           <p className={`mt-2 text-xs font-medium ${saveDisabledReason ? "text-red-600" : "text-emerald-600"}`}>
