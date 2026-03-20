@@ -95,6 +95,29 @@ const sumValuesByKeys = (values, keys) => {
   return (keys || []).reduce((sum, key) => sum + toNumber(values[key]), 0);
 };
 
+const computeZoneDayTotals = async (zone, dateIso) => {
+  const [outletsSnap, salesSnap, damagesSnap] = await Promise.all([
+    db.collection(OUTLETS_COLLECTION).get(),
+    db.collection(DAILY_SALES_COLLECTION).where("date", "==", dateIso).get(),
+    db.collection(DAILY_DAMAGES_COLLECTION).where("date", "==", dateIso).get(),
+  ]);
+
+  const outletRows = outletsSnap.docs.map(mapDoc);
+  const zoneOutletsMap = getZoneOutletMap(outletRows);
+  const outletKeys = zoneOutletsMap.get(zone) || [];
+
+  const salesRows = salesSnap.docs.map(mapDoc);
+  const damageRows = damagesSnap.docs.map(mapDoc);
+
+  const salesDoc = getLatestDocByDate(salesRows, dateIso);
+  const damagesDoc = getLatestDocByDate(damageRows, dateIso);
+
+  return {
+    salesQty: sumValuesByKeys(salesDoc?.outlets, outletKeys),
+    damagesQty: sumValuesByKeys(damagesDoc?.damages, outletKeys),
+  };
+};
+
 const commitBatches = async (refsAndData) => {
   if (!refsAndData.length) return 0;
   let written = 0;
@@ -210,7 +233,7 @@ const mapDoc = (doc) => ({ id: doc.id, ...doc.data() });
 
 export const upsertZoneStockEntry = async (req, res) => {
   try {
-    const { zone, date, openingStock, stockIn, salesQty, damagesQty, closingStock, addedBy } = req.body || {};
+    const { zone, date, openingStock, stockIn, addedBy } = req.body || {};
 
     const normalizedZone = normalizeZoneLabel(zone);
     const normalizedDate = normalizeDate(date);
@@ -219,14 +242,19 @@ export const upsertZoneStockEntry = async (req, res) => {
       return res.status(400).json({ message: "zone and date are required" });
     }
 
+    const computedTotals = await computeZoneDayTotals(normalizedZone, normalizedDate);
+    const normalizedOpeningStock = toNumber(openingStock);
+    const normalizedStockIn = toNumber(stockIn);
+    const computedClosingStock = normalizedOpeningStock + normalizedStockIn - computedTotals.salesQty - computedTotals.damagesQty;
+
     const payload = {
       zone: normalizedZone,
       date: normalizedDate,
-      openingStock: toNumber(openingStock),
-      stockIn: toNumber(stockIn),
-      salesQty: toNumber(salesQty),
-      damagesQty: toNumber(damagesQty),
-      closingStock: toNumber(closingStock),
+      openingStock: normalizedOpeningStock,
+      stockIn: normalizedStockIn,
+      salesQty: computedTotals.salesQty,
+      damagesQty: computedTotals.damagesQty,
+      closingStock: computedClosingStock,
       updatedAt: new Date(),
     };
 

@@ -272,26 +272,18 @@ export default function ZoneStockEntry() {
   const closingStock = openingStock + stockInNumber - selectedDateSales - selectedDateDamages;
 
   const isTodaySelected = selectedDate === entryWindow.currentDate;
-  const isLockedEntry = Boolean(existingForDate);
   const hasMissingSalesEntries = missingSalesOutlets.length > 0;
-  const canCreateEntry = entryWindow.isBeforeNoon && isTodaySelected && !isLockedEntry && !hasMissingSalesEntries;
-  const isDateEditable = entryWindow.isBeforeNoon && isTodaySelected && !isLockedEntry;
-  const canSave = Boolean(selectedZone && selectedDate && canCreateEntry);
+  const canSave = Boolean(selectedZone && selectedDate && isTodaySelected);
 
   const saveDisabledReason = useMemo(() => {
     if (!selectedZone || !selectedDate) return "Please select zone and date.";
-    if (!entryWindow.isBeforeNoon) return `Inventory entry is allowed only before ${entryWindow.cutoffLabel}.`;
     if (!isTodaySelected) return "Inventory entry can only be created for today's date.";
-    if (isLockedEntry) return "An inventory entry already exists for this date and is locked.";
-    if (hasMissingSalesEntries) {
-      return `Complete sales entries for all outlets first: ${missingSalesOutlets.map((outlet) => outlet.area || outlet.name || outlet.id).join(", ")}.`;
-    }
     return "";
-  }, [selectedZone, selectedDate, isLockedEntry, entryWindow, isTodaySelected, hasMissingSalesEntries, missingSalesOutlets]);
+  }, [selectedZone, selectedDate, isTodaySelected]);
 
   const handleSave = async () => {
     if (!canSave) {
-      alert(saveDisabledReason || "Entry is locked for this date");
+      alert(saveDisabledReason || "Entry is allowed only for today's date.");
       return;
     }
 
@@ -329,7 +321,7 @@ export default function ZoneStockEntry() {
       }
 
       await loadAll();
-      alert("Zone stock entry saved successfully. This date is now locked.");
+      alert(existingForDate ? "Zone stock entry updated successfully." : "Zone stock entry saved successfully.");
     } catch (error) {
       alert(error?.message || "Failed to save entry");
     } finally {
@@ -436,9 +428,6 @@ export default function ZoneStockEntry() {
           <p className="mt-1 text-sm text-gray-500">
             Opening Stock = Previous Day Closing Stock, Closing Stock = Opening + Stock In - Sales - Damages.
           </p>
-          <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold uppercase tracking-wide text-red-700">
-            Inventory must be entered only after completing all sales data entries, without exception.
-          </p>
         </div>
 
         <div className="rounded-2xl border border-gray-200 bg-white p-3 md:p-4 shadow-sm">
@@ -473,7 +462,6 @@ export default function ZoneStockEntry() {
                 onChange={(e) => setSelectedDate(e.target.value)}
                 min={entryWindow.currentDate}
                 max={entryWindow.currentDate}
-                disabled={!entryWindow.isBeforeNoon || isLockedEntry}
                 className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
               />
             </div>
@@ -493,10 +481,10 @@ export default function ZoneStockEntry() {
                 min="0"
                 value={stockIn}
                 onChange={(e) => setStockIn(e.target.value)}
-                readOnly={!isDateEditable}
+                readOnly={!isTodaySelected}
                 className={[
                   "w-full rounded-xl border px-3 py-2.5 text-sm",
-                  isDateEditable
+                  isTodaySelected
                     ? "border-gray-200 focus:outline-none focus:ring-2 focus:ring-orange-400"
                     : "border-gray-200 bg-gray-50 text-gray-500",
                 ].join(" ")}
@@ -555,7 +543,7 @@ export default function ZoneStockEntry() {
             </p>
           ) : null}
           <p className={`mt-2 text-xs font-medium ${saveDisabledReason ? "text-red-600" : "text-emerald-600"}`}>
-            {saveDisabledReason || `Entries are allowed only for today before ${entryWindow.cutoffLabel}, and each date can be saved only once.`}
+            {saveDisabledReason || "Entries are allowed only for today's date. You can re-save to sync updated sales and damages."}
           </p>
         </div>
 
