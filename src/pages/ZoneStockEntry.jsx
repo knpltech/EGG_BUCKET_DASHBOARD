@@ -118,9 +118,11 @@ export default function ZoneStockEntry() {
   const [selectedDate, setSelectedDate] = useState(entryWindow.currentDate);
   const [selectedZone, setSelectedZone] = useState("");
   const [stockIn, setStockIn] = useState("0");
+  const [remarks, setRemarks] = useState("");
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);
   const [editStockIn, setEditStockIn] = useState("0");
+  const [editRemarks, setEditRemarks] = useState("");
 
   const [outlets, setOutlets] = useState([]);
   const [salesRows, setSalesRows] = useState([]);
@@ -229,19 +231,25 @@ export default function ZoneStockEntry() {
 
   const zoneHistory = useMemo(() => {
     if (!selectedZone) return [];
-    return Array.from(
-      new Map(
-        zoneStockRows
-          .filter((row) => row?.zone === selectedZone)
-          .sort((a, b) => getDocTimestamp(b) - getDocTimestamp(a))
-          .map((row) => [normalizeDate(row.date || row.createdAt), row])
-      ).values()
-    )
-      .sort((a, b) => compareIsoDates(normalizeDate(b.date || b.createdAt), normalizeDate(a.date || a.createdAt)));
+    const latestByDate = new Map();
+    const sortedRows = zoneStockRows
+      .filter((row) => row?.zone === selectedZone)
+      .sort((a, b) => getDocTimestamp(b) - getDocTimestamp(a));
+
+    for (const row of sortedRows) {
+      const rowDate = normalizeDate(row.date || row.createdAt);
+      if (!rowDate) continue;
+      // Rows are already sorted newest-first, keep the first row per date.
+      if (!latestByDate.has(rowDate)) latestByDate.set(rowDate, row);
+    }
+
+    return Array.from(latestByDate.values()).sort((a, b) =>
+      compareIsoDates(normalizeDate(b.date || b.createdAt), normalizeDate(a.date || a.createdAt))
+    );
   }, [zoneStockRows, selectedZone]);
 
   const existingForDate = useMemo(
-    () => zoneHistory.find((row) => normalizeDate(row.date) === selectedDate) || null,
+    () => zoneHistory.find((row) => normalizeDate(row.date || row.createdAt) === selectedDate) || null,
     [zoneHistory, selectedDate]
   );
 
@@ -252,7 +260,7 @@ export default function ZoneStockEntry() {
     return previous ? toNumber(previous.closingStock) : 0;
   }, [zoneHistory, selectedDate]);
 
-  const openingStock = existingForDate ? toNumber(existingForDate.openingStock) : previousClosing;
+  const openingStock = previousClosing;
 
   const missingSalesOutlets = useMemo(() => {
     if (!zoneOutlets.length) return [];
@@ -263,9 +271,11 @@ export default function ZoneStockEntry() {
   useEffect(() => {
     if (existingForDate) {
       setStockIn(String(toNumber(existingForDate.stockIn)));
+      setRemarks(String(existingForDate.remarks || ""));
       return;
     }
     setStockIn("0");
+    setRemarks("");
   }, [existingForDate?.id, selectedDate, selectedZone]);
 
   const stockInNumber = toNumber(stockIn);
@@ -308,6 +318,7 @@ export default function ZoneStockEntry() {
           date: selectedDate,
           openingStock,
           stockIn: stockInNumber,
+          remarks: remarks.trim(),
           salesQty: selectedDateSales,
           damagesQty: selectedDateDamages,
           closingStock,
@@ -333,6 +344,7 @@ export default function ZoneStockEntry() {
     if (!isAdmin || !row) return;
     setEditRow(row);
     setEditStockIn(String(toNumber(row.stockIn)));
+    setEditRemarks(String(row.remarks || ""));
     setEditModalOpen(true);
   }, [isAdmin]);
 
@@ -340,6 +352,7 @@ export default function ZoneStockEntry() {
     setEditModalOpen(false);
     setEditRow(null);
     setEditStockIn("0");
+    setEditRemarks("");
   }, []);
 
   const handleEditSave = useCallback(async () => {
@@ -366,6 +379,7 @@ export default function ZoneStockEntry() {
           date: rowDate,
           openingStock: rowOpeningStock,
           stockIn: updatedStockIn,
+          remarks: editRemarks.trim(),
           salesQty: rowSales,
           damagesQty: rowDamages,
           closingStock: updatedClosingStock,
@@ -391,7 +405,7 @@ export default function ZoneStockEntry() {
     } finally {
       setIsSaving(false);
     }
-  }, [isAdmin, editRow, editStockIn, selectedDate, selectedDateSales, selectedDateDamages, selectedZone, user, loadAll, handleEditCancel]);
+  }, [isAdmin, editRow, editStockIn, editRemarks, selectedDate, selectedDateSales, selectedDateDamages, selectedZone, user, loadAll, handleEditCancel]);
 
   const displayedHistory = useMemo(() => {
     if (!zoneHistory.length) return [];
@@ -517,6 +531,17 @@ export default function ZoneStockEntry() {
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm font-bold text-green-600"
               />
             </div>
+            <div className="md:col-span-6">
+              <label className="mb-1 block text-sm font-semibold text-gray-700">Remarks</label>
+              <input
+                type="text"
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                placeholder="Optional notes for this stock entry"
+                maxLength={500}
+                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+              />
+            </div>
             <div className="flex items-end">
               <button
                 type="button"
@@ -563,17 +588,18 @@ export default function ZoneStockEntry() {
                   <th className="px-3 py-3">Sales</th>
                   <th className="px-3 py-3">Damages</th>
                   <th className="px-3 py-3">Closing Stock</th>
+                  <th className="px-3 py-3">Remarks</th>
                   {isAdmin ? <th className="px-3 py-3 text-right">Action</th> : null}
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={isAdmin ? 7 : 6} className="px-3 py-6 text-center text-gray-500">Loading history...</td>
+                    <td colSpan={isAdmin ? 8 : 7} className="px-3 py-6 text-center text-gray-500">Loading history...</td>
                   </tr>
                 ) : displayedHistory.length === 0 ? (
                   <tr>
-                    <td colSpan={isAdmin ? 7 : 6} className="px-3 py-6 text-center text-gray-500">No entries available for this zone.</td>
+                    <td colSpan={isAdmin ? 8 : 7} className="px-3 py-6 text-center text-gray-500">No entries available for this zone.</td>
                   </tr>
                 ) : (
                   displayedHistory.map((row) => {
@@ -592,6 +618,7 @@ export default function ZoneStockEntry() {
                         <td className="px-3 py-3 font-semibold text-blue-700">{toNumber(row.salesQty).toLocaleString("en-IN")}</td>
                         <td className="px-3 py-3 font-semibold text-red-600">{toNumber(row.damagesQty).toLocaleString("en-IN")}</td>
                         <td className="px-3 py-3 text-lg font-bold text-gray-900">{toNumber(row.closingStock).toLocaleString("en-IN")}</td>
+                        <td className="px-3 py-3 max-w-xs text-gray-700">{String(row.remarks || "-")}</td>
                         {isAdmin ? (
                           <td className="px-3 py-3 text-right">
                             <button
@@ -645,6 +672,17 @@ export default function ZoneStockEntry() {
                   <span className="font-bold text-green-600">
                     {(toNumber(editRow.openingStock) + toNumber(editStockIn) - toNumber(normalizeDate(editRow.date || editRow.createdAt) === selectedDate ? selectedDateSales : editRow.salesQty) - toNumber(normalizeDate(editRow.date || editRow.createdAt) === selectedDate ? selectedDateDamages : editRow.damagesQty)).toLocaleString("en-IN")}
                   </span>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-gray-700">Remarks</label>
+                  <input
+                    type="text"
+                    value={editRemarks}
+                    onChange={(e) => setEditRemarks(e.target.value)}
+                    placeholder="Optional notes"
+                    maxLength={500}
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                  />
                 </div>
               </div>
 

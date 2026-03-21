@@ -276,6 +276,37 @@ const createEmptyZoneRevenue = () => ({
 const createEmptyZoneStats = () =>
   Object.fromEntries(ZONES.map((zoneName) => [zoneName, { eggs: 0, outlets: 0, damage: 0, necc: "₹0.00" }]));
 
+const createEmptyZoneClosing = () =>
+  Object.fromEntries(ZONES.map((zoneName) => [zoneName, 0]));
+
+const getZoneWiseClosingStock = (rows = [], selectedDate) => {
+  const latestByZone = new Map();
+
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const rowDate = normalizeDate(row?.date || row?.createdAt);
+    if (rowDate !== selectedDate) continue;
+
+    const normalizedZone = normalizeZone(row?.zone);
+    if (!normalizedZone) continue;
+
+    const zoneLabel = `Zone ${normalizedZone}`;
+    if (!ZONES.includes(zoneLabel)) continue;
+
+    const existing = latestByZone.get(zoneLabel);
+    if (!existing || getDocTimestamp(row) >= getDocTimestamp(existing)) {
+      latestByZone.set(zoneLabel, row);
+    }
+  }
+
+  return Object.fromEntries(
+    ZONES.map((zoneLabel) => {
+      const row = latestByZone.get(zoneLabel);
+      const closingValue = Number(row?.closingStock);
+      return [zoneLabel, Number.isFinite(closingValue) ? closingValue : 0];
+    })
+  );
+};
+
 export default function AdminDashboard() {
   const { isAdmin, isViewer, zone } = getRoleFlags();
   const hasGlobalDashboardScope = isAdmin || isViewer;
@@ -290,6 +321,8 @@ export default function AdminDashboard() {
   const [revenueLoading, setRevenueLoading] = useState(true);
   const [zoneStats, setZoneStats] = useState(createEmptyZoneStats);
   const [zoneStatsLoading, setZoneStatsLoading] = useState(true);
+  const [zoneClosingStock, setZoneClosingStock] = useState(createEmptyZoneClosing);
+  const [zoneClosingLoading, setZoneClosingLoading] = useState(true);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -355,19 +388,22 @@ export default function AdminDashboard() {
     const loadDashboard = async () => {
       setRevenueLoading(true);
       setZoneStatsLoading(true);
+      setZoneClosingLoading(true);
 
       try {
         const outlets = await updateOutlets();
-        const [salesRes, damageRes, neccRes] = await Promise.all([
+        const [salesRes, damageRes, neccRes, zoneStockRes] = await Promise.all([
           fetch(`${API_URL}/dailysales/all`),
           fetch(`${API_URL}/daily-damage/all`),
           fetch(`${API_URL}/neccrate/all`),
+          fetch(`${API_URL}/zone-stock/all`),
         ]);
 
-        const [salesRows, damageRows, neccRates] = await Promise.all([
+        const [salesRows, damageRows, neccRates, zoneStockRows] = await Promise.all([
           salesRes.json(),
           damageRes.json(),
           neccRes.json(),
+          zoneStockRes.json(),
         ]);
 
         setEggsToday(getSalesTotal(Array.isArray(salesRows) ? salesRows : [], outlets, selectedDate));
@@ -386,6 +422,7 @@ export default function AdminDashboard() {
 
         const revenueData = await fetchZoneWiseRevenue(selectedDate);
         setZoneRevenue(revenueData.success ? revenueData.zoneRevenue : createEmptyZoneRevenue());
+        setZoneClosingStock(getZoneWiseClosingStock(Array.isArray(zoneStockRows) ? zoneStockRows : [], selectedDate));
       } catch (err) {
         console.error("Dashboard load error:", err);
         setEggsToday(0);
@@ -393,9 +430,11 @@ export default function AdminDashboard() {
         setNeccRate("₹0.00");
         setZoneRevenue(createEmptyZoneRevenue());
         setZoneStats(createEmptyZoneStats());
+        setZoneClosingStock(createEmptyZoneClosing());
       } finally {
         setRevenueLoading(false);
         setZoneStatsLoading(false);
+        setZoneClosingLoading(false);
       }
     };
 
@@ -498,6 +537,22 @@ export default function AdminDashboard() {
               <div key={zoneName} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center">
                 <h3 className="font-semibold text-orange-600 mb-4">{zoneName}</h3>
                 <div className="text-3xl font-bold text-orange-600">{(zoneStats[zoneName]?.damage ?? 0).toLocaleString("en-IN")}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <h2 className="text-xl font-bold mb-4">Closing Stock by Supervisor Zone</h2>
+      <div className="bg-white rounded-xl shadow-md p-6 mb-10">
+        {zoneClosingLoading ? (
+          <p className="text-gray-500 text-center py-10">Loading closing stock data...</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            {ZONES.map((zoneName) => (
+              <div key={zoneName} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center">
+                <h3 className="font-semibold text-orange-600 mb-4">{zoneName}</h3>
+                <div className="text-3xl font-bold text-orange-600">{(zoneClosingStock[zoneName] ?? 0).toLocaleString("en-IN")}</div>
               </div>
             ))}
           </div>

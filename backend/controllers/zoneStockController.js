@@ -15,6 +15,16 @@ const normalizeZoneLabel = (zone) => {
 
 const normalizeDate = (value) => {
   if (!value) return null;
+  if (value && typeof value === "object" && typeof value.toDate === "function") {
+    const date = value.toDate();
+    if (Number.isNaN(date.getTime())) return null;
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
+  if (value && typeof value === "object" && value._seconds !== undefined) {
+    const date = new Date(value._seconds * 1000);
+    if (Number.isNaN(date.getTime())) return null;
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+  }
   if (typeof value === "string") {
     const trimmed = value.trim();
     if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
@@ -36,6 +46,18 @@ const normalizeDate = (value) => {
 const toNumber = (value) => {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : 0;
+};
+
+const toMillis = (value) => {
+  if (!value) return 0;
+  if (value && typeof value === "object" && typeof value.toDate === "function") {
+    return value.toDate().getTime();
+  }
+  if (value && typeof value === "object" && value._seconds !== undefined) {
+    return value._seconds * 1000;
+  }
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
 };
 
 const getIsoToday = () => {
@@ -95,6 +117,21 @@ const sumValuesByKeys = (values, keys) => {
   return (keys || []).reduce((sum, key) => sum + toNumber(values[key]), 0);
 };
 
+const getLatestRowsByDate = (rows, valueKey) => {
+  const byDate = new Map();
+  for (const row of rows || []) {
+    const date = normalizeDate(row?.date || row?.createdAt);
+    if (!date) continue;
+    const existing = byDate.get(date);
+    const currentTs = toMillis(row?.updatedAt || row?.createdAt || row?.date);
+    const existingTs = existing ? toMillis(existing?.updatedAt || existing?.createdAt || existing?.date) : -1;
+    if (!existing || currentTs >= existingTs) {
+      byDate.set(date, row?.[valueKey]);
+    }
+  }
+  return byDate;
+};
+
 const computeZoneDayTotals = async (zone, dateIso) => {
   const [outletsSnap, salesSnap, damagesSnap] = await Promise.all([
     db.collection(OUTLETS_COLLECTION).get(),
@@ -118,14 +155,113 @@ const computeZoneDayTotals = async (zone, dateIso) => {
   };
 };
 
-const commitBatches = async (refsAndData) => {
+const getPreviousClosingStock = async (zone, dateIso) => {
+  const snap = await db.collection(COLLECTION).where("zone", "==", zone).get();
+  if (snap.empty) return 0;
+
+  const previous = snap.docs
+    .map(mapDoc)
+    .map((row) => ({
+      ...row,
+      normalizedDate: normalizeDate(row?.date || row?.createdAt),
+    }))
+    .filter((row) => row.normalizedDate && String(row.normalizedDate).localeCompare(String(dateIso)) < 0)
+    .sort((a, b) => String(b.normalizedDate).localeCompare(String(a.normalizedDate)))[0];
+
+  return previous ? toNumber(previous.closingStock) : 0;
+};
+
+const recalculateZoneStockFromDate = async (zone, startDate) => {
+  const normalizedZone = normalizeZoneLabel(zone);
+  const normalizedStartDate = normalizeDate(startDate);
+  if (!normalizedZone || !normalizedStartDate) return 0;
+
+  const [zoneSnap, outletsSnap, salesSnap, damagesSnap] = await Promise.all([
+    db.collection(COLLECTION).where("zone", "==", normalizedZone).get(),
+    db.collection(OUTLETS_COLLECTION).get(),
+    db.collection(DAILY_SALES_COLLECTION).get(),
+    db.collection(DAILY_DAMAGES_COLLECTION).get(),
+  ]);
+
+  if (zoneSnap.empty) return 0;
+
+  const zoneRowsRaw = zoneSnap.docs
+    .map((doc) => ({ ref: doc.ref, id: doc.id, ...doc.data() }))
+    .map((row) => ({
+      ...row,
+      normalizedDate: normalizeDate(row?.date || row?.createdAt),
+    }))
+    .filter((row) => row.normalizedDate);
+
+  const latestByDate = new Map();
+  for (const row of zoneRowsRaw) {
+    const existing = latestByDate.get(row.normalizedDate);
+    const rowTs = toMillis(row.updatedAt || row.createdAt || row.date);
+    const existingTs = existing ? toMillis(existing.updatedAt || existing.createdAt || existing.date) : -1;
+    if (!existing || rowTs >= existingTs) {
+      latestByDate.set(row.normalizedDate, row);
+    }
+  }
+
+  const zoneRows = Array.from(latestByDate.values()).sort((a, b) => String(a.normalizedDate).localeCompare(String(b.normalizedDate)));
+
+  const previousRow = zoneRows
+    .filter((row) => String(row.normalizedDate).localeCompare(String(normalizedStartDate)) < 0)
+    .sort((a, b) => String(b.normalizedDate).localeCompare(String(a.normalizedDate)))[0];
+
+  let previousClosing = previousRow ? toNumber(previousRow.closingStock) : 0;
+  const rowsToRecalculate = zoneRows.filter((row) => String(row.normalizedDate).localeCompare(String(normalizedStartDate)) >= 0);
+  if (!rowsToRecalculate.length) return 0;
+
+  const outletRows = outletsSnap.docs.map(mapDoc);
+  const zoneOutletsMap = getZoneOutletMap(outletRows);
+  const outletKeys = zoneOutletsMap.get(normalizedZone) || [];
+
+  const salesRows = salesSnap.docs.map(mapDoc);
+  const damagesRows = damagesSnap.docs.map(mapDoc);
+  const latestSalesByDate = getLatestRowsByDate(salesRows, "outlets");
+  const latestDamagesByDate = getLatestRowsByDate(damagesRows, "damages");
+
+  const writes = [];
+
+  for (const row of rowsToRecalculate) {
+    const rowDate = row.normalizedDate;
+    const salesQty = sumValuesByKeys(latestSalesByDate.get(rowDate), outletKeys);
+    const damagesQty = sumValuesByKeys(latestDamagesByDate.get(rowDate), outletKeys);
+    const stockIn = toNumber(row.stockIn);
+    const closingStock = previousClosing + stockIn - salesQty - damagesQty;
+
+    writes.push({
+      ref: row.ref,
+      data: {
+        openingStock: previousClosing,
+        salesQty,
+        damagesQty,
+        closingStock,
+        remarks: String(row.remarks || "").trim().slice(0, 500),
+        updatedAt: new Date(),
+      },
+    });
+
+    previousClosing = closingStock;
+  }
+
+  return commitBatches(writes, { merge: true });
+};
+
+const commitBatches = async (refsAndData, options = {}) => {
   if (!refsAndData.length) return 0;
+  const { merge = false } = options;
   let written = 0;
   for (let i = 0; i < refsAndData.length; i += 450) {
     const chunk = refsAndData.slice(i, i + 450);
     const batch = db.batch();
     for (const item of chunk) {
-      batch.set(item.ref, item.data);
+      if (merge) {
+        batch.set(item.ref, item.data, { merge: true });
+      } else {
+        batch.set(item.ref, item.data);
+      }
       written += 1;
     }
     await batch.commit();
@@ -231,9 +367,46 @@ const ensureZoneStockDefaults = async () => {
 
 const mapDoc = (doc) => ({ id: doc.id, ...doc.data() });
 
+const hasNonEmptyRemarks = (row) => String(row?.remarks || "").trim().length > 0;
+
+const selectPreferredRow = (current, candidate) => {
+  if (!current) return candidate;
+
+  const currentHasRemarks = hasNonEmptyRemarks(current);
+  const candidateHasRemarks = hasNonEmptyRemarks(candidate);
+
+  if (candidateHasRemarks && !currentHasRemarks) return candidate;
+  if (!candidateHasRemarks && currentHasRemarks) return current;
+
+  const currentTs = toMillis(current?.updatedAt || current?.createdAt || current?.date);
+  const candidateTs = toMillis(candidate?.updatedAt || candidate?.createdAt || candidate?.date);
+  return candidateTs >= currentTs ? candidate : current;
+};
+
+const dedupeZoneStockRows = (rows) => {
+  const byZoneDate = new Map();
+
+  for (const row of rows || []) {
+    const zone = normalizeZoneLabel(row?.zone);
+    const date = normalizeDate(row?.date || row?.createdAt);
+    if (!zone || !date) continue;
+
+    const key = `${zone}__${date}`;
+    const normalizedRow = {
+      ...row,
+      zone,
+      date,
+    };
+
+    byZoneDate.set(key, selectPreferredRow(byZoneDate.get(key), normalizedRow));
+  }
+
+  return Array.from(byZoneDate.values());
+};
+
 export const upsertZoneStockEntry = async (req, res) => {
   try {
-    const { zone, date, openingStock, stockIn, addedBy } = req.body || {};
+    const { zone, date, stockIn, remarks, addedBy } = req.body || {};
 
     const normalizedZone = normalizeZoneLabel(zone);
     const normalizedDate = normalizeDate(date);
@@ -243,8 +416,9 @@ export const upsertZoneStockEntry = async (req, res) => {
     }
 
     const computedTotals = await computeZoneDayTotals(normalizedZone, normalizedDate);
-    const normalizedOpeningStock = toNumber(openingStock);
+    const normalizedOpeningStock = await getPreviousClosingStock(normalizedZone, normalizedDate);
     const normalizedStockIn = toNumber(stockIn);
+    const normalizedRemarks = String(remarks || "").trim().slice(0, 500);
     const computedClosingStock = normalizedOpeningStock + normalizedStockIn - computedTotals.salesQty - computedTotals.damagesQty;
 
     const payload = {
@@ -252,6 +426,7 @@ export const upsertZoneStockEntry = async (req, res) => {
       date: normalizedDate,
       openingStock: normalizedOpeningStock,
       stockIn: normalizedStockIn,
+      remarks: normalizedRemarks,
       salesQty: computedTotals.salesQty,
       damagesQty: computedTotals.damagesQty,
       closingStock: computedClosingStock,
@@ -267,20 +442,44 @@ export const upsertZoneStockEntry = async (req, res) => {
       };
     }
 
-    const existingSnap = await db
-      .collection(COLLECTION)
-      .where("zone", "==", normalizedZone)
-      .where("date", "==", normalizedDate)
-      .limit(1)
-      .get();
+    const zoneSnap = await db.collection(COLLECTION).where("zone", "==", normalizedZone).get();
 
-    if (!existingSnap.empty) {
-      const existingDoc = existingSnap.docs[0];
-      await existingDoc.ref.set(payload, { merge: true });
+    const matchingDocs = zoneSnap.docs
+      .map((doc) => ({
+        id: doc.id,
+        ref: doc.ref,
+        ...doc.data(),
+        normalizedDate: normalizeDate(doc.data()?.date || doc.data()?.createdAt),
+      }))
+      .filter((row) => row.normalizedDate === normalizedDate)
+      .sort((a, b) => toMillis(b.updatedAt || b.createdAt || b.date) - toMillis(a.updatedAt || a.createdAt || a.date));
+
+    if (matchingDocs.length) {
+      const primaryDoc = matchingDocs[0];
+      const duplicateDocs = matchingDocs.slice(1);
+      const finalRemarks = normalizedRemarks;
+
+      const updatePayload = {
+        ...payload,
+        remarks: finalRemarks,
+        date: normalizedDate,
+      };
+
+      await primaryDoc.ref.set(updatePayload, { merge: true });
+
+      for (const duplicate of duplicateDocs) {
+        await duplicate.ref.delete();
+      }
+
+      const recalculated = await recalculateZoneStockFromDate(normalizedZone, normalizedDate);
+      
+      const updatedDoc = await primaryDoc.ref.get();
+      const returnData = { id: updatedDoc.id, ...updatedDoc.data() };
       return res.status(200).json({
-        id: existingDoc.id,
+        ...returnData,
         merged: true,
-        message: "Zone stock entry updated",
+        recalculated,
+        message: "Zone stock entry updated and future days recalculated",
       });
     }
 
@@ -289,10 +488,16 @@ export const upsertZoneStockEntry = async (req, res) => {
       createdAt: new Date(),
     });
 
+    const recalculated = await recalculateZoneStockFromDate(normalizedZone, normalizedDate);
+
+    const createdDoc = await docRef.get();
+    const returnData = { id: createdDoc.id, ...createdDoc.data() };
+
     return res.status(201).json({
-      id: docRef.id,
+      ...returnData,
       merged: false,
-      message: "Zone stock entry created",
+      recalculated,
+      message: "Zone stock entry created and future days recalculated",
     });
   } catch (error) {
     return res.status(500).json({ message: "Error saving zone stock entry", error: error.message });
@@ -303,8 +508,7 @@ export const getAllZoneStockEntries = async (_req, res) => {
   try {
     await ensureZoneStockDefaults();
     const snapshot = await db.collection(COLLECTION).get();
-    const data = snapshot.docs
-      .map(mapDoc)
+    const data = dedupeZoneStockRows(snapshot.docs.map(mapDoc))
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
     return res.status(200).json(data);
   } catch (error) {
@@ -319,8 +523,7 @@ export const getZoneStockEntriesByZone = async (req, res) => {
     if (!zone) return res.status(400).json({ message: "zone is required" });
 
     const snapshot = await db.collection(COLLECTION).where("zone", "==", zone).get();
-    const data = snapshot.docs
-      .map(mapDoc)
+    const data = dedupeZoneStockRows(snapshot.docs.map(mapDoc))
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
     return res.status(200).json(data);
   } catch (error) {
@@ -405,3 +608,4 @@ export const resetAllZoneStockEntries = async (_req, res) => {
     return res.status(500).json({ message: "Error resetting zone stock entries", error: error.message });
   }
 };
+

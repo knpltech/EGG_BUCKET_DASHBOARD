@@ -161,11 +161,40 @@ const formatZoneLabel = (zoneKey) => {
   return `Zone ${String(zoneKey).trim()}`;
 };
 
+const getClosingStockBySupervisorZone = (rows, normalizedZones, today) => {
+  const zoneSet = new Set((normalizedZones || []).map((zoneKey) => String(zoneKey)));
+  const latestByZone = new Map();
+
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const rowDate = normalizeDate(row?.date || row?.createdAt);
+    if (rowDate !== today) continue;
+
+    const zoneNumber = normalizeZone(row?.zone);
+    if (!zoneNumber || !zoneSet.has(String(zoneNumber))) continue;
+
+    const zoneLabel = formatZoneLabel(zoneNumber);
+    const existing = latestByZone.get(zoneLabel);
+    if (!existing || getDocTimestamp(row) >= getDocTimestamp(existing)) {
+      latestByZone.set(zoneLabel, row);
+    }
+  }
+
+  return Object.fromEntries(
+    (normalizedZones || []).map((zoneNumber) => {
+      const zoneLabel = formatZoneLabel(zoneNumber);
+      const row = latestByZone.get(zoneLabel);
+      const closingValue = Number(row?.closingStock);
+      return [zoneLabel, Number.isFinite(closingValue) ? closingValue : 0];
+    })
+  );
+};
+
 export default function SupervisorDashboard() {
   const [eggsToday, setEggsToday] = useState(0);
   const [totalOutlets, setTotalOutlets] = useState(0);
   const [damagesToday, setDamagesToday] = useState(0);
   const [neccRate, setNeccRate] = useState("₹0.00");
+  const [zoneClosingStock, setZoneClosingStock] = useState({});
 
   const normalizedUserZones = useMemo(() => {
     try {
@@ -190,22 +219,29 @@ export default function SupervisorDashboard() {
     }
   }, []);
 
+  const totalClosingStock = useMemo(() => {
+    const total = Object.values(zoneClosingStock || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
+    return Number.isFinite(total) ? total : 0;
+  }, [zoneClosingStock]);
+
   useEffect(() => {
     const today = getLocalIsoDate();
 
     const fetchSupervisorDashboard = async () => {
       try {
-        const [outletsRes, salesRes, damagesRes, ratesRes] = await Promise.all([
+        const [outletsRes, salesRes, damagesRes, ratesRes, zoneStockRes] = await Promise.all([
           fetch(`${API_URL}/outlets/all`),
           fetch(`${API_URL}/dailysales/all`),
           fetch(`${API_URL}/daily-damage/all`),
           fetch(`${API_URL}/neccrate/all`),
+          fetch(`${API_URL}/zone-stock/all`),
         ]);
 
         const outletsRaw = await outletsRes.json();
         const salesRaw = await salesRes.json();
         const damagesRaw = await damagesRes.json();
         const ratesRaw = await ratesRes.json();
+        const zoneStockRaw = await zoneStockRes.json();
 
         const zoneOutlets = Array.isArray(outletsRaw)
           ? outletsRaw.filter((outlet) => isOutletInSupervisorZones(outlet, normalizedUserZones))
@@ -229,11 +265,14 @@ export default function SupervisorDashboard() {
           const averageRate = getAverageNeccRate(todayZoneRates);
           setNeccRate(`₹${averageRate.toFixed(2)}`);
         }
+
+        setZoneClosingStock(getClosingStockBySupervisorZone(zoneStockRaw, normalizedUserZones, today));
       } catch {
         setEggsToday(0);
         setTotalOutlets(0);
         setDamagesToday(0);
         setNeccRate("₹0.00");
+        setZoneClosingStock({});
       }
     };
 
@@ -256,11 +295,28 @@ export default function SupervisorDashboard() {
           ) : null}
           <p className="mb-6 text-gray-600">Today&apos;s overview for your assigned zone outlets.</p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
             <StatCard title="Total Eggs Distributed Today" value={eggsToday} icon="🥚" />
             <StatCard title="Total Outlets" value={totalOutlets} icon="🏪" />
             <StatCard title="Damages Today" value={damagesToday} icon="📉" />
             <StatCard title="Today&apos;s NECC Rate" value={neccRate} icon="📈" />
+            <StatCard title="Today&apos;s Closing Stock" value={totalClosingStock.toLocaleString("en-IN")} icon="📦" />
+          </div>
+
+          <div className="mb-8 rounded-xl bg-white p-6 shadow">
+            <h2 className="mb-4 text-xl font-semibold text-gray-800">Closing Stock by Assigned Zone</h2>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {(normalizedUserZones || []).map((zoneNumber) => {
+                const zoneLabel = formatZoneLabel(zoneNumber);
+                const closingValue = Number(zoneClosingStock?.[zoneLabel] || 0);
+                return (
+                  <div key={zoneLabel} className="rounded-lg border border-gray-200 p-4 text-center">
+                    <p className="mb-2 font-semibold text-orange-600">{zoneLabel}</p>
+                    <p className="text-3xl font-bold text-orange-600">{closingValue.toLocaleString("en-IN")}</p>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
