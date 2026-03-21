@@ -315,7 +315,6 @@ export default function AdminDashboard() {
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [totalOutlets, setTotalOutlets] = useState(0);
   const [eggsToday, setEggsToday] = useState(0);
-  const [neccRate, setNeccRate] = useState("₹0.00");
   const [damagesToday, setDamagesToday] = useState(0);
   const [zoneRevenue, setZoneRevenue] = useState(createEmptyZoneRevenue);
   const [revenueLoading, setRevenueLoading] = useState(true);
@@ -416,14 +415,6 @@ export default function AdminDashboard() {
         const computedZoneStats = computeZoneStats(outlets, salesRows, damageRows, neccRates);
         setZoneStats(computedZoneStats);
 
-        const zoneAverageValues = Object.values(computedZoneStats)
-          .map((zoneStat) => Number(String(zoneStat.necc || "").replace(/[^\d.]/g, "")))
-          .filter((value) => Number.isFinite(value) && value > 0);
-        const averageZoneRate = zoneAverageValues.length
-          ? zoneAverageValues.reduce((sum, value) => sum + value, 0) / zoneAverageValues.length
-          : 0;
-        setNeccRate(`₹${averageZoneRate.toFixed(2)}`);
-
         const revenueData = await fetchZoneWiseRevenue(selectedDate);
         setZoneRevenue(revenueData.success ? revenueData.zoneRevenue : createEmptyZoneRevenue());
         setZoneClosingStock(getZoneWiseClosingStock(Array.isArray(zoneStockRows) ? zoneStockRows : [], selectedDate));
@@ -431,7 +422,6 @@ export default function AdminDashboard() {
         console.error("Dashboard load error:", err);
         setEggsToday(0);
         setDamagesToday(0);
-        setNeccRate("₹0.00");
         setZoneRevenue(createEmptyZoneRevenue());
         setZoneStats(createEmptyZoneStats());
         setZoneClosingStock(createEmptyZoneClosing());
@@ -492,11 +482,10 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
         <StatCard title="Total Eggs Distributed" value={eggsToday} icon="🥚" />
         <StatCard title="Total Outlets" value={totalOutlets} icon="🏪" />
         <StatCard title="Total Egg Damages" value={damagesToday} icon="📉" />
-        <StatCard title="NECC Rate" value={neccRate} icon="📈" />
         <StatCard
           title="Total Closing Stock (All Zones)"
           value={zoneClosingLoading ? "..." : totalClosingStockAllZones.toLocaleString("en-IN")}
@@ -588,16 +577,22 @@ export default function AdminDashboard() {
 
       <h2 className="text-xl font-bold mb-4">NECC Rate by Supervisor Zone</h2>
       <div className="bg-white rounded-xl shadow-md p-6 mb-10">
-        {zoneStatsLoading ? (
+        {zoneStatsLoading || revenueLoading ? (
           <p className="text-gray-500 text-center py-10">Loading zone data...</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            {ZONES.map((zoneName) => (
-              <div key={zoneName} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center">
-                <h3 className="font-semibold text-orange-600 mb-4">{zoneName}</h3>
-                <div className="text-3xl font-bold text-orange-600">{zoneStats[zoneName]?.necc ?? "₹0.00"}</div>
-              </div>
-            ))}
+            {ZONES.map((zoneName) => {
+              const eggsDistributed = Number(zoneStats[zoneName]?.eggs) || 0;
+              const totalRevenue = Number(zoneRevenue[zoneName]?.total) || 0;
+              const computedRate = eggsDistributed > 0 ? totalRevenue / eggsDistributed : 0;
+
+              return (
+                <div key={zoneName} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center">
+                  <h3 className="font-semibold text-orange-600 mb-4">{zoneName}</h3>
+                  <div className="text-3xl font-bold text-orange-600">₹{computedRate.toFixed(2)}</div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
