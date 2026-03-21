@@ -283,13 +283,15 @@ export default function ZoneStockEntry() {
 
   const isTodaySelected = selectedDate === entryWindow.currentDate;
   const hasMissingSalesEntries = missingSalesOutlets.length > 0;
-  const canSave = Boolean(selectedZone && selectedDate && isTodaySelected);
+  const isSupervisorLockedForDate = Boolean(isSupervisor && existingForDate);
+  const canSave = Boolean(selectedZone && selectedDate && isTodaySelected && !isSupervisorLockedForDate);
 
   const saveDisabledReason = useMemo(() => {
     if (!selectedZone || !selectedDate) return "Please select zone and date.";
     if (!isTodaySelected) return "Inventory entry can only be created for today's date.";
+    if (isSupervisorLockedForDate) return "Entry locked. Supervisors can submit inventory only once per day.";
     return "";
-  }, [selectedZone, selectedDate, isTodaySelected]);
+  }, [selectedZone, selectedDate, isTodaySelected, isSupervisorLockedForDate]);
 
   const handleSave = async () => {
     if (!canSave) {
@@ -327,8 +329,15 @@ export default function ZoneStockEntry() {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || "Failed to save entry");
+        let message = "Failed to save entry";
+        try {
+          const errorJson = await response.json();
+          if (errorJson?.message) message = errorJson.message;
+        } catch {
+          const errorText = await response.text();
+          if (errorText) message = errorText;
+        }
+        throw new Error(message);
       }
 
       await loadAll();
@@ -568,7 +577,7 @@ export default function ZoneStockEntry() {
             </p>
           ) : null}
           <p className={`mt-2 text-xs font-medium ${saveDisabledReason ? "text-red-600" : "text-emerald-600"}`}>
-            {saveDisabledReason || "Entries are allowed only for today's date. You can re-save to sync updated sales and damages."}
+            {saveDisabledReason || "Entries are allowed only for today's date."}
           </p>
         </div>
 

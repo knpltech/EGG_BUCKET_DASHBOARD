@@ -454,6 +454,13 @@ export const upsertZoneStockEntry = async (req, res) => {
       .filter((row) => row.normalizedDate === normalizedDate)
       .sort((a, b) => toMillis(b.updatedAt || b.createdAt || b.date) - toMillis(a.updatedAt || a.createdAt || a.date));
 
+    const requesterRole = String(addedBy?.role || "").trim().toLowerCase();
+    if (requesterRole === "supervisor" && matchingDocs.length) {
+      return res.status(409).json({
+        message: "Inventory entry locked. Supervisors can submit zone stock only once per day.",
+      });
+    }
+
     if (matchingDocs.length) {
       const primaryDoc = matchingDocs[0];
       const duplicateDocs = matchingDocs.slice(1);

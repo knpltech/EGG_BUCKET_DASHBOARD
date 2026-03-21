@@ -224,6 +224,8 @@ export default function SupervisorDashboard() {
     return Number.isFinite(total) ? total : 0;
   }, [zoneClosingStock]);
 
+  const showZoneBreakdown = normalizedUserZones.length > 1;
+
   useEffect(() => {
     const today = getLocalIsoDate();
 
@@ -303,21 +305,23 @@ export default function SupervisorDashboard() {
             <StatCard title="Today&apos;s Closing Stock" value={totalClosingStock.toLocaleString("en-IN")} icon="📦" />
           </div>
 
-          <div className="mb-8 rounded-xl bg-white p-6 shadow">
-            <h2 className="mb-4 text-xl font-semibold text-gray-800">Closing Stock by Assigned Zone</h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {(normalizedUserZones || []).map((zoneNumber) => {
-                const zoneLabel = formatZoneLabel(zoneNumber);
-                const closingValue = Number(zoneClosingStock?.[zoneLabel] || 0);
-                return (
-                  <div key={zoneLabel} className="rounded-lg border border-gray-200 p-4 text-center">
-                    <p className="mb-2 font-semibold text-orange-600">{zoneLabel}</p>
-                    <p className="text-3xl font-bold text-orange-600">{closingValue.toLocaleString("en-IN")}</p>
-                  </div>
-                );
-              })}
+          {showZoneBreakdown ? (
+            <div className="mb-8 rounded-xl bg-white p-6 shadow">
+              <h2 className="mb-4 text-xl font-semibold text-gray-800">Closing Stock by Assigned Zone</h2>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {(normalizedUserZones || []).map((zoneNumber) => {
+                  const zoneLabel = formatZoneLabel(zoneNumber);
+                  const closingValue = Number(zoneClosingStock?.[zoneLabel] || 0);
+                  return (
+                    <div key={zoneLabel} className="rounded-lg border border-gray-200 p-4 text-center">
+                      <p className="mb-2 font-semibold text-orange-600">{zoneLabel}</p>
+                      <p className="text-3xl font-bold text-orange-600">{closingValue.toLocaleString("en-IN")}</p>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          ) : null}
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
             <Link to="/supervisor/damages" className="rounded-xl bg-orange-100 p-6 shadow hover:bg-orange-200 transition flex flex-col items-center">
