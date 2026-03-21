@@ -112,7 +112,7 @@ const getLatestDayDoc = (rows, selectedDate) => {
 };
 
 export default function ZoneStockEntry() {
-  const { isAdmin, isSupervisor, zone } = getRoleFlags();
+  const { isAdmin, isSupervisor, isViewer, zone } = getRoleFlags();
   const [now, setNow] = useState(() => new Date());
   const entryWindow = useMemo(() => getEntryWindowState(now), [now]);
   const [selectedDate, setSelectedDate] = useState(entryWindow.currentDate);
@@ -141,10 +141,10 @@ export default function ZoneStockEntry() {
   }, []);
 
   const availableZones = useMemo(() => {
-    if (isAdmin) return ALL_ZONES;
+    if (isAdmin || isViewer) return ALL_ZONES;
     if (isSupervisor) return extractUserZones(user, zone);
     return [];
-  }, [isAdmin, isSupervisor, user, zone]);
+  }, [isAdmin, isSupervisor, isViewer, user, zone]);
 
   useEffect(() => {
     if (!selectedZone && availableZones.length > 0) {
@@ -284,7 +284,8 @@ export default function ZoneStockEntry() {
   const isTodaySelected = selectedDate === entryWindow.currentDate;
   const hasMissingSalesEntries = missingSalesOutlets.length > 0;
   const isSupervisorLockedForDate = Boolean(isSupervisor && existingForDate);
-  const canSave = Boolean(selectedZone && selectedDate && isTodaySelected && !isSupervisorLockedForDate);
+  const canEditInventory = isAdmin || isSupervisor;
+  const canSave = Boolean(canEditInventory && selectedZone && selectedDate && isTodaySelected && !isSupervisorLockedForDate);
 
   const saveDisabledReason = useMemo(() => {
     if (!selectedZone || !selectedDate) return "Please select zone and date.";
@@ -432,12 +433,12 @@ export default function ZoneStockEntry() {
     });
   }, [zoneHistory, selectedDate, openingStock, stockInNumber, selectedDateSales, selectedDateDamages, closingStock]);
 
-  if (!isAdmin && !isSupervisor) {
+  if (!isAdmin && !isSupervisor && !isViewer) {
     return (
       <div className="min-h-screen bg-eggBg flex items-center justify-center px-4">
         <div className="rounded-2xl border border-orange-200 bg-white px-6 py-5 text-center shadow-sm">
           <h2 className="text-xl font-semibold text-gray-900">Zone Stock Entry</h2>
-          <p className="mt-2 text-sm text-gray-500">Only Admin and Supervisor can access this page.</p>
+          <p className="mt-2 text-sm text-gray-500">Only Admin, Supervisor, and Viewer can access this page.</p>
         </div>
       </div>
     );
@@ -473,6 +474,7 @@ export default function ZoneStockEntry() {
           </div>
         </div>
 
+        {canEditInventory ? (
         <div className="rounded-2xl border border-gray-200 bg-white p-4 md:p-6 shadow-sm">
           <h2 className="text-xl font-semibold text-gray-900">New Entry</h2>
 
@@ -580,6 +582,12 @@ export default function ZoneStockEntry() {
             {saveDisabledReason || "Entries are allowed only for today's date."}
           </p>
         </div>
+        ) : (
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 md:p-6 shadow-sm">
+          <h2 className="text-xl font-semibold text-gray-900">Inventory Data</h2>
+          <p className="mt-2 text-sm text-gray-500">Viewer access is read-only. You can review zone-wise stock history below.</p>
+        </div>
+        )}
 
         <div className="rounded-2xl border border-gray-200 bg-white p-4 md:p-6 shadow-sm">
           <div className="flex items-center justify-between">

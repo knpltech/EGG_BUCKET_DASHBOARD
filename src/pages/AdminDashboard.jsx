@@ -323,6 +323,10 @@ export default function AdminDashboard() {
   const [zoneStatsLoading, setZoneStatsLoading] = useState(true);
   const [zoneClosingStock, setZoneClosingStock] = useState(createEmptyZoneClosing);
   const [zoneClosingLoading, setZoneClosingLoading] = useState(true);
+  const totalClosingStockAllZones = ZONES.reduce(
+    (sum, zoneName) => sum + (Number(zoneClosingStock?.[zoneName]) || 0),
+    0
+  );
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -488,11 +492,16 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-10">
         <StatCard title="Total Eggs Distributed" value={eggsToday} icon="🥚" />
         <StatCard title="Total Outlets" value={totalOutlets} icon="🏪" />
         <StatCard title="Total Egg Damages" value={damagesToday} icon="📉" />
         <StatCard title="NECC Rate" value={neccRate} icon="📈" />
+        <StatCard
+          title="Total Closing Stock (All Zones)"
+          value={zoneClosingLoading ? "..." : totalClosingStockAllZones.toLocaleString("en-IN")}
+          icon="📦"
+        />
       </div>
 
       <h2 className="text-xl font-bold mb-4">Revenue by Supervisor Zone</h2>

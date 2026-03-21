@@ -188,6 +188,10 @@ export default function Sidebar({ supervisor }) {
               <FontAwesomeIcon icon={faTableCells} />
               {open && "Dashboard"}
             </Link>
+            <Link to="/admin/inventory" className={linkClass("/admin/inventory")}> 
+              <FontAwesomeIcon icon={faStore} />
+              {open && "Inventory"}
+            </Link>
             <Link to="/admin/damages" className={linkClass("/admin/damages")}> 
               <FontAwesomeIcon icon={faExclamationTriangle} />
               {open && "Daily Damages"}
@@ -195,10 +199,6 @@ export default function Sidebar({ supervisor }) {
             <Link to="/admin/neccrate" className={linkClass("/admin/neccrate")}> 
               <FontAwesomeIcon icon={faEgg} />
               {open && "NECC Rate"}
-            </Link>
-            <Link to="/admin/incentive" className={linkClass("/admin/incentive")}>
-              <FontAwesomeIcon icon={faGift} />
-              {open && "Incentive"}
             </Link>
             <Link to="/admin/dailysales" className={linkClass("/admin/dailysales")}> 
               <FontAwesomeIcon icon={faEgg} />
