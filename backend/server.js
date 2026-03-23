@@ -8,6 +8,7 @@ import { db } from "./config/firebase.js";
 import authRoutes from "./routes/authRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import incentiveRoutes from "./routes/incentiveRoutes.js";
+import advanceRoutes from "./routes/advanceRoutes.js";
 import dailyDamageRoutes from "./routes/dailyDamageRoutes.js";
 import neccrateRoutes from "./routes/neccrateRoutes.js";
 import dailysalesRoutes from "./routes/dailysalesRoutes.js";
@@ -45,6 +46,7 @@ app.get("/api", (req, res) => {
 // ✅ API routes ONLY
 app.use("/api/auth", authRoutes);
 app.use("/api/incentive", incentiveRoutes);
+app.use("/api/advance", advanceRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/daily-damage", dailyDamageRoutes);
 app.use("/api/neccrate", neccrateRoutes);
