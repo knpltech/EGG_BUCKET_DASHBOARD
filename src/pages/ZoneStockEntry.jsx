@@ -131,6 +131,8 @@ export default function ZoneStockEntry() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState(null);
 
   const user = useMemo(() => {
     try {
@@ -181,6 +183,7 @@ export default function ZoneStockEntry() {
       setSalesRows(Array.isArray(salesData) ? salesData : []);
       setDamageRows(Array.isArray(damageData) ? damageData : []);
       setZoneStockRows(Array.isArray(zoneStockData) ? zoneStockData : []);
+      setLastRefreshedAt(new Date());
     } catch {
       setOutlets([]);
       setSalesRows([]);
@@ -193,18 +196,17 @@ export default function ZoneStockEntry() {
 
   useEffect(() => {
     loadAll();
-    const refreshTimer = window.setInterval(loadAll, 30000);
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") loadAll();
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      window.clearInterval(refreshTimer);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
   }, [loadAll]);
+
+  const handleManualRefresh = useCallback(async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await loadAll();
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [isRefreshing, loadAll]);
 
   const zoneOutlets = useMemo(() => {
     if (!selectedZone) return [];
@@ -455,22 +457,33 @@ export default function ZoneStockEntry() {
         </div>
 
         <div className="rounded-2xl border border-gray-200 bg-white p-3 md:p-4 shadow-sm">
-          <div className="flex flex-wrap gap-2">
-            {availableZones.map((zoneName) => (
-              <button
-                key={zoneName}
-                type="button"
-                onClick={() => setSelectedZone(zoneName)}
-                className={[
-                  "rounded-full border px-4 py-2 text-sm font-semibold transition-colors",
-                  selectedZone === zoneName
-                    ? "border-orange-500 bg-orange-500 text-white"
-                    : "border-gray-200 bg-white text-gray-700 hover:border-orange-300 hover:text-orange-600",
-                ].join(" ")}
-              >
-                {zoneName}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center justify-between gap-5">
+            <div className="flex flex-wrap gap-2">
+              {availableZones.map((zoneName) => (
+                <button
+                  key={zoneName}
+                  type="button"
+                  onClick={() => setSelectedZone(zoneName)}
+                  className={[
+                    "rounded-full border px-4 py-2 text-sm font-semibold transition-colors",
+                    selectedZone === zoneName
+                      ? "border-orange-500 bg-orange-500 text-white"
+                      : "border-gray-200 bg-white text-gray-700 hover:border-orange-300 hover:text-orange-600",
+                  ].join(" ")}
+                >
+                  {zoneName}
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleManualRefresh}
+              disabled={isRefreshing || isLoading}
+              className="w-38 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2.5 text-xs font-semibold text-orange-700 hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isRefreshing ? "Refreshing..." : "Refresh"}
+            </button>
           </div>
         </div>
 
@@ -594,6 +607,12 @@ export default function ZoneStockEntry() {
             <h2 className="text-xl font-semibold text-gray-900">Stock History</h2>
             <span className="text-xs font-semibold text-gray-500">{selectedZone || "No zone selected"}</span>
           </div>
+
+          {lastRefreshedAt ? (
+            <p className="mt-2 text-xs text-gray-500">
+              Last refreshed at {lastRefreshedAt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+            </p>
+          ) : null}
 
           <div className="mt-4 overflow-x-auto">
             <table className="min-w-full text-sm">
