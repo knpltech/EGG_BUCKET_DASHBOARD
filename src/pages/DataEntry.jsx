@@ -157,6 +157,12 @@ const normalizeDate = (d) => {
   return String(d).slice(0, 10);
 };
 
+const extractErrorMessage = (text, fallback = "Failed to save one of the entries") => {
+  if (!text) return fallback;
+  const cleaned = String(text).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+  return cleaned || fallback;
+};
+
 /* ================= SPINNER ================= */
 const Spinner = () => (
   <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -182,7 +188,9 @@ export default function DataEntry() {
   const [allDamagesData,   setAllDamagesData]   = useState([]);
   const [allNeccData,      setAllNeccData]      = useState([]);
   const [allIncentiveData, setAllIncentiveData] = useState([]);
+  const [allAdvanceData,   setAllAdvanceData]   = useState([]);
   const [incentive,        setIncentive]        = useState("");
+  const [advance,          setAdvance]          = useState("");
 
   const [supervisorInfo, setSupervisorInfo] = useState(null);
   const [supervisorZones, setSupervisorZones] = useState([]);
@@ -198,6 +206,7 @@ export default function DataEntry() {
   const [digital,         setDigital]         = useState("");
   const [digitalLocked,   setDigitalLocked]   = useState(false);
   const [incentiveLocked, setIncentiveLocked] = useState(false);
+  const [advanceLocked,   setAdvanceLocked]   = useState(false);
   const [isSubmitting,    setIsSubmitting]    = useState(false);
   const [isDeleting,      setIsDeleting]      = useState(false);
 
@@ -234,21 +243,23 @@ export default function DataEntry() {
   /* ================= LOAD ALL COLLECTIONS ================= */
   const loadAllData = useCallback(async () => {
     try {
-      const [sRes, cRes, dRes, dmRes, nRes, iRes] = await Promise.all([
+      const [sRes, cRes, dRes, dmRes, nRes, iRes, aRes] = await Promise.all([
         fetch(`${API}/dailysales/all`),
         fetch(`${API}/cash-payments/all`),
         fetch(`${API}/digital-payments/all`),
         fetch(`${API}/daily-damage/all`),
         fetch(`${API}/neccrate/all`),
         fetch(`${API}/incentive/all`),
+        fetch(`${API}/advance/all`),
       ]);
-      const [sData, cData, dData, dmData, nData, iData] = await Promise.all([
+      const [sData, cData, dData, dmData, nData, iData, aData] = await Promise.all([
         sRes.ok  ? sRes.json()  : [],
         cRes.ok  ? cRes.json()  : [],
         dRes.ok  ? dRes.json()  : [],
         dmRes.ok ? dmRes.json() : [],
         nRes.ok  ? nRes.json()  : [],
         iRes.ok  ? iRes.json()  : [],
+        aRes.ok  ? aRes.json()  : [],
       ]);
       setAllSalesData(Array.isArray(sData)  ? sData  : []);
       setAllCashData(Array.isArray(cData)   ? cData  : []);
@@ -256,6 +267,7 @@ export default function DataEntry() {
       setAllDamagesData(Array.isArray(dmData) ? dmData : []);
       setAllNeccData(Array.isArray(nData)   ? nData  : []);
       setAllIncentiveData(Array.isArray(iData) ? iData : []);
+      setAllAdvanceData(Array.isArray(aData) ? aData : []);
     } catch (err) {
       console.error("Error loading all data:", err);
     }
@@ -279,6 +291,8 @@ export default function DataEntry() {
       normalizeDate(doc.date || doc.createdAt) === d && doc.outletId === outlet);
     const hasInIncentive = (d) => allIncentiveData.some(doc =>
       normalizeDate(doc.date || doc.createdAt) === d && doc.outlets && doc.outlets[outlet] !== undefined);
+    const hasInAdvance = (d) => allAdvanceData.some(doc =>
+      normalizeDate(doc.date || doc.createdAt) === d && doc.outlets && doc.outlets[outlet] !== undefined);
 
     const allDates = new Set();
     allSalesData.forEach(doc => {
@@ -301,15 +315,19 @@ export default function DataEntry() {
       if (doc.outletId === outlet)
         allDates.add(normalizeDate(doc.date || doc.createdAt));
     });
+    allAdvanceData.forEach(doc => {
+      if (doc.outlets && doc.outlets[outlet] !== undefined)
+        allDates.add(normalizeDate(doc.date || doc.createdAt));
+    });
 
     const completed = new Set();
     allDates.forEach(d => {
-      if ([hasInSales(d), hasInCash(d), hasInDigital(d), hasInDamages(d), hasInNecc(d), hasInIncentive(d)].every(Boolean))
+      if ([hasInSales(d), hasInCash(d), hasInDigital(d), hasInDamages(d), hasInNecc(d), hasInIncentive(d), hasInAdvance(d)].every(Boolean))
         completed.add(d);
     });
 
     return { completedDates: completed };
-  }, [outlet, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData]);
+  }, [outlet, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allAdvanceData]);
 
   /* ================= SUPERVISOR INFO ================= */
   useEffect(() => {
@@ -365,9 +383,16 @@ export default function DataEntry() {
       if (supervisor?.zone) allZones.add(supervisor.zone);
     }
 
+    const advanceEntry = allAdvanceData.find(doc => normalizeDate(doc.date || doc.createdAt) === date);
+    if (advanceEntry?.addedByPerOutlet?.[outlet]) {
+      const supervisor = advanceEntry.addedByPerOutlet[outlet];
+      if (!firstSupervisor) firstSupervisor = supervisor;
+      if (supervisor?.zone) allZones.add(supervisor.zone);
+    }
+
     setSupervisorInfo(firstSupervisor);
     setSupervisorZones(Array.from(allZones).sort());
-  }, [date, outlet, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData]);
+  }, [date, outlet, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allAdvanceData]);
 
   /* ================= LOCK CHECK ================= */
   useEffect(() => {
@@ -378,6 +403,7 @@ export default function DataEntry() {
       setCash(""); setCashLocked(false);
       setDigital(""); setDigitalLocked(false);
       setIncentive(""); setIncentiveLocked(false);
+      setAdvance(""); setAdvanceLocked(false);
       return;
     }
 
@@ -411,7 +437,12 @@ export default function DataEntry() {
     if (foundIncentive) { setIncentive(foundIncentive.outlets[outlet]); setIncentiveLocked(true); }
     else { setIncentive(""); setIncentiveLocked(false); }
 
-  }, [outlet, date, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData]);
+    const foundAdvance = allAdvanceData.find(doc =>
+      normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
+    if (foundAdvance) { setAdvance(foundAdvance.outlets[outlet]); setAdvanceLocked(true); }
+    else { setAdvance(""); setAdvanceLocked(false); }
+
+  }, [outlet, date, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allAdvanceData]);
 
   /* ================= RESET ================= */
   const handleReset = () => {
@@ -421,6 +452,7 @@ export default function DataEntry() {
     if (!cashLocked)      setCash("");
     if (!digitalLocked)   setDigital("");
     if (!incentiveLocked) setIncentive("");
+    if (!advanceLocked)   setAdvance("");
   };
 
   /* ================= DELETE OUTLET DATA FOR DATE (admin only) ================= */
@@ -444,6 +476,7 @@ export default function DataEntry() {
         `${API}/daily-damage/date/${date}/outlet/${encoded}`,
         `${API}/neccrate/date/${date}/outlet/${encoded}`,
         `${API}/incentive/date/${date}/outlet/${encoded}`,
+        `${API}/advance/date/${date}/outlet/${encoded}`,
       ];
 
       const results = await Promise.all(endpoints.map(url =>
@@ -471,6 +504,7 @@ export default function DataEntry() {
       setCash(""); setCashLocked(false);
       setDigital(""); setDigitalLocked(false);
       setIncentive(""); setIncentiveLocked(false);
+      setAdvance(""); setAdvanceLocked(false);
       setSupervisorInfo(null);
       setSupervisorZones([]);
 
@@ -497,7 +531,7 @@ export default function DataEntry() {
 
     const allAlreadyLocked =
       neccrateLocked && salesLocked && damagesLocked &&
-      cashLocked && digitalLocked && incentiveLocked;
+      cashLocked && digitalLocked && incentiveLocked && advanceLocked;
 
     if (allAlreadyLocked) {
       alert("All data for this outlet and date is already submitted. No changes to save.");
@@ -511,6 +545,7 @@ export default function DataEntry() {
     if (!cashLocked      && cash === "")      missingFields.push("Cash Payment");
     if (!digitalLocked   && digital === "")   missingFields.push("Digital Payment");
     if (!incentiveLocked && incentive === "") missingFields.push("Daily Incentive");
+    if (!advanceLocked   && advance === "")   missingFields.push("Advance");
 
     if (missingFields.length > 0) {
       alert(`Please fill in all fields before submitting:\n• ${missingFields.join("\n• ")}`);
@@ -554,6 +589,12 @@ export default function DataEntry() {
           body: JSON.stringify({ date, outlet, value: Number(incentive), addedBy: addedByInfo }),
         }));
       }
+      if (!advanceLocked && advance !== "") {
+        tasks.push(fetch(`${API}/advance/add`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ date, outlet, value: Number(advance), addedBy: addedByInfo }),
+        }));
+      }
       if (!cashLocked && cash !== "") {
         tasks.push(fetch(`${API}/cash-payments/add`, {
           method: "POST", headers: { "Content-Type": "application/json" },
@@ -569,7 +610,10 @@ export default function DataEntry() {
 
       const results = await Promise.all(tasks);
       for (const r of results) {
-        if (!r.ok) { const txt = await r.text(); throw new Error(txt || "Failed to save one of the entries"); }
+        if (!r.ok) {
+          const txt = await r.text();
+          throw new Error(extractErrorMessage(txt));
+        }
       }
 
       alert("Data saved successfully ✅");
@@ -580,6 +624,7 @@ export default function DataEntry() {
       if (!cashLocked      && cash !== "")      setCashLocked(true);
       if (!digitalLocked   && digital !== "")   setDigitalLocked(true);
       if (!incentiveLocked && incentive !== "") setIncentiveLocked(true);
+      if (!advanceLocked   && advance !== "")   setAdvanceLocked(true);
 
       await loadAllData();
     } catch (err) {
@@ -606,11 +651,12 @@ export default function DataEntry() {
   const hasUnlockedValue =
     (!neccrateLocked && neccrate !== "") || (!salesLocked && sales !== "") ||
     (!damagesLocked  && damages !== "")  || (!cashLocked  && cash !== "")  ||
-    (!digitalLocked  && digital !== "")  || (!incentiveLocked && incentive !== "");
+    (!digitalLocked  && digital !== "")  || (!incentiveLocked && incentive !== "") ||
+    (!advanceLocked  && advance !== "");
 
   const allAlreadyLocked =
     neccrateLocked && salesLocked && damagesLocked &&
-    cashLocked && digitalLocked && incentiveLocked;
+    cashLocked && digitalLocked && incentiveLocked && advanceLocked;
 
   const allUnlockedFilled =
     (neccrateLocked  || neccrate !== "")  &&
@@ -618,13 +664,14 @@ export default function DataEntry() {
     (damagesLocked   || damages !== "")   &&
     (cashLocked      || cash !== "")      &&
     (digitalLocked   || digital !== "")   &&
-    (incentiveLocked || incentive !== "");
+    (incentiveLocked || incentive !== "") &&
+    (advanceLocked   || advance !== "");
 
   const canSubmit = !allAlreadyLocked && allUnlockedFilled;
 
   const hasDataForOutlet = supervisorInfo || allAlreadyLocked ||
     salesLocked || cashLocked || digitalLocked ||
-    damagesLocked || neccrateLocked || incentiveLocked;
+    damagesLocked || neccrateLocked || incentiveLocked || advanceLocked;
 
   const isSupervisorDateBlocked = useCallback((isoDate) => {
     if (!isSupervisor) return false;
@@ -819,7 +866,7 @@ export default function DataEntry() {
 </div>
 
 {/* ---- Digital Payment + Cash Payment ---- */}
-<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
   <div>
     <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Digital Payment</label>
     <input type="number" placeholder="Digital Payment" className={inputCls(digitalLocked)}
@@ -833,6 +880,21 @@ export default function DataEntry() {
       value={cash} disabled={cashLocked || outletInactive} onChange={e => setCash(e.target.value)} />
     {cashLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
   </div>
+</div>
+
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Advance</label>
+    <input
+      type="number" placeholder="Advance"
+      className={inputCls(advanceLocked)}
+      value={advance} disabled={advanceLocked || outletInactive}
+      onChange={e => setAdvance(e.target.value)}
+    />
+    {advanceLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
+  </div>
+
+  <div />
 </div>
             {/* ---- Summary Card ---- */}
             <div className="mt-5">

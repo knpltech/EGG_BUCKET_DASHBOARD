@@ -5,12 +5,12 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faUserPlus } from "@fortawesome/free-solid-svg-icons";
 import { faMoneyBillWave } from "@fortawesome/free-solid-svg-icons";
 import { faGift } from "@fortawesome/free-solid-svg-icons";
+import { faSliders } from "@fortawesome/free-solid-svg-icons";
 import {
   faTableCells,
   faEgg,
   faDollarSign,
   faWallet,
-  faTruck,
   faStore,
   faChartLine,
   faUsers,
@@ -107,6 +107,10 @@ export default function Sidebar({ supervisor }) {
               <FontAwesomeIcon icon={faGift} />
               {open && "Incentive"}
             </Link>
+            <Link to="/supervisor/advance" className={linkClass("/supervisor/advance")}> 
+              <FontAwesomeIcon icon={faSliders} />
+              {open && "Advance"}
+            </Link>
             <Link to="/supervisor/dailysales" className={linkClass("/supervisor/dailysales")}> 
               <FontAwesomeIcon icon={faEgg} />
               {open && "Daily Sales Quantity"}
@@ -151,6 +155,10 @@ export default function Sidebar({ supervisor }) {
             <Link to="/admin/incentive" className={linkClass("/admin/incentive")}> 
               <FontAwesomeIcon icon={faGift} />
               {open && "Incentive"}
+            </Link>
+            <Link to="/admin/advance" className={linkClass("/admin/advance")}> 
+              <FontAwesomeIcon icon={faSliders} />
+              {open && "Advance"}
             </Link>
             <Link to="/admin/dailysales" className={linkClass("/admin/dailysales")}> 
               <FontAwesomeIcon icon={faEgg} />
@@ -265,6 +273,12 @@ export default function Sidebar({ supervisor }) {
               <Link to="/admin/dailysales" className={linkClass("/admin/dailysales")}> 
                 <FontAwesomeIcon icon={faEgg} />
                 {open && "Daily Sales Quantity"}
+              </Link>
+            )}
+            {(dataAgentRoles.includes("advance")) && (
+              <Link to="/admin/advance" className={linkClass("/admin/advance")}> 
+                <FontAwesomeIcon icon={faSliders} />
+                {open && "Advance"}
               </Link>
             )}
             {(dataAgentRoles.includes("digital_payments")) && (

@@ -16,6 +16,7 @@ export default function DataAgentDashboard() {
     { role: "digital_payments", name: "Digital Payments", path: "/admin/digital-payments" },
     { role: "cash_payments", name: "Cash Payments", path: "/admin/cash-payments" },
     { role: "neccrate", name: "NECC Rate", path: "/admin/neccrate" },
+    { role: "advance", name: "Advance", path: "/admin/advance" },
     { role: "daily_damages", name: "Daily Damages", path: "/admin/damages" },
     // Support legacy role value for backward compatibility
     { role: "dailydamages", name: "Daily Damages", path: "/admin/damages" },
