@@ -50,7 +50,7 @@ function DailySalesAnalytics({ rows }) {
             <Tooltip formatter={(value) => Number(value).toLocaleString("en-IN")} />
             <Line
               type="monotone"
-              dataKey="total"
+              dataKey="Total"
               stroke="#f97316"
               strokeWidth={3}
               dot={{ r: 5 }}
