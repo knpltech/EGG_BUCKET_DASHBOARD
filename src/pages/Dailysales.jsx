@@ -47,7 +47,12 @@ function DailySalesAnalytics({ rows }) {
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="date" />
             <YAxis />
-            <Tooltip formatter={(value) => Number(value).toLocaleString("en-IN")} />
+            <Tooltip
+              formatter={(value, name) => [
+                Number(value).toLocaleString("en-IN"),
+                name === "total" ? "Total" : name,
+              ]}
+            />
             <Line
               type="monotone"
               dataKey="total"

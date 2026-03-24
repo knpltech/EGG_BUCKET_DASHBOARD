@@ -210,7 +210,7 @@ export default function Sidebar({ supervisor }) {
             </Link>
             <Link to="/admin/dailysales" className={linkClass("/admin/dailysales")}> 
               <FontAwesomeIcon icon={faEgg} />
-              {open && "Daily Sales"}
+              {open && "Daily Sales Quantity"}
             </Link>
             <Link to="/admin/digital-payments" className={linkClass("/admin/digital-payments")}> 
               <FontAwesomeIcon icon={faWallet} />
