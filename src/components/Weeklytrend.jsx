@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import {
-  BarChart,
-  Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -211,10 +211,8 @@ const Weeklytrend = ({ rows = [], outlets: allowedOutlets = [] }) => {
           </p>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart
+            <LineChart
               data={chartData}
-              barGap={6}
-              barCategoryGap={16}
               margin={{ top: 10, right: 20, left: 10, bottom: 10 }}
             >
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -246,16 +244,19 @@ const Weeklytrend = ({ rows = [], outlets: allowedOutlets = [] }) => {
               <Legend wrapperStyle={{ fontSize: 11 }} formatter={(val) => nameMap[val] || val} />
 
               {outletKeys.map((outlet, idx) => (
-                <Bar
+                <Line
                   key={outlet}
+                  type="monotone"
                   dataKey={outlet}
                   name={nameMap[outlet] || outlet}
-                  fill={COLORS[idx % COLORS.length]}
-                  radius={[6, 6, 0, 0]}
-                  maxBarSize={26}
+                  stroke={COLORS[idx % COLORS.length]}
+                  dot={{ fill: COLORS[idx % COLORS.length], r: 4 }}
+                  activeDot={{ r: 6 }}
+                  strokeWidth={2}
+                  isAnimationActive={true}
                 />
               ))}
-            </BarChart>
+            </LineChart>
           </ResponsiveContainer>
         )}
       </div>
