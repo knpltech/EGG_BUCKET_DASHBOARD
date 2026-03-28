@@ -3,6 +3,15 @@ const API_URL = import.meta.env.VITE_API_URL;
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { getRoleFlags, zonesMatch } from "../utils/role";
 import * as XLSX from "xlsx";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import Topbar from "../components/Topbar";
 import Dailyheader from "../components/Dailyheader";
@@ -10,6 +19,54 @@ import DailyTable from "../components/DailyTable";
 import Weeklytrend from "../components/Weeklytrend";
 
 const OUTLETS_KEY = "egg_outlets_v1";
+
+const formatDateDMY = (iso) => {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return `${String(date.getDate()).padStart(2, "0")}-${String(date.getMonth() + 1).padStart(2, "0")}-${date.getFullYear()}`;
+};
+
+function DailySalesAnalytics({ rows }) {
+  const chartData = useMemo(() => {
+    return rows.map((row) => ({
+      date: formatDateDMY(row.date),
+      total: Number(row.total) || 0,
+    }));
+  }, [rows]);
+
+  if (!chartData.length) return null;
+
+  return (
+    <div className="mt-6 rounded-2xl bg-white p-6 shadow-md">
+      <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-700">
+        Daily Sales Trend by Date
+      </h2>
+      <div style={{ width: "100%", height: 260 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="date" />
+            <YAxis />
+            <Tooltip
+              formatter={(value, name) => [
+                Number(value).toLocaleString("en-IN"),
+                name === "total" ? "Total" : name,
+              ]}
+            />
+            <Line
+              type="monotone"
+              dataKey="total"
+              stroke="#f97316"
+              strokeWidth={3}
+              dot={{ r: 5 }}
+              activeDot={{ r: 7 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
 
 const Dailysales = () => {
   const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
@@ -415,6 +472,7 @@ const Dailysales = () => {
         {(isAdmin || isSupervisor || isViewer) && outlets.length > 0 && (
           <div className="mt-10">
             <Weeklytrend rows={scopedRows} outlets={visibleOutlets} />
+            <DailySalesAnalytics rows={scopedRows} />
           </div>
         )}
       </div>
