@@ -1,6 +1,8 @@
 import {
   LineChart,
+  BarChart,
   Line,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -56,6 +58,7 @@ function parseAnyDate(dateStr) {
 export default function Rateanalytics({ rows = [], outlets: allowedOutlets = [] }) {
   const [chartData, setChartData] = useState([]);
   const [outletKeys, setOutletKeys] = useState([]);
+  const [chartType, setChartType] = useState("bar");
 
   const { nameMap, outletLookup } = useMemo(() => {
     const nameMap = {};
@@ -217,48 +220,108 @@ export default function Rateanalytics({ rows = [], outlets: allowedOutlets = [] 
         className="grid gap-6 ml-4"
         style={{ gridTemplateColumns: "1.3fr 0.5fr 0.5fr" }}
       >
-        {/* 📈 LINE GRAPH for last 15 days*/}
+        {/* 📈 NECC GRAPH for last 15 days*/}
         <div className="bg-white shadow rounded-xl p-6">
-          <h2 className="font-semibold mb-4">
-            Last 15 Days NECC Rate Trend
-          </h2>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <h2 className="font-semibold">
+              Last 15 Days NECC Rate Trend
+            </h2>
+
+            <div className="inline-flex items-center rounded-lg border border-orange-100 bg-orange-50 p-1">
+              <button
+                type="button"
+                onClick={() => setChartType("bar")}
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
+                  chartType === "bar"
+                    ? "bg-white text-orange-600 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Bar
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartType("line")}
+                className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
+                  chartType === "line"
+                    ? "bg-white text-orange-600 shadow-sm"
+                    : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Line
+              </button>
+            </div>
+          </div>
 
           <div style={{ width: "100%", height: 260 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                <YAxis
-                  tick={{ fontSize: 11 }}
-                  tickLine={false}
-                  axisLine={false}
-                  width={34}
-                  domain={["auto", "auto"]}
-                />
-                <Tooltip
-                  formatter={(value, name) => {
-                    const rate = Number(value);
-                    if (!Number.isFinite(rate)) return ["No entry", nameMap[name] || name];
-                    return [`₹${rate.toFixed(2)}`, nameMap[name] || name];
-                  }}
-                  labelFormatter={(_, payload) => payload?.[0]?.payload?.fullDate || ""}
-                />
-                <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => nameMap[value] || value} />
-
-                {outletKeys.map((key, idx) => (
-                  <Line
-                    key={key}
-                    type="monotone"
-                    dataKey={key}
-                    name={nameMap[key] || key}
-                    stroke={colors[idx % colors.length]}
-                    strokeWidth={2}
-                    connectNulls
-                    dot={{ r: 3, strokeWidth: 1 }}
-                    activeDot={{ r: 5 }}
+              {chartType === "line" ? (
+                <LineChart data={chartData} margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <YAxis
+                    tick={{ fontSize: 11 }}
+                    tickLine={false}
+                    axisLine={false}
+                    width={34}
+                    domain={["auto", "auto"]}
                   />
-                ))}
-              </LineChart>
+                  <Tooltip
+                    formatter={(value, name) => {
+                      const rate = Number(value);
+                      if (!Number.isFinite(rate)) return ["No entry", nameMap[name] || name];
+                      return [`₹${rate.toFixed(2)}`, nameMap[name] || name];
+                    }}
+                    labelFormatter={(_, payload) => payload?.[0]?.payload?.fullDate || ""}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => nameMap[value] || value} />
+
+                  {outletKeys.map((key, idx) => (
+                    <Line
+                      key={key}
+                      type="monotone"
+                      dataKey={key}
+                      name={nameMap[key] || key}
+                      stroke={colors[idx % colors.length]}
+                      strokeWidth={2}
+                      connectNulls
+                      dot={{ r: 3, strokeWidth: 1 }}
+                      activeDot={{ r: 5 }}
+                    />
+                  ))}
+                </LineChart>
+              ) : (
+                <BarChart data={chartData} margin={{ top: 8, right: 16, left: 4, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <YAxis
+                    tick={{ fontSize: 11 }}
+                    tickLine={false}
+                    axisLine={false}
+                    width={34}
+                    domain={["auto", "auto"]}
+                  />
+                  <Tooltip
+                    formatter={(value, name) => {
+                      const rate = Number(value);
+                      if (!Number.isFinite(rate)) return ["No entry", nameMap[name] || name];
+                      return [`₹${rate.toFixed(2)}`, nameMap[name] || name];
+                    }}
+                    labelFormatter={(_, payload) => payload?.[0]?.payload?.fullDate || ""}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => nameMap[value] || value} />
+
+                  {outletKeys.map((key, idx) => (
+                    <Bar
+                      key={key}
+                      dataKey={key}
+                      name={nameMap[key] || key}
+                      fill={colors[idx % colors.length]}
+                      radius={[4, 4, 0, 0]}
+                    />
+                  ))}
+                </BarChart>
+              )}
             </ResponsiveContainer>
           </div>
         </div>
