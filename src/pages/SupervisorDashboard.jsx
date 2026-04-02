@@ -133,6 +133,13 @@ const getTodayPaymentTotal = (rows, outlets, today) => {
   return Array.from(latestValues.values()).reduce((sum, value) => sum + (Number(value) || 0), 0);
 };
 
+const getTodayMappedOutletsTotal = (rows, outlets, today) => {
+  const doc = getLatestDayDoc(rows, today);
+  if (!doc) return 0;
+  if (!Array.isArray(outlets) || outlets.length === 0) return 0;
+  return outlets.reduce((sum, outlet) => sum + getPaymentValueForOutlet(doc, outlet), 0);
+};
+
 const extractSupervisorZones = (user) => {
   if (!user || typeof user !== "object") return [];
   const rawZones = [];
@@ -185,6 +192,8 @@ const getClosingStockBySupervisorZone = (rows, normalizedZones, today) => {
 export default function SupervisorDashboard() {
   const [eggsToday, setEggsToday] = useState(0);
   const [totalCashPayments, setTotalCashPayments] = useState(0);
+  const [totalIncentive, setTotalIncentive] = useState(0);
+  const [totalAdvance, setTotalAdvance] = useState(0);
   const [damagesToday, setDamagesToday] = useState(0);
   const [neccRate, setNeccRate] = useState("₹0.00");
   const [zoneClosingStock, setZoneClosingStock] = useState({});
@@ -224,12 +233,14 @@ export default function SupervisorDashboard() {
 
     const fetchSupervisorDashboard = async () => {
       try {
-        const [outletsRes, salesRes, damagesRes, cashRes, digitalRes, zoneStockRes] = await Promise.all([
+        const [outletsRes, salesRes, damagesRes, cashRes, digitalRes, incentiveRes, advanceRes, zoneStockRes] = await Promise.all([
           fetch(`${API_URL}/outlets/all`),
           fetch(`${API_URL}/dailysales/all`),
           fetch(`${API_URL}/daily-damage/all`),
           fetch(`${API_URL}/cash-payments/all`),
           fetch(`${API_URL}/digital-payments/all`),
+          fetch(`${API_URL}/incentive/all`),
+          fetch(`${API_URL}/advance/all`),
           fetch(`${API_URL}/zone-stock/all`),
         ]);
 
@@ -238,6 +249,8 @@ export default function SupervisorDashboard() {
         const damagesRaw = await damagesRes.json();
         const cashRaw = await cashRes.json();
         const digitalRaw = await digitalRes.json();
+        const incentiveRaw = await incentiveRes.json();
+        const advanceRaw = await advanceRes.json();
         const zoneStockRaw = await zoneStockRes.json();
 
         const zoneOutlets = Array.isArray(outletsRaw)
@@ -252,6 +265,8 @@ export default function SupervisorDashboard() {
 
         setEggsToday(salesTotal);
         setTotalCashPayments(cashTotal);
+        setTotalIncentive(getTodayMappedOutletsTotal(incentiveRaw, activeOutlets, today));
+        setTotalAdvance(getTodayMappedOutletsTotal(advanceRaw, activeOutlets, today));
         setDamagesToday(getTodayDamageTotal(damagesRaw, activeOutlets, today));
         const computedRate = salesTotal > 0 ? totalRevenue / salesTotal : 0;
         setNeccRate(`₹${computedRate.toFixed(2)}`);
@@ -260,6 +275,8 @@ export default function SupervisorDashboard() {
       } catch {
         setEggsToday(0);
         setTotalCashPayments(0);
+        setTotalIncentive(0);
+        setTotalAdvance(0);
         setDamagesToday(0);
         setNeccRate("₹0.00");
         setZoneClosingStock({});
@@ -285,12 +302,17 @@ export default function SupervisorDashboard() {
           ) : null}
           <p className="mb-6 text-gray-600">Today&apos;s overview for your assigned zone outlets.</p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
             <StatCard title="Total Eggs Distributed Today" value={eggsToday} icon="🥚" />
             <StatCard title="Total Cash Payments" value={formatCurrency(totalCashPayments)} icon="💵" />
             <StatCard title="Damages Today" value={damagesToday} icon="📉" />
             <StatCard title="Today&apos;s NECC Rate" value={neccRate} icon="📈" />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
             <StatCard title="Today&apos;s Closing Stock" value={totalClosingStock.toLocaleString("en-IN")} icon="📦" />
+            <StatCard title="Total Incentives" value={formatCurrency(totalIncentive)} icon="🎯" />
+            <StatCard title="Total Advances" value={formatCurrency(totalAdvance)} icon="💰" />
           </div>
 
           {showZoneBreakdown ? (
