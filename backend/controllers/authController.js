@@ -42,7 +42,25 @@ export const loginUser = async (req, res) => {
     if (!collection)
       return res.status(400).json({ success: false, error: "Invalid role" });
 
-    const userSnap = await db.collection(collection).doc(username).get();
+    const trimmedUsername = String(username).trim();
+    const exactUserSnap = await db.collection(collection).doc(trimmedUsername).get();
+
+    let userSnap = exactUserSnap;
+    let resolvedUsername = trimmedUsername;
+
+    // Fallback for case-only mismatches (e.g., "admin" vs "Admin") in doc IDs.
+    if (!userSnap.exists) {
+      const collectionSnap = await db.collection(collection).get();
+      const matchedDoc = collectionSnap.docs.find(
+        (doc) => doc.id.toLowerCase() === trimmedUsername.toLowerCase()
+      );
+
+      if (matchedDoc) {
+        userSnap = matchedDoc;
+        resolvedUsername = matchedDoc.id;
+      }
+    }
+
     if (!userSnap.exists)
       return res.status(401).json({ success: false, error: "Invalid credentials" });
 
@@ -102,7 +120,7 @@ export const loginUser = async (req, res) => {
 // Generate JWT
 const token = jwt.sign(
   {
-    username,
+    username: resolvedUsername,
     role: user.role,
   },
   JWT_SECRET,
@@ -116,7 +134,7 @@ return res.json({
   success: true,
   token,
   user: {
-    username,
+    username: resolvedUsername,
     ...userWithoutPassword,
   },
 });

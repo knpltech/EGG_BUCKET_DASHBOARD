@@ -279,6 +279,66 @@ const createEmptyZoneStats = () =>
 const createEmptyZoneClosing = () =>
   Object.fromEntries(ZONES.map((zoneName) => [zoneName, 0]));
 
+const createEmptyZoneAmounts = () =>
+  Object.fromEntries(ZONES.map((zoneName) => [zoneName, 0]));
+
+const getAmountValueForOutlet = (doc, outlet) => {
+  const values = doc?.outlets;
+  if (!values || typeof values !== "object" || Array.isArray(values)) return 0;
+
+  const keys = [outlet?.id, outlet?.area, outlet?.name].filter(Boolean);
+  for (const key of keys) {
+    if (values[key] !== undefined) return Number(values[key]) || 0;
+  }
+
+  return 0;
+};
+
+const getZoneWiseAmountTotals = (rows = [], outlets = [], selectedDate) => {
+  const zoneTotals = createEmptyZoneAmounts();
+
+  const activeOutlets = Array.isArray(outlets)
+    ? outlets.filter((outlet) => outlet && outlet.status === "Active")
+    : [];
+
+  const zoneOutletsMap = new Map();
+  activeOutlets.forEach((outlet) => {
+    const normalizedZone = normalizeZone(outlet.zoneId || outlet.zone || outlet.zoneNumber);
+    if (!normalizedZone) return;
+
+    const zoneLabel = `Zone ${normalizedZone}`;
+    if (!ZONES.includes(zoneLabel)) return;
+
+    if (!zoneOutletsMap.has(zoneLabel)) zoneOutletsMap.set(zoneLabel, []);
+    zoneOutletsMap.get(zoneLabel).push(outlet);
+  });
+
+  const dayRows = Array.isArray(rows)
+    ? rows
+        .filter((doc) => normalizeDate(doc.date || doc.createdAt) === selectedDate)
+        .sort((a, b) => getDocTimestamp(a) - getDocTimestamp(b))
+    : [];
+
+  zoneOutletsMap.forEach((zoneOutlets, zoneLabel) => {
+    const latestValues = new Map();
+
+    dayRows.forEach((doc) => {
+      zoneOutlets.forEach((outlet) => {
+        const outletKey = outlet?.id || outlet?.area || outlet?.name;
+        if (!outletKey) return;
+        latestValues.set(outletKey, getAmountValueForOutlet(doc, outlet));
+      });
+    });
+
+    zoneTotals[zoneLabel] = Array.from(latestValues.values()).reduce(
+      (sum, value) => sum + (Number(value) || 0),
+      0
+    );
+  });
+
+  return zoneTotals;
+};
+
 const getZoneWiseClosingStock = (rows = [], selectedDate) => {
   const latestByZone = new Map();
 
@@ -322,8 +382,19 @@ export default function AdminDashboard() {
   const [zoneStatsLoading, setZoneStatsLoading] = useState(true);
   const [zoneClosingStock, setZoneClosingStock] = useState(createEmptyZoneClosing);
   const [zoneClosingLoading, setZoneClosingLoading] = useState(true);
+  const [zoneIncentive, setZoneIncentive] = useState(createEmptyZoneAmounts);
+  const [zoneAdvance, setZoneAdvance] = useState(createEmptyZoneAmounts);
+  const [amountLoading, setAmountLoading] = useState(true);
   const totalClosingStockAllZones = ZONES.reduce(
     (sum, zoneName) => sum + (Number(zoneClosingStock?.[zoneName]) || 0),
+    0
+  );
+  const totalIncentiveAllZones = ZONES.reduce(
+    (sum, zoneName) => sum + (Number(zoneIncentive?.[zoneName]) || 0),
+    0
+  );
+  const totalAdvanceAllZones = ZONES.reduce(
+    (sum, zoneName) => sum + (Number(zoneAdvance?.[zoneName]) || 0),
     0
   );
 
@@ -392,21 +463,26 @@ export default function AdminDashboard() {
       setRevenueLoading(true);
       setZoneStatsLoading(true);
       setZoneClosingLoading(true);
+      setAmountLoading(true);
 
       try {
         const outlets = await updateOutlets();
-        const [salesRes, damageRes, neccRes, zoneStockRes] = await Promise.all([
+        const [salesRes, damageRes, neccRes, zoneStockRes, incentiveRes, advanceRes] = await Promise.all([
           fetch(`${API_URL}/dailysales/all`),
           fetch(`${API_URL}/daily-damage/all`),
           fetch(`${API_URL}/neccrate/all`),
           fetch(`${API_URL}/zone-stock/all`),
+          fetch(`${API_URL}/incentive/all`),
+          fetch(`${API_URL}/advance/all`),
         ]);
 
-        const [salesRows, damageRows, neccRates, zoneStockRows] = await Promise.all([
+        const [salesRows, damageRows, neccRates, zoneStockRows, incentiveRows, advanceRows] = await Promise.all([
           salesRes.json(),
           damageRes.json(),
           neccRes.json(),
           zoneStockRes.json(),
+          incentiveRes.json(),
+          advanceRes.json(),
         ]);
 
         setEggsToday(getSalesTotal(Array.isArray(salesRows) ? salesRows : [], outlets, selectedDate));
@@ -418,6 +494,8 @@ export default function AdminDashboard() {
         const revenueData = await fetchZoneWiseRevenue(selectedDate);
         setZoneRevenue(revenueData.success ? revenueData.zoneRevenue : createEmptyZoneRevenue());
         setZoneClosingStock(getZoneWiseClosingStock(Array.isArray(zoneStockRows) ? zoneStockRows : [], selectedDate));
+        setZoneIncentive(getZoneWiseAmountTotals(Array.isArray(incentiveRows) ? incentiveRows : [], outlets, selectedDate));
+        setZoneAdvance(getZoneWiseAmountTotals(Array.isArray(advanceRows) ? advanceRows : [], outlets, selectedDate));
       } catch (err) {
         console.error("Dashboard load error:", err);
         setEggsToday(0);
@@ -425,10 +503,13 @@ export default function AdminDashboard() {
         setZoneRevenue(createEmptyZoneRevenue());
         setZoneStats(createEmptyZoneStats());
         setZoneClosingStock(createEmptyZoneClosing());
+        setZoneIncentive(createEmptyZoneAmounts());
+        setZoneAdvance(createEmptyZoneAmounts());
       } finally {
         setRevenueLoading(false);
         setZoneStatsLoading(false);
         setZoneClosingLoading(false);
+        setAmountLoading(false);
       }
     };
 
@@ -482,7 +563,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
         <StatCard title="Total Eggs Distributed" value={eggsToday} icon="🥚" />
         <StatCard title="Total Outlets" value={totalOutlets} icon="🏪" />
         <StatCard title="Total Egg Damages" value={damagesToday} icon="📉" />
@@ -490,6 +571,19 @@ export default function AdminDashboard() {
           title="Total Closing Stock (All Zones)"
           value={zoneClosingLoading ? "..." : totalClosingStockAllZones.toLocaleString("en-IN")}
           icon="📦"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-10">
+        <StatCard
+          title="Total Incentives"
+          value={amountLoading ? "..." : formatCurrency(totalIncentiveAllZones)}
+          icon="🎯"
+        />
+        <StatCard
+          title="Total Advances"
+          value={amountLoading ? "..." : formatCurrency(totalAdvanceAllZones)}
+          icon="💰"
         />
       </div>
 
@@ -535,6 +629,38 @@ export default function AdminDashboard() {
               <div key={zoneName} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center">
                 <h3 className="font-semibold text-orange-600 mb-4">{zoneName}</h3>
                 <div className="text-3xl font-bold text-orange-600">{(zoneStats[zoneName]?.damage ?? 0).toLocaleString("en-IN")}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <h2 className="text-xl font-bold mb-4">Incentive by Supervisor Zone</h2>
+      <div className="bg-white rounded-xl shadow-md p-6 mb-10">
+        {amountLoading ? (
+          <p className="text-gray-500 text-center py-10">Loading incentive data...</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            {ZONES.map((zoneName) => (
+              <div key={zoneName} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center">
+                <h3 className="font-semibold text-orange-600 mb-4">{zoneName}</h3>
+                <div className="text-3xl font-bold text-orange-600">{formatCurrency(zoneIncentive[zoneName] ?? 0)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <h2 className="text-xl font-bold mb-4">Advance by Supervisor Zone</h2>
+      <div className="bg-white rounded-xl shadow-md p-6 mb-10">
+        {amountLoading ? (
+          <p className="text-gray-500 text-center py-10">Loading advance data...</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            {ZONES.map((zoneName) => (
+              <div key={zoneName} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center">
+                <h3 className="font-semibold text-orange-600 mb-4">{zoneName}</h3>
+                <div className="text-3xl font-bold text-orange-600">{formatCurrency(zoneAdvance[zoneName] ?? 0)}</div>
               </div>
             ))}
           </div>

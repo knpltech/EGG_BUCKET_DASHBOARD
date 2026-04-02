@@ -6,6 +6,14 @@ import { normalizeZone } from "../utils/role";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
+const formatCurrency = (value) => {
+  if (value == null || Number.isNaN(Number(value))) return "₹0";
+  return "₹" + Number(value).toLocaleString("en-IN", {
+    maximumFractionDigits: 0,
+    minimumFractionDigits: 0,
+  });
+};
+
 const getLocalIsoDate = (value = new Date()) => {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "";
@@ -51,27 +59,6 @@ const getDocTimestamp = (doc) => {
   return Number.isNaN(parsed) ? 0 : parsed;
 };
 
-const getNeccRateNumber = (doc) => {
-  if (!doc) return 0;
-  if (doc.rateValue !== undefined) {
-    const value = Number(doc.rateValue);
-    if (Number.isFinite(value)) return value;
-  }
-  if (doc.rate) {
-    const match = String(doc.rate).replace(/,/g, "").match(/([\d.]+)/);
-    if (match) return Number(match[1]) || 0;
-  }
-  return 0;
-};
-
-const getAverageNeccRate = (docs = []) => {
-  const numeric = docs
-    .map((doc) => getNeccRateNumber(doc))
-    .filter((value) => Number.isFinite(value) && value > 0);
-  if (!numeric.length) return 0;
-  return numeric.reduce((sum, value) => sum + value, 0) / numeric.length;
-};
-
 const getLatestDayDoc = (rows, today) => {
   if (!Array.isArray(rows)) return null;
   const dayRows = rows
@@ -98,6 +85,18 @@ const getDamageValueForOutlet = (doc, outlet) => {
   return 0;
 };
 
+const getPaymentValueForOutlet = (doc, outlet) => {
+  const values = doc?.outlets;
+  if (!values || typeof values !== "object" || Array.isArray(values)) return 0;
+
+  const keys = [outlet?.id, outlet?.area, outlet?.name].filter(Boolean);
+  for (const key of keys) {
+    if (values[key] !== undefined) return Number(values[key]) || 0;
+  }
+
+  return 0;
+};
+
 const getTodaySalesTotal = (rows, outlets, today) => {
   const doc = getLatestDayDoc(rows, today);
   if (!doc) return 0;
@@ -110,6 +109,28 @@ const getTodayDamageTotal = (rows, outlets, today) => {
   if (!doc) return 0;
   if (!Array.isArray(outlets) || outlets.length === 0) return 0;
   return outlets.reduce((sum, outlet) => sum + getDamageValueForOutlet(doc, outlet), 0);
+};
+
+const getTodayPaymentTotal = (rows, outlets, today) => {
+  if (!Array.isArray(outlets) || outlets.length === 0) return 0;
+
+  const dayRows = Array.isArray(rows)
+    ? rows
+        .filter((doc) => normalizeDate(doc.date || doc.createdAt) === today)
+        .sort((a, b) => getDocTimestamp(a) - getDocTimestamp(b))
+    : [];
+
+  const latestValues = new Map();
+
+  dayRows.forEach((doc) => {
+    outlets.forEach((outlet) => {
+      const outletKey = outlet?.id || outlet?.area || outlet?.name;
+      if (!outletKey) return;
+      latestValues.set(outletKey, getPaymentValueForOutlet(doc, outlet));
+    });
+  });
+
+  return Array.from(latestValues.values()).reduce((sum, value) => sum + (Number(value) || 0), 0);
 };
 
 const extractSupervisorZones = (user) => {
@@ -126,34 +147,6 @@ const isOutletInSupervisorZones = (outlet, normalizedZones) => {
   if (!Array.isArray(normalizedZones) || normalizedZones.length === 0) return false;
   const outletZone = normalizeZone(outlet?.zoneId || outlet?.zone || outlet?.zoneNumber);
   return Boolean(outletZone && normalizedZones.includes(outletZone));
-};
-
-const normalizeTextKey = (value) => {
-  if (value == null) return null;
-  return String(value).trim().toLowerCase();
-};
-
-const buildOutletIdentitySet = (outlets = []) => {
-  const keys = new Set();
-  outlets.forEach((outlet) => {
-    const idKey = normalizeTextKey(outlet?.id);
-    const nameKey = normalizeTextKey(outlet?.name);
-    const areaKey = normalizeTextKey(outlet?.area);
-    if (idKey) keys.add(idKey);
-    if (nameKey) keys.add(nameKey);
-    if (areaKey) keys.add(areaKey);
-  });
-  return keys;
-};
-
-const isNeccDocForOutlets = (doc, outletIdentitySet) => {
-  if (!outletIdentitySet || outletIdentitySet.size === 0) return false;
-  const outletIdKey = normalizeTextKey(doc?.outletId);
-  const outletKey = normalizeTextKey(doc?.outlet);
-  return Boolean(
-    (outletIdKey && outletIdentitySet.has(outletIdKey)) ||
-    (outletKey && outletIdentitySet.has(outletKey))
-  );
 };
 
 const formatZoneLabel = (zoneKey) => {
@@ -191,7 +184,7 @@ const getClosingStockBySupervisorZone = (rows, normalizedZones, today) => {
 
 export default function SupervisorDashboard() {
   const [eggsToday, setEggsToday] = useState(0);
-  const [totalOutlets, setTotalOutlets] = useState(0);
+  const [totalCashPayments, setTotalCashPayments] = useState(0);
   const [damagesToday, setDamagesToday] = useState(0);
   const [neccRate, setNeccRate] = useState("₹0.00");
   const [zoneClosingStock, setZoneClosingStock] = useState({});
@@ -231,18 +224,20 @@ export default function SupervisorDashboard() {
 
     const fetchSupervisorDashboard = async () => {
       try {
-        const [outletsRes, salesRes, damagesRes, ratesRes, zoneStockRes] = await Promise.all([
+        const [outletsRes, salesRes, damagesRes, cashRes, digitalRes, zoneStockRes] = await Promise.all([
           fetch(`${API_URL}/outlets/all`),
           fetch(`${API_URL}/dailysales/all`),
           fetch(`${API_URL}/daily-damage/all`),
-          fetch(`${API_URL}/neccrate/all`),
+          fetch(`${API_URL}/cash-payments/all`),
+          fetch(`${API_URL}/digital-payments/all`),
           fetch(`${API_URL}/zone-stock/all`),
         ]);
 
         const outletsRaw = await outletsRes.json();
         const salesRaw = await salesRes.json();
         const damagesRaw = await damagesRes.json();
-        const ratesRaw = await ratesRes.json();
+        const cashRaw = await cashRes.json();
+        const digitalRaw = await digitalRes.json();
         const zoneStockRaw = await zoneStockRes.json();
 
         const zoneOutlets = Array.isArray(outletsRaw)
@@ -250,28 +245,21 @@ export default function SupervisorDashboard() {
           : [];
 
         const activeOutlets = zoneOutlets.filter((outlet) => outlet.status === "Active");
-        const outletIdentitySet = buildOutletIdentitySet(activeOutlets);
+        const salesTotal = getTodaySalesTotal(salesRaw, activeOutlets, today);
+        const cashTotal = getTodayPaymentTotal(cashRaw, activeOutlets, today);
+        const digitalTotal = getTodayPaymentTotal(digitalRaw, activeOutlets, today);
+        const totalRevenue = cashTotal + digitalTotal;
 
-        setTotalOutlets(activeOutlets.length);
-        setEggsToday(getTodaySalesTotal(salesRaw, activeOutlets, today));
+        setEggsToday(salesTotal);
+        setTotalCashPayments(cashTotal);
         setDamagesToday(getTodayDamageTotal(damagesRaw, activeOutlets, today));
-
-        if (!Array.isArray(ratesRaw) || ratesRaw.length === 0) {
-          setNeccRate("₹0.00");
-        } else {
-          const todayZoneRates = ratesRaw.filter((rate) => {
-            const isToday = normalizeDate(rate.date || rate.createdAt) === today;
-            return isToday && isNeccDocForOutlets(rate, outletIdentitySet);
-          });
-
-          const averageRate = getAverageNeccRate(todayZoneRates);
-          setNeccRate(`₹${averageRate.toFixed(2)}`);
-        }
+        const computedRate = salesTotal > 0 ? totalRevenue / salesTotal : 0;
+        setNeccRate(`₹${computedRate.toFixed(2)}`);
 
         setZoneClosingStock(getClosingStockBySupervisorZone(zoneStockRaw, normalizedUserZones, today));
       } catch {
         setEggsToday(0);
-        setTotalOutlets(0);
+        setTotalCashPayments(0);
         setDamagesToday(0);
         setNeccRate("₹0.00");
         setZoneClosingStock({});
@@ -299,7 +287,7 @@ export default function SupervisorDashboard() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
             <StatCard title="Total Eggs Distributed Today" value={eggsToday} icon="🥚" />
-            <StatCard title="Total Outlets" value={totalOutlets} icon="🏪" />
+            <StatCard title="Total Cash Payments" value={formatCurrency(totalCashPayments)} icon="💵" />
             <StatCard title="Damages Today" value={damagesToday} icon="📉" />
             <StatCard title="Today&apos;s NECC Rate" value={neccRate} icon="📈" />
             <StatCard title="Today&apos;s Closing Stock" value={totalClosingStock.toLocaleString("en-IN")} icon="📦" />
