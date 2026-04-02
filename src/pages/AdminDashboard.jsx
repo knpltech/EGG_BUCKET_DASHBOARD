@@ -1,6 +1,6 @@
 const API_URL = import.meta.env.VITE_API_URL;
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getRoleFlags, normalizeZone } from "../utils/role";
 import { fetchZoneWiseRevenue } from "../context/reportsApi";
 
@@ -15,6 +15,16 @@ const formatCurrency = (value) => {
     maximumFractionDigits: 0,
     minimumFractionDigits: 0,
   });
+};
+
+const toNumber = (value) => {
+  if (typeof value === "string") {
+    const normalized = value.replace(/,/g, "").trim();
+    const numeric = Number(normalized);
+    return Number.isFinite(numeric) ? numeric : 0;
+  }
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
 };
 
 const getLocalIsoDate = (value = new Date()) => {
@@ -339,7 +349,7 @@ const getZoneWiseAmountTotals = (rows = [], outlets = [], selectedDate) => {
   return zoneTotals;
 };
 
-const getZoneWiseClosingStock = (rows = [], selectedDate) => {
+const getZoneWiseClosingStock = (rows = [], selectedDate, zoneSales = {}, zoneDamages = {}) => {
   const latestByZone = new Map();
 
   for (const row of Array.isArray(rows) ? rows : []) {
@@ -361,7 +371,13 @@ const getZoneWiseClosingStock = (rows = [], selectedDate) => {
   return Object.fromEntries(
     ZONES.map((zoneLabel) => {
       const row = latestByZone.get(zoneLabel);
-      const closingValue = Number(row?.closingStock);
+      if (!row) return [zoneLabel, 0];
+
+      const openingStock = toNumber(row?.openingStock);
+      const stockIn = toNumber(row?.stockIn);
+      const salesQty = zoneSales[zoneLabel] !== undefined ? toNumber(zoneSales[zoneLabel]) : toNumber(row?.salesQty);
+      const damagesQty = zoneDamages[zoneLabel] !== undefined ? toNumber(zoneDamages[zoneLabel]) : toNumber(row?.damagesQty);
+      const closingValue = openingStock + stockIn - salesQty - damagesQty;
       return [zoneLabel, Number.isFinite(closingValue) ? closingValue : 0];
     })
   );
@@ -386,7 +402,7 @@ export default function AdminDashboard() {
   const [zoneAdvance, setZoneAdvance] = useState(createEmptyZoneAmounts);
   const [amountLoading, setAmountLoading] = useState(true);
   const totalClosingStockAllZones = ZONES.reduce(
-    (sum, zoneName) => sum + (Number(zoneClosingStock?.[zoneName]) || 0),
+    (sum, zoneName) => sum + toNumber(zoneClosingStock?.[zoneName]),
     0
   );
   const totalIncentiveAllZones = ZONES.reduce(
@@ -408,7 +424,7 @@ export default function AdminDashboard() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  useEffect(() => {
+  const loadDashboard = useCallback(async () => {
     const computeZoneStats = (outlets, salesRows, damageRows, neccRates) => {
       const stats = createEmptyZoneStats();
 
@@ -459,7 +475,6 @@ export default function AdminDashboard() {
       }
     };
 
-    const loadDashboard = async () => {
       setRevenueLoading(true);
       setZoneStatsLoading(true);
       setZoneClosingLoading(true);
@@ -491,9 +506,18 @@ export default function AdminDashboard() {
         const computedZoneStats = computeZoneStats(outlets, salesRows, damageRows, neccRates);
         setZoneStats(computedZoneStats);
 
+        const zoneSales = Object.fromEntries(
+          ZONES.map((zoneName) => [zoneName, toNumber(computedZoneStats?.[zoneName]?.eggs)])
+        );
+        const zoneDamages = Object.fromEntries(
+          ZONES.map((zoneName) => [zoneName, toNumber(computedZoneStats?.[zoneName]?.damage)])
+        );
+
         const revenueData = await fetchZoneWiseRevenue(selectedDate);
         setZoneRevenue(revenueData.success ? revenueData.zoneRevenue : createEmptyZoneRevenue());
-        setZoneClosingStock(getZoneWiseClosingStock(Array.isArray(zoneStockRows) ? zoneStockRows : [], selectedDate));
+        setZoneClosingStock(
+          getZoneWiseClosingStock(Array.isArray(zoneStockRows) ? zoneStockRows : [], selectedDate, zoneSales, zoneDamages)
+        );
         setZoneIncentive(getZoneWiseAmountTotals(Array.isArray(incentiveRows) ? incentiveRows : [], outlets, selectedDate));
         setZoneAdvance(getZoneWiseAmountTotals(Array.isArray(advanceRows) ? advanceRows : [], outlets, selectedDate));
       } catch (err) {
@@ -511,10 +535,34 @@ export default function AdminDashboard() {
         setZoneClosingLoading(false);
         setAmountLoading(false);
       }
+    }, [hasGlobalDashboardScope, selectedDate, zone]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const refresh = async () => {
+      if (!mounted) return;
+      await loadDashboard();
     };
 
-    loadDashboard();
-  }, [hasGlobalDashboardScope, selectedDate, zone]);
+    refresh();
+
+    const intervalId = window.setInterval(refresh, 30000);
+    const handleFocus = () => refresh();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [loadDashboard]);
 
   return (
     <div className="min-h-screen bg-eggBg px-4 py-6 md:px-8 flex flex-col">

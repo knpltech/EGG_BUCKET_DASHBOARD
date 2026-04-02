@@ -44,6 +44,11 @@ const normalizeDate = (value) => {
 };
 
 const toNumber = (value) => {
+  if (typeof value === "string") {
+    const normalized = value.replace(/,/g, "").trim();
+    const numeric = Number(normalized);
+    return Number.isFinite(numeric) ? numeric : 0;
+  }
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : 0;
 };
@@ -58,6 +63,11 @@ const toMillis = (value) => {
   }
   const parsed = new Date(value).getTime();
   return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const normalizeTextKey = (value) => {
+  if (value == null) return "";
+  return String(value).trim().toLowerCase();
 };
 
 const getIsoToday = () => {
@@ -114,7 +124,29 @@ const getZoneOutletMap = (outlets) => {
 
 const sumValuesByKeys = (values, keys) => {
   if (!values || typeof values !== "object" || Array.isArray(values)) return 0;
-  return (keys || []).reduce((sum, key) => sum + toNumber(values[key]), 0);
+
+  const normalizedValueMap = new Map();
+  for (const [rawKey, rawValue] of Object.entries(values)) {
+    const normalizedKey = normalizeTextKey(rawKey);
+    if (!normalizedKey) continue;
+    normalizedValueMap.set(normalizedKey, toNumber(rawValue));
+  }
+
+  const matchedKeys = new Set();
+  return (keys || []).reduce((sum, key) => {
+    const normalizedKey = normalizeTextKey(key);
+    if (!normalizedKey || matchedKeys.has(normalizedKey)) return sum;
+
+    let value = 0;
+    if (values[key] !== undefined) {
+      value = toNumber(values[key]);
+    } else if (normalizedValueMap.has(normalizedKey)) {
+      value = toNumber(normalizedValueMap.get(normalizedKey));
+    }
+
+    matchedKeys.add(normalizedKey);
+    return sum + value;
+  }, 0);
 };
 
 const getLatestRowsByDate = (rows, valueKey) => {
@@ -371,16 +403,17 @@ const hasNonEmptyRemarks = (row) => String(row?.remarks || "").trim().length > 0
 
 const selectPreferredRow = (current, candidate) => {
   if (!current) return candidate;
+  const currentTs = toMillis(current?.updatedAt || current?.createdAt || current?.date);
+  const candidateTs = toMillis(candidate?.updatedAt || candidate?.createdAt || candidate?.date);
+  if (candidateTs > currentTs) return candidate;
+  if (candidateTs < currentTs) return current;
 
   const currentHasRemarks = hasNonEmptyRemarks(current);
   const candidateHasRemarks = hasNonEmptyRemarks(candidate);
-
   if (candidateHasRemarks && !currentHasRemarks) return candidate;
   if (!candidateHasRemarks && currentHasRemarks) return current;
 
-  const currentTs = toMillis(current?.updatedAt || current?.createdAt || current?.date);
-  const candidateTs = toMillis(candidate?.updatedAt || candidate?.createdAt || candidate?.date);
-  return candidateTs >= currentTs ? candidate : current;
+  return candidate;
 };
 
 const dedupeZoneStockRows = (rows) => {

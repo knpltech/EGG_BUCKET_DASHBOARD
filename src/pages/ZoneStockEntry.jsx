@@ -162,8 +162,12 @@ export default function ZoneStockEntry() {
     return () => window.clearInterval(timer);
   }, []);
 
-  const loadAll = useCallback(async () => {
-    setIsLoading(true);
+  const loadAll = useCallback(async (silent = false) => {
+    if (silent) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
     try {
       const [outletsRes, salesRes, damageRes, zoneStockRes] = await Promise.all([
         fetch(`${API_URL}/outlets/all`),
@@ -190,19 +194,45 @@ export default function ZoneStockEntry() {
       setDamageRows([]);
       setZoneStockRows([]);
     } finally {
-      setIsLoading(false);
+      if (silent) {
+        setIsRefreshing(false);
+      } else {
+        setIsLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    loadAll();
+    let mounted = true;
+
+    const refresh = async (silent = false) => {
+      if (!mounted) return;
+      await loadAll(silent);
+    };
+
+    refresh(false);
+
+    const intervalId = window.setInterval(() => refresh(true), 30000);
+    const handleFocus = () => refresh(true);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") refresh(true);
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [loadAll]);
 
   const handleManualRefresh = useCallback(async () => {
     if (isRefreshing) return;
-    setIsRefreshing(true);
     try {
-      await loadAll();
+      await loadAll(true);
     } finally {
       setIsRefreshing(false);
     }

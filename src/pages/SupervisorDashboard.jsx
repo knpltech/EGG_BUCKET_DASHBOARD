@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Topbar from "../components/Topbar";
@@ -12,6 +12,16 @@ const formatCurrency = (value) => {
     maximumFractionDigits: 0,
     minimumFractionDigits: 0,
   });
+};
+
+const toNumber = (value) => {
+  if (typeof value === "string") {
+    const normalized = value.replace(/,/g, "").trim();
+    const numeric = Number(normalized);
+    return Number.isFinite(numeric) ? numeric : 0;
+  }
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
 };
 
 const getLocalIsoDate = (value = new Date()) => {
@@ -161,7 +171,7 @@ const formatZoneLabel = (zoneKey) => {
   return `Zone ${String(zoneKey).trim()}`;
 };
 
-const getClosingStockBySupervisorZone = (rows, normalizedZones, today) => {
+const getClosingStockBySupervisorZone = (rows, normalizedZones, today, zoneSales = {}, zoneDamages = {}) => {
   const zoneSet = new Set((normalizedZones || []).map((zoneKey) => String(zoneKey)));
   const latestByZone = new Map();
 
@@ -183,7 +193,13 @@ const getClosingStockBySupervisorZone = (rows, normalizedZones, today) => {
     (normalizedZones || []).map((zoneNumber) => {
       const zoneLabel = formatZoneLabel(zoneNumber);
       const row = latestByZone.get(zoneLabel);
-      const closingValue = Number(row?.closingStock);
+      if (!row) return [zoneLabel, 0];
+
+      const openingStock = toNumber(row?.openingStock);
+      const stockIn = toNumber(row?.stockIn);
+      const salesQty = zoneSales[zoneLabel] !== undefined ? toNumber(zoneSales[zoneLabel]) : toNumber(row?.salesQty);
+      const damagesQty = zoneDamages[zoneLabel] !== undefined ? toNumber(zoneDamages[zoneLabel]) : toNumber(row?.damagesQty);
+      const closingValue = openingStock + stockIn - salesQty - damagesQty;
       return [zoneLabel, Number.isFinite(closingValue) ? closingValue : 0];
     })
   );
@@ -222,69 +238,109 @@ export default function SupervisorDashboard() {
   }, []);
 
   const totalClosingStock = useMemo(() => {
-    const total = Object.values(zoneClosingStock || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
+    const total = Object.values(zoneClosingStock || {}).reduce((sum, value) => sum + toNumber(value), 0);
     return Number.isFinite(total) ? total : 0;
   }, [zoneClosingStock]);
 
   const showZoneBreakdown = normalizedUserZones.length > 1;
 
-  useEffect(() => {
+  const fetchSupervisorDashboard = useCallback(async () => {
     const today = getLocalIsoDate();
 
-    const fetchSupervisorDashboard = async () => {
-      try {
-        const [outletsRes, salesRes, damagesRes, cashRes, digitalRes, incentiveRes, advanceRes, zoneStockRes] = await Promise.all([
-          fetch(`${API_URL}/outlets/all`),
-          fetch(`${API_URL}/dailysales/all`),
-          fetch(`${API_URL}/daily-damage/all`),
-          fetch(`${API_URL}/cash-payments/all`),
-          fetch(`${API_URL}/digital-payments/all`),
-          fetch(`${API_URL}/incentive/all`),
-          fetch(`${API_URL}/advance/all`),
-          fetch(`${API_URL}/zone-stock/all`),
-        ]);
+    try {
+      const [outletsRes, salesRes, damagesRes, cashRes, digitalRes, incentiveRes, advanceRes, zoneStockRes] = await Promise.all([
+        fetch(`${API_URL}/outlets/all`),
+        fetch(`${API_URL}/dailysales/all`),
+        fetch(`${API_URL}/daily-damage/all`),
+        fetch(`${API_URL}/cash-payments/all`),
+        fetch(`${API_URL}/digital-payments/all`),
+        fetch(`${API_URL}/incentive/all`),
+        fetch(`${API_URL}/advance/all`),
+        fetch(`${API_URL}/zone-stock/all`),
+      ]);
 
-        const outletsRaw = await outletsRes.json();
-        const salesRaw = await salesRes.json();
-        const damagesRaw = await damagesRes.json();
-        const cashRaw = await cashRes.json();
-        const digitalRaw = await digitalRes.json();
-        const incentiveRaw = await incentiveRes.json();
-        const advanceRaw = await advanceRes.json();
-        const zoneStockRaw = await zoneStockRes.json();
+      const outletsRaw = await outletsRes.json();
+      const salesRaw = await salesRes.json();
+      const damagesRaw = await damagesRes.json();
+      const cashRaw = await cashRes.json();
+      const digitalRaw = await digitalRes.json();
+      const incentiveRaw = await incentiveRes.json();
+      const advanceRaw = await advanceRes.json();
+      const zoneStockRaw = await zoneStockRes.json();
 
-        const zoneOutlets = Array.isArray(outletsRaw)
-          ? outletsRaw.filter((outlet) => isOutletInSupervisorZones(outlet, normalizedUserZones))
-          : [];
+      const zoneOutlets = Array.isArray(outletsRaw)
+        ? outletsRaw.filter((outlet) => isOutletInSupervisorZones(outlet, normalizedUserZones))
+        : [];
 
-        const activeOutlets = zoneOutlets.filter((outlet) => outlet.status === "Active");
-        const salesTotal = getTodaySalesTotal(salesRaw, activeOutlets, today);
-        const cashTotal = getTodayPaymentTotal(cashRaw, activeOutlets, today);
-        const digitalTotal = getTodayPaymentTotal(digitalRaw, activeOutlets, today);
-        const totalRevenue = cashTotal + digitalTotal;
+      const activeOutlets = zoneOutlets.filter((outlet) => outlet.status === "Active");
+      const salesTotal = getTodaySalesTotal(salesRaw, activeOutlets, today);
+      const cashTotal = getTodayPaymentTotal(cashRaw, activeOutlets, today);
+      const digitalTotal = getTodayPaymentTotal(digitalRaw, activeOutlets, today);
+      const totalRevenue = cashTotal + digitalTotal;
 
-        setEggsToday(salesTotal);
-        setTotalCashPayments(cashTotal);
-        setTotalIncentive(getTodayMappedOutletsTotal(incentiveRaw, activeOutlets, today));
-        setTotalAdvance(getTodayMappedOutletsTotal(advanceRaw, activeOutlets, today));
-        setDamagesToday(getTodayDamageTotal(damagesRaw, activeOutlets, today));
-        const computedRate = salesTotal > 0 ? totalRevenue / salesTotal : 0;
-        setNeccRate(`₹${computedRate.toFixed(2)}`);
+      setEggsToday(salesTotal);
+      setTotalCashPayments(cashTotal);
+      setTotalIncentive(getTodayMappedOutletsTotal(incentiveRaw, activeOutlets, today));
+      setTotalAdvance(getTodayMappedOutletsTotal(advanceRaw, activeOutlets, today));
+      setDamagesToday(getTodayDamageTotal(damagesRaw, activeOutlets, today));
+      const computedRate = salesTotal > 0 ? totalRevenue / salesTotal : 0;
+      setNeccRate(`₹${computedRate.toFixed(2)}`);
 
-        setZoneClosingStock(getClosingStockBySupervisorZone(zoneStockRaw, normalizedUserZones, today));
-      } catch {
-        setEggsToday(0);
-        setTotalCashPayments(0);
-        setTotalIncentive(0);
-        setTotalAdvance(0);
-        setDamagesToday(0);
-        setNeccRate("₹0.00");
-        setZoneClosingStock({});
-      }
+      const zoneSales = Object.fromEntries(
+        (normalizedUserZones || []).map((zoneNumber) => {
+          const zoneOutlets = activeOutlets.filter(
+            (outlet) => normalizeZone(outlet?.zoneId || outlet?.zone || outlet?.zoneNumber) === String(zoneNumber)
+          );
+          return [formatZoneLabel(zoneNumber), getTodaySalesTotal(salesRaw, zoneOutlets, today)];
+        })
+      );
+
+      const zoneDamages = Object.fromEntries(
+        (normalizedUserZones || []).map((zoneNumber) => {
+          const zoneOutlets = activeOutlets.filter(
+            (outlet) => normalizeZone(outlet?.zoneId || outlet?.zone || outlet?.zoneNumber) === String(zoneNumber)
+          );
+          return [formatZoneLabel(zoneNumber), getTodayDamageTotal(damagesRaw, zoneOutlets, today)];
+        })
+      );
+
+      setZoneClosingStock(getClosingStockBySupervisorZone(zoneStockRaw, normalizedUserZones, today, zoneSales, zoneDamages));
+    } catch {
+      setEggsToday(0);
+      setTotalCashPayments(0);
+      setTotalIncentive(0);
+      setTotalAdvance(0);
+      setDamagesToday(0);
+      setNeccRate("₹0.00");
+      setZoneClosingStock({});
+    }
+  }, [normalizedUserZones]);
+
+  useEffect(() => {
+    let mounted = true;
+    const refresh = async () => {
+      if (!mounted) return;
+      await fetchSupervisorDashboard();
     };
 
-    fetchSupervisorDashboard();
-  }, [normalizedUserZones]);
+    refresh();
+
+    const intervalId = window.setInterval(refresh, 30000);
+    const handleFocus = () => refresh();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [fetchSupervisorDashboard]);
 
   return (
     <div className="flex min-h-screen">
@@ -321,7 +377,7 @@ export default function SupervisorDashboard() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {(normalizedUserZones || []).map((zoneNumber) => {
                   const zoneLabel = formatZoneLabel(zoneNumber);
-                  const closingValue = Number(zoneClosingStock?.[zoneLabel] || 0);
+                  const closingValue = toNumber(zoneClosingStock?.[zoneLabel]);
                   return (
                     <div key={zoneLabel} className="rounded-lg border border-gray-200 p-4 text-center">
                       <p className="mb-2 font-semibold text-orange-600">{zoneLabel}</p>
