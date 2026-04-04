@@ -201,16 +201,7 @@ export default function Rateanalytics({ rows = [], outlets: allowedOutlets = [] 
     .flatMap((r) => outletKeys.map((key) => Number(r[key])))
     .filter((value) => Number.isFinite(value));
 
-  const entriesCount = availableRates.length;
-
   const colors = ["#f97316", "#3b82f6", "#22c55e", "#a855f7", "#ef4444", "#06b6d4", "#f59e0b"];
-
-  const averageRate =
-    availableRates.length === 0
-      ? "0.00"
-      : (
-          availableRates.reduce((sum, rate) => sum + rate, 0) / availableRates.length
-        ).toFixed(2);
 
   return (
     <div className="mt-10">
@@ -218,7 +209,7 @@ export default function Rateanalytics({ rows = [], outlets: allowedOutlets = [] 
 
       <div
         className="grid gap-6 ml-4"
-        style={{ gridTemplateColumns: "1.3fr 0.5fr 0.5fr" }}
+        style={{ gridTemplateColumns: "1fr" }}
       >
         {/* 📈 NECC GRAPH for last 15 days*/}
         <div className="bg-white shadow rounded-xl p-6">
@@ -325,49 +316,6 @@ export default function Rateanalytics({ rows = [], outlets: allowedOutlets = [] 
             </ResponsiveContainer>
           </div>
         </div>
-
-        {/* 📊 AVERAGE */}
-        <div className="bg-gradient-to-br from-white to-orange-50 shadow-sm rounded-xl px-5 py-4 flex flex-col items-center justify-center hover:shadow-md transition">
-          
-          <div className="flex items-center gap-1.5 mb-1">
-            <span className="text-orange-500 text-base">📈</span>
-            <h2 className="text-lg font-semibold text-gray-600 uppercase tracking-wide">
-              15 Day Avg
-            </h2>
-          </div>
-
-          <h1 className="text-5xl font-bold text-orange-600 leading-tight">
-            ₹{averageRate}
-          </h1>
-
-          <div className="mt-1 text-[11px] text-gray-500">
-            Last 15 days
-          </div>
-
-          <div className="mt-2 w-10 h-[2px] bg-orange-400 rounded-full" />
-        </div>
-
-        {/* 📊 COUNT */}
-        <div className="bg-gradient-to-br from-white to-yellow-50 shadow-sm rounded-xl px-5 py-4 flex flex-col items-center justify-center hover:shadow-md transition">
-          
-          <div className="flex items-center gap-1.5 mb-1">
-            <span className="text-blue-500 text-base">🧾</span>
-            <h2 className="text-lg font-semibold text-gray-600 uppercase tracking-wide">
-              Entries
-            </h2>
-          </div>
-
-          <h1 className="text-5xl font-bold text-yellow-600 leading-tight">
-            {entriesCount}
-          </h1>
-
-          <div className="mt-1 text-[11px] text-gray-500">
-            Last 15 days
-          </div>
-
-          <div className="mt-2 w-10 h-[2px] bg-yellow-400 rounded-full" />
-        </div>
-
 
       </div>
     </div>
