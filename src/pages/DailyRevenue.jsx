@@ -15,6 +15,7 @@ import {
 import Topbar from "../components/Topbar";
 import Dailyheader from "../components/Dailyheader";
 import DailyTable from "../components/DailyTable";
+import { getThisWeekRange } from "../utils/dateRange";
 
 const getOutletRevenueValue = (row, outletRef) => {
   const outletObj = typeof outletRef === "object" ? outletRef : null;
@@ -73,11 +74,12 @@ function RevenueAnalytics({ rows }) {
 }
 
 export default function DailyRevenue() {
+  const defaultWeekRange = useMemo(() => getThisWeekRange(), []);
   const [rows, setRows] = useState([]);
   const [outlets, setOutlets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const [fromDate, setFromDate] = useState(defaultWeekRange.from);
+  const [toDate, setToDate] = useState(defaultWeekRange.to);
 
   const fetchRevenueData = useCallback(async () => {
     setLoading(true);

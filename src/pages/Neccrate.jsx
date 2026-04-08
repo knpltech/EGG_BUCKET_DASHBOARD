@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import Rateanalytics from "../components/Rateanalytics";
 import Topbar from "../components/Topbar";
 import { getRoleFlags } from "../utils/role";
+import { getThisWeekRange } from "../utils/dateRange";
 
 /* ================= helpers ================= */
 const normalizeDate = (d) => {
@@ -38,6 +39,7 @@ const parseRate = (doc) => {
 /* ================= Neccrate page ================= */
 const Neccrate = () => {
   const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
+  const defaultWeekRange = useMemo(() => getThisWeekRange(), []);
 
   const [rawRows,       setRawRows]       = useState([]);
   const [outlets,       setOutlets]       = useState([]); // full outlet list with names
@@ -45,8 +47,8 @@ const Neccrate = () => {
   const [editRow,       setEditRow]       = useState({});  // { date, outletKey, rate, remarks, docId }
   const [editValues,    setEditValues]    = useState({});
   const [isEditSaving,  setIsEditSaving]  = useState(false);
-  const [fromDate,      setFromDate]      = useState("");
-  const [toDate,        setToDate]        = useState("");
+  const [fromDate,      setFromDate]      = useState(defaultWeekRange.from);
+  const [toDate,        setToDate]        = useState(defaultWeekRange.to);
 
   /* ---- fetch outlets (to get display names) ---- */
   useEffect(() => {
