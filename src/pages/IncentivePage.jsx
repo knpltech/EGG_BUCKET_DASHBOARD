@@ -2,6 +2,7 @@ const API_URL = import.meta.env.VITE_API_URL;
 
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { getRoleFlags, zonesMatch } from "../utils/role";
+import { getThisWeekRange } from "../utils/dateRange";
 import * as XLSX from "xlsx";
 
 import Topbar from "../components/Topbar";
@@ -11,6 +12,7 @@ import DailyTable from "../components/DailyTable";
 const Incentive = () => {
 
   const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
+  const defaultWeekRange = useMemo(() => getThisWeekRange(), []);
   const showTable = isAdmin || isViewer || isDataAgent || isSupervisor;
   const isReadOnly = isViewer;
 
@@ -28,8 +30,8 @@ const Incentive = () => {
 
   const displayedOutlets = isSupervisor ? formOutlets : outlets;
 
-  const [fromDate,setFromDate] = useState("");
-  const [toDate,setToDate] = useState("");
+  const [fromDate,setFromDate] = useState(defaultWeekRange.from);
+  const [toDate,setToDate] = useState(defaultWeekRange.to);
 
   /* ================= EDIT ================= */
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import * as XLSX from "xlsx";
 const API_URL = import.meta.env.VITE_API_URL;
 import { getRoleFlags, zonesMatch } from "../utils/role";
+import { getThisWeekRange } from "../utils/dateRange";
 
 const STORAGE_KEY = "egg_outlets_v1";
 
@@ -136,6 +137,7 @@ const BaseCalendar = ({ rows, selectedDate, onSelectDate, showDots }) => {
 
 export default function DigitalPayments() {
   const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
+  const defaultWeekRange = useMemo(() => getThisWeekRange(), []);
   const showForms = isAdmin || isDataAgent;
   const showTable = isAdmin || isDataAgent || isSupervisor || isViewer;
 
@@ -159,8 +161,8 @@ export default function DigitalPayments() {
 
   const displayedOutlets = isSupervisor ? formOutlets : outlets;
 
-  const [filterFrom, setFilterFrom] = useState("");
-  const [filterTo, setFilterTo] = useState("");
+  const [filterFrom, setFilterFrom] = useState(defaultWeekRange.from);
+  const [filterTo, setFilterTo] = useState(defaultWeekRange.to);
   const [entryDate, setEntryDate] = useState("");
   const [entryValues, setEntryValues] = useState({});
   const [isEntryCalendarOpen, setIsEntryCalendarOpen] = useState(false);

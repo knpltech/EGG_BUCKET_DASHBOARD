@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useDamage } from "../context/DamageContext";
 import * as XLSX from "xlsx";
 import { getRoleFlags, zonesMatch } from "../utils/role";
+import { getThisWeekRange } from "../utils/dateRange";
 import {
   LineChart,
   Line,
@@ -295,6 +296,7 @@ function DamageAnalytics({ filteredData, outlets }) {
    ===================================================================== */
 export default function DailyDamages() {
   const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
+  const defaultWeekRange = useMemo(() => getThisWeekRange(), []);
   console.log('DailyDamages - isSupervisor:', isSupervisor, '| zone:', zone);
 
   const showForms = isAdmin || isDataAgent;
@@ -314,8 +316,8 @@ export default function DailyDamages() {
   const STORAGE_KEY = "egg_outlets_v1";
   const [outlets, setOutlets] = useState([]);
 
-  const [fromDate, setFromDate] = useState("");
-  const [toDate,   setToDate]   = useState("");
+  const [fromDate, setFromDate] = useState(defaultWeekRange.from);
+  const [toDate,   setToDate]   = useState(defaultWeekRange.to);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
