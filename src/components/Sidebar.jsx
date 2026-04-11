@@ -3,14 +3,14 @@ import { useState, useEffect } from "react";
 import logo from "../assets/Logo.png";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faUserPlus } from "@fortawesome/free-solid-svg-icons";
-import { faIndianRupeeSign } from "@fortawesome/free-solid-svg-icons";
 import { faMoneyBillWave } from "@fortawesome/free-solid-svg-icons";
+import { faGift } from "@fortawesome/free-solid-svg-icons";
+import { faSliders } from "@fortawesome/free-solid-svg-icons";
 import {
   faTableCells,
   faEgg,
   faDollarSign,
   faWallet,
-  faTruck,
   faStore,
   faChartLine,
   faUsers,
@@ -91,6 +91,10 @@ export default function Sidebar({ supervisor }) {
               <FontAwesomeIcon icon={faPenToSquare} />
               {open && "Data Entry"}
             </Link>
+            <Link to="/supervisor/inventory" className={linkClass("/supervisor/inventory")}> 
+              <FontAwesomeIcon icon={faStore} />
+              {open && "Inventory"}
+            </Link>
             <Link to="/supervisor/damages" className={linkClass("/supervisor/damages")}> 
               <FontAwesomeIcon icon={faExclamationTriangle} />
               {open && "Daily Damages"}
@@ -99,9 +103,17 @@ export default function Sidebar({ supervisor }) {
               <FontAwesomeIcon icon={faEgg} />
               {open && "NECC Rate"}
             </Link>
+            <Link to="/supervisor/incentive" className={linkClass("/supervisor/incentive")}> 
+              <FontAwesomeIcon icon={faGift} />
+              {open && "Incentive"}
+            </Link>
+            <Link to="/supervisor/advance" className={linkClass("/supervisor/advance")}> 
+              <FontAwesomeIcon icon={faSliders} />
+              {open && "Advance"}
+            </Link>
             <Link to="/supervisor/dailysales" className={linkClass("/supervisor/dailysales")}> 
-              <FontAwesomeIcon icon={faIndianRupeeSign} />
-              {open && "Daily Sales"}
+              <FontAwesomeIcon icon={faEgg} />
+              {open && "Daily Sales Quantity"}
             </Link>
             <Link to="/supervisor/digital-payments" className={linkClass("/supervisor/digital-payments")}> 
               <FontAwesomeIcon icon={faWallet} />
@@ -128,6 +140,10 @@ export default function Sidebar({ supervisor }) {
               <FontAwesomeIcon icon={faPenToSquare} />
               {open && "Data Entry"}
             </Link>
+            <Link to="/admin/inventory" className={linkClass("/admin/inventory")}> 
+              <FontAwesomeIcon icon={faStore} />
+              {open && "Inventory"}
+            </Link>
             <Link to="/admin/damages" className={linkClass("/admin/damages")}> 
               <FontAwesomeIcon icon={faExclamationTriangle} />
               {open && "Daily Damages"}
@@ -136,8 +152,16 @@ export default function Sidebar({ supervisor }) {
               <FontAwesomeIcon icon={faEgg} />
               {open && "NECC Rate"}
             </Link>
+            <Link to="/admin/incentive" className={linkClass("/admin/incentive")}> 
+              <FontAwesomeIcon icon={faGift} />
+              {open && "Incentive"}
+            </Link>
+            <Link to="/admin/advance" className={linkClass("/admin/advance")}> 
+              <FontAwesomeIcon icon={faSliders} />
+              {open && "Advance"}
+            </Link>
             <Link to="/admin/dailysales" className={linkClass("/admin/dailysales")}> 
-              <FontAwesomeIcon icon={faIndianRupeeSign} />
+              <FontAwesomeIcon icon={faEgg} />
               {open && "Daily Sales Quantity"}
             </Link>
             <Link to="/admin/digital-payments" className={linkClass("/admin/digital-payments")}> 
@@ -148,9 +172,13 @@ export default function Sidebar({ supervisor }) {
               <FontAwesomeIcon icon={faMoneyBillWave} />
               {open && "Cash Payments"}
             </Link>
+            <Link to="/admin/daily-revenue" className={linkClass("/admin/daily-revenue")}> 
+              <FontAwesomeIcon icon={faDollarSign} />
+              {open && "Daily Revenue"}
+            </Link>
             <Link to="/admin/distribution" className={linkClass("/admin/distribution")}> 
               <FontAwesomeIcon icon={faUsers} />
-              {open && "Add Data Agent & Supervisor"}
+              {open && "Add Supervisor"}
             </Link>
             <Link to="/admin/outlets" className={linkClass("/admin/outlets")}> 
               <FontAwesomeIcon icon={faStore} />
@@ -158,12 +186,20 @@ export default function Sidebar({ supervisor }) {
             </Link>
             <Link to="/admin/users" className={linkClass("/admin/users")}> 
               <FontAwesomeIcon icon={faUsers} />
-              {open && "Users"}
+              {open && "Supervisors Display"}
             </Link>
           </>
         )}
         {isViewer && (
           <>
+            <Link to="/viewer/dashboard" className={linkClass("/viewer/dashboard")}>
+              <FontAwesomeIcon icon={faTableCells} />
+              {open && "Dashboard"}
+            </Link>
+            <Link to="/admin/inventory" className={linkClass("/admin/inventory")}> 
+              <FontAwesomeIcon icon={faStore} />
+              {open && "Inventory"}
+            </Link>
             <Link to="/admin/damages" className={linkClass("/admin/damages")}> 
               <FontAwesomeIcon icon={faExclamationTriangle} />
               {open && "Daily Damages"}
@@ -173,8 +209,8 @@ export default function Sidebar({ supervisor }) {
               {open && "NECC Rate"}
             </Link>
             <Link to="/admin/dailysales" className={linkClass("/admin/dailysales")}> 
-              <FontAwesomeIcon icon={faIndianRupeeSign} />
-              {open && "Daily Sales"}
+              <FontAwesomeIcon icon={faEgg} />
+              {open && "Daily Sales Quantity"}
             </Link>
             <Link to="/admin/digital-payments" className={linkClass("/admin/digital-payments")}> 
               <FontAwesomeIcon icon={faWallet} />
@@ -183,6 +219,10 @@ export default function Sidebar({ supervisor }) {
             <Link to="/admin/cash-payments" className={linkClass("/admin/cash-payments")}> 
               <FontAwesomeIcon icon={faMoneyBillWave} />
               {open && "Cash Payments"}
+            </Link>
+            <Link to="/admin/daily-revenue" className={linkClass("/admin/daily-revenue")}>
+              <FontAwesomeIcon icon={faDollarSign} />
+              {open && "Daily Revenue"}
             </Link>
               <Link to="/admin/reports" className={linkClass("/admin/reports")}> 
             <FontAwesomeIcon icon={faChartLine} />
@@ -193,7 +233,7 @@ export default function Sidebar({ supervisor }) {
         {dataAgentRoles && dataAgentRoles.includes("distribution") && !isAdmin && (
           <Link to="/admin/distribution" className={linkClass("/admin/distribution")}> 
             <FontAwesomeIcon icon={faUserPlus} />
-            {open && "Add Data Agent"}
+            {open && "Add Supervisor"}
           </Link>
         )}
         {dataAgentRoles && dataAgentRoles.includes("outlets") && !isAdmin && (
@@ -231,8 +271,14 @@ export default function Sidebar({ supervisor }) {
             )}
             {(dataAgentRoles.includes("daily_sales")) && (
               <Link to="/admin/dailysales" className={linkClass("/admin/dailysales")}> 
-                <FontAwesomeIcon icon={faIndianRupeeSign} />
+                <FontAwesomeIcon icon={faEgg} />
                 {open && "Daily Sales Quantity"}
+              </Link>
+            )}
+            {(dataAgentRoles.includes("advance")) && (
+              <Link to="/admin/advance" className={linkClass("/admin/advance")}> 
+                <FontAwesomeIcon icon={faSliders} />
+                {open && "Advance"}
               </Link>
             )}
             {(dataAgentRoles.includes("digital_payments")) && (
@@ -250,7 +296,7 @@ export default function Sidebar({ supervisor }) {
             {(dataAgentRoles.includes("distribution")) && (
               <Link to="/admin/distribution" className={linkClass("/admin/distribution")}> 
                 <FontAwesomeIcon icon={faUsers} />
-                {open && "Add Data Agent & Supervisor"}
+                {open && "Add Supervisor"}
               </Link>
             )}
             {/* Removed duplicate Outlets link for data agents */}

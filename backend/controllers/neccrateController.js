@@ -1,4 +1,5 @@
 import { db } from "../config/firebase.js";
+import { validateSupervisorSameDayEntry } from "../utils/entryCutoff.js";
 
 const parseNumericRate = (value) => {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -27,6 +28,61 @@ const normalizeNeccDoc = (id, data = {}) => {
   };
 };
 
+export const addNeccRate = async (req, res) => {
+  try {
+    const { date, remarks, addedBy } = req.body;
+    const outletKey = getOutletKey(req.body);
+    const numericRate = parseNumericRate(req.body.rate);
+
+    if (!date || !outletKey || numericRate === null) {
+      return res.status(400).json({ message: "Missing required field: date, outletId/outlet, or rate" });
+    }
+
+    const entryValidation = validateSupervisorSameDayEntry(date, addedBy);
+    if (!entryValidation.allowed) {
+      return res.status(403).json({
+        message: entryValidation.message,
+        today: entryValidation.todayIso,
+        timezone: entryValidation.timezone,
+      });
+    }
+
+    const docData = {
+      date,
+      outletId: outletKey,
+      outlet: outletKey,
+      rateValue: numericRate,
+      rate: `₹${numericRate.toFixed(2)} per egg`,
+      remarks: remarks || "—",
+      createdAt: new Date(),
+    };
+
+    if (addedBy) {
+      docData.addedBy = {
+        username: addedBy.username,
+        zone: addedBy.zone,
+        role: addedBy.role,
+        timestamp: addedBy.timestamp,
+      };
+    }
+
+    const docRef = await db.collection("neccRates").add(docData);
+    res.status(201).json({ id: docRef.id, message: "NECC rate recorded" });
+  } catch (error) {
+    res.status(500).json({ message: "Error adding NECC rate", error: error.message });
+  }
+};
+
+export const getAllNeccRates = async (req, res) => {
+  try {
+    const snapshot = await db.collection("neccRates").orderBy("date", "desc").get();
+    const rates = snapshot.docs.map((doc) => normalizeNeccDoc(doc.id, doc.data()));
+    res.status(200).json(rates);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching NECC rates", error: error.message });
+  }
+};
+
 export const updateNeccRate = async (req, res) => {
   try {
     const { id } = req.params;
@@ -35,7 +91,7 @@ export const updateNeccRate = async (req, res) => {
     const numericRate = parseNumericRate(req.body.rate);
 
     if (!date || !outletKey || numericRate === null) {
-      return res.status(400).json({ message: "Missing required field: date, outletId, or rate" });
+      return res.status(400).json({ message: "Missing required field: date, outletId/outlet, or rate" });
     }
 
     const updateData = {
@@ -57,38 +113,51 @@ export const updateNeccRate = async (req, res) => {
   }
 };
 
-export const addNeccRate = async (req, res) => {
+export const deleteNeccRatesByDate = async (req, res) => {
   try {
-    const { date, remarks } = req.body;
-    const outletKey = getOutletKey(req.body);
-    const numericRate = parseNumericRate(req.body.rate);
+    const { date } = req.params;
+    if (!date) return res.status(400).json({ message: "Date is required" });
 
-    if (!date || !outletKey || numericRate === null) {
-      return res.status(400).json({ message: "Missing required field: date, outletId, or rate" });
-    }
+    const snapshot = await db.collection("neccRates").where("date", "==", date).get();
+    const batch = db.batch();
+    let deletedCount = 0;
 
-    const docRef = await db.collection("neccRates").add({
-      date,
-      outletId: outletKey,
-      outlet: outletKey,
-      rateValue: numericRate,
-      rate: `₹${numericRate.toFixed(2)} per egg`,
-      remarks: remarks || "—",
-      createdAt: new Date(),
+    snapshot.docs.forEach((doc) => {
+      batch.delete(doc.ref);
+      deletedCount += 1;
     });
 
-    res.status(201).json({ id: docRef.id, message: "NECC rate recorded" });
+    await batch.commit();
+
+    res.status(200).json({
+      message: `Deleted ${deletedCount} entry(ies) for date ${date}`,
+      count: deletedCount,
+    });
   } catch (error) {
-    res.status(500).json({ message: "Error adding NECC rate", error: error.message });
+    res.status(500).json({ message: "Error deleting NECC rates", error: error.message });
   }
 };
 
-export const getAllNeccRates = async (req, res) => {
+export const deleteNeccRateByOutletAndDate = async (req, res) => {
   try {
-    const snapshot = await db.collection("neccRates").orderBy("date", "desc").get();
-    const rates = snapshot.docs.map((doc) => normalizeNeccDoc(doc.id, doc.data()));
-    res.status(200).json(rates);
+    const { date, outletId } = req.params;
+    if (!date || !outletId) {
+      return res.status(400).json({ message: "Date and outletId are required" });
+    }
+
+    const snapshot = await db.collection("neccRates")
+      .where("date", "==", date)
+      .where("outletId", "==", outletId)
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) {
+      return res.status(404).json({ message: "No NECC entry found for this outlet and date" });
+    }
+
+    await snapshot.docs[0].ref.delete();
+    res.status(200).json({ message: `NECC rate for outlet ${outletId} on ${date} deleted`, count: 1 });
   } catch (error) {
-    res.status(500).json({ message: "Error fetching NECC rates", error: error.message });
+    res.status(500).json({ message: "Error deleting NECC rate", error: error.message });
   }
 };

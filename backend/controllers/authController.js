@@ -7,6 +7,22 @@ import bcrypt from "bcryptjs";
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) throw new Error("JWT_SECRET is not set");
 
+const isFirestoreQuotaError = (err) => {
+  if (!err) return false;
+  const code = String(err.code ?? "").toLowerCase();
+  const details = String(err.details || err.message || "").toLowerCase();
+  return (
+    code === "8" ||
+    code === "resource-exhausted" ||
+    details.includes("quota exceeded") ||
+    details.includes("resource_exhausted") ||
+    details.includes("resource exhausted") ||
+    details.includes("quota")
+  );
+};
+
+const LOGIN_QUOTA_RETRY_SECONDS = Number(process.env.LOGIN_QUOTA_RETRY_SECONDS || 60);
+
 
 export const loginUser = async (req, res) => {
   try {
@@ -26,9 +42,27 @@ export const loginUser = async (req, res) => {
     if (!collection)
       return res.status(400).json({ success: false, error: "Invalid role" });
 
-    const userSnap = await db.collection(collection).doc(username).get();
+    const trimmedUsername = String(username).trim();
+    const exactUserSnap = await db.collection(collection).doc(trimmedUsername).get();
+
+    let userSnap = exactUserSnap;
+    let resolvedUsername = trimmedUsername;
+
+    // Fallback for case-only mismatches (e.g., "admin" vs "Admin") in doc IDs.
+    if (!userSnap.exists) {
+      const collectionSnap = await db.collection(collection).get();
+      const matchedDoc = collectionSnap.docs.find(
+        (doc) => doc.id.toLowerCase() === trimmedUsername.toLowerCase()
+      );
+
+      if (matchedDoc) {
+        userSnap = matchedDoc;
+        resolvedUsername = matchedDoc.id;
+      }
+    }
+
     if (!userSnap.exists)
-      return res.status(404).json({ success: false, error: "User not found" });
+      return res.status(401).json({ success: false, error: "Invalid credentials" });
 
     const user = userSnap.data();
 
@@ -38,10 +72,7 @@ export const loginUser = async (req, res) => {
       // Normalize zone comparison (handle "Zone 1" vs "zone 1" vs "1")
       const normalizeZone = (z) => z ? String(z).toLowerCase().replace('zone', '').trim() : null;
       if (zone && userZone && normalizeZone(zone) !== normalizeZone(userZone)) {
-        return res.status(401).json({ 
-          success: false, 
-          error: `Zone mismatch. You are assigned to ${userZone}, not ${zone}` 
-        });
+        return res.status(401).json({ success: false, error: "Invalid credentials" });
       }
     }
 
@@ -50,10 +81,7 @@ export const loginUser = async (req, res) => {
       const userZone = user.zoneId || user.zone;
       const normalizeZone = (z) => z ? String(z).toLowerCase().replace('zone', '').trim() : null;
       if (zone && userZone && normalizeZone(zone) !== normalizeZone(userZone)) {
-        return res.status(401).json({ 
-          success: false, 
-          error: `Zone mismatch. You are assigned to ${userZone}, not ${zone}` 
-        });
+        return res.status(401).json({ success: false, error: "Invalid credentials" });
       }
     }
 
@@ -62,21 +90,21 @@ export const loginUser = async (req, res) => {
       role === "admin" &&
       !(user.role === "Admin" || (Array.isArray(user.roles) && user.roles.includes("admin")))
     ) {
-      return res.status(401).json({ success: false, error: "Admin access denied" });
+      return res.status(401).json({ success: false, error: "Invalid credentials" });
     }
 
     if (
       role === "dataagent" &&
       !(user.role === "DataAgent" || (Array.isArray(user.roles) && user.roles.includes("dataagent")))
     ) {
-      return res.status(401).json({ success: false, error: "DataAgent access denied" });
+      return res.status(401).json({ success: false, error: "Invalid credentials" });
     }
 
     if (
       role === "viewer" &&
       !(user.role === "Viewer" || (Array.isArray(user.roles) && user.roles.includes("viewer")))
     ) {
-      return res.status(401).json({ success: false, error: "Viewer access denied" });
+      return res.status(401).json({ success: false, error: "Invalid credentials" });
     }
 
 
@@ -85,14 +113,14 @@ export const loginUser = async (req, res) => {
     if (!valid) {
       return res.status(401).json({
         success: false,
-        error: "Invalid password",
+        error: "Invalid credentials",
       });
     }
 
 // Generate JWT
 const token = jwt.sign(
   {
-    username,
+    username: resolvedUsername,
     role: user.role,
   },
   JWT_SECRET,
@@ -106,12 +134,26 @@ return res.json({
   success: true,
   token,
   user: {
-    username,
+    username: resolvedUsername,
     ...userWithoutPassword,
   },
 });
 
   }catch (err) { 
+    if (isFirestoreQuotaError(err)) {
+      console.error("loginUser firestore quota error:", err.message);
+      const retryAfter = Number.isFinite(LOGIN_QUOTA_RETRY_SECONDS) && LOGIN_QUOTA_RETRY_SECONDS > 0
+        ? Math.floor(LOGIN_QUOTA_RETRY_SECONDS)
+        : 60;
+      res.set("Retry-After", String(retryAfter));
+      return res.status(429).json({
+        success: false,
+        error: "Firestore quota exceeded. Please wait and retry.",
+        code: "FIRESTORE_QUOTA_EXCEEDED",
+        retryAfterSeconds: retryAfter,
+      });
+    }
+
     console.error("loginUser error:", err); 
     return res.status(500).json({ success: false, error: err.message }); 
   } 

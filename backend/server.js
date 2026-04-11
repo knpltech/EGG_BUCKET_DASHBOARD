@@ -3,9 +3,12 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
+import { db } from "./config/firebase.js";
 
 import authRoutes from "./routes/authRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
+import incentiveRoutes from "./routes/incentiveRoutes.js";
+import advanceRoutes from "./routes/advanceRoutes.js";
 import dailyDamageRoutes from "./routes/dailyDamageRoutes.js";
 import neccrateRoutes from "./routes/neccrateRoutes.js";
 import dailysalesRoutes from "./routes/dailysalesRoutes.js";
@@ -16,11 +19,24 @@ import outletRoutes from "./routes/outletRoutes.js";
 import reportsRoutes from "./routes/reportsRoutes.js"; // ← ADD THIS LINE
 import supervisorRoutes from "./routes/supervisorRoutes.js";
 import dataEntryRoutes from "./routes/dataEntryRoutes.js";
+import zoneStockRoutes from "./routes/zoneStockRoutes.js";
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+
+// Optional Firestore warmup. Keep disabled by default to avoid an extra read on startup.
+if (String(process.env.ENABLE_FIRESTORE_WARMUP || "").toLowerCase() === "true") {
+  (async () => {
+    try {
+      await db.collection("admin").limit(1).get();
+      console.log("✅ Firestore connection warmed up");
+    } catch (err) {
+      console.log("⚠️ Firestore warmup failed:", err.message);
+    }
+  })();
+}
 
 // ✅ API health check
 app.get("/api", (req, res) => {
@@ -29,6 +45,8 @@ app.get("/api", (req, res) => {
 
 // ✅ API routes ONLY
 app.use("/api/auth", authRoutes);
+app.use("/api/incentive", incentiveRoutes);
+app.use("/api/advance", advanceRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/daily-damage", dailyDamageRoutes);
 app.use("/api/neccrate", neccrateRoutes);
@@ -40,6 +58,7 @@ app.use("/api/outlets", outletRoutes);
 app.use("/api/reports", reportsRoutes); // ← ADD THIS LINE
 app.use("/api/supervisor", supervisorRoutes);
 app.use("/api/data-entry", dataEntryRoutes);
+app.use("/api/zone-stock", zoneStockRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () =>

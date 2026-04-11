@@ -8,6 +8,114 @@ const config = {
 
 const API_BASE_URL = config.apiBaseUrl;
 
+const getLocalIsoDate = (value = new Date()) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+};
+
+const normalizeDate = (value) => {
+  try {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+      if (/^\d{2}-\d{2}-\d{4}$/.test(trimmed)) {
+        const [day, month, year] = trimmed.split('-');
+        return `${year}-${month}-${day}`;
+      }
+    }
+
+    if (value && typeof value === 'object' && typeof value.toDate === 'function') {
+      return getLocalIsoDate(value.toDate());
+    }
+
+    if (value && typeof value === 'object' && value._seconds !== undefined) {
+      return getLocalIsoDate(new Date(value._seconds * 1000));
+    }
+
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) return getLocalIsoDate(parsed);
+  } catch {}
+
+  return String(value ?? '').slice(0, 10);
+};
+
+const getDocTimestamp = (doc) => {
+  const value = doc?.updatedAt || doc?.createdAt || doc?.date;
+
+  if (value && typeof value === 'object' && typeof value.toDate === 'function') {
+    return value.toDate().getTime();
+  }
+
+  if (value && typeof value === 'object' && value._seconds !== undefined) {
+    return value._seconds * 1000;
+  }
+
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const normalizeZoneLabel = (zone) => {
+  if (!zone) return null;
+  const raw = String(zone).trim();
+  const numberMatch = raw.match(/(\d+)/);
+  return numberMatch ? `Zone ${numberMatch[1]}` : raw;
+};
+
+const createEmptyZoneRevenue = () => ({
+  'Zone 1': { cash: 0, digital: 0, total: 0 },
+  'Zone 2': { cash: 0, digital: 0, total: 0 },
+  'Zone 3': { cash: 0, digital: 0, total: 0 },
+  'Zone 4': { cash: 0, digital: 0, total: 0 },
+  'Zone 5': { cash: 0, digital: 0, total: 0 },
+});
+
+const getPaymentValueForOutlet = (doc, outlet) => {
+  const values = doc?.outlets;
+  if (!values || typeof values !== 'object' || Array.isArray(values)) return 0;
+
+  const keys = [outlet.id, outlet.area, outlet.name].filter(Boolean);
+  for (const key of keys) {
+    if (values[key] !== undefined) return Number(values[key]) || 0;
+  }
+
+  return 0;
+};
+
+const buildZoneTotalsFromPayments = (rows, outlets, paymentType, today, zoneRevenue) => {
+  const activeOutlets = Array.isArray(outlets)
+    ? outlets.filter((outlet) => outlet && outlet.status === 'Active')
+    : [];
+
+  const zoneOutletsMap = new Map();
+  activeOutlets.forEach((outlet) => {
+    const zoneKey = normalizeZoneLabel(outlet.zoneId || outlet.zone || outlet.zoneNumber);
+    if (!zoneKey) return;
+    if (!zoneRevenue[zoneKey]) zoneRevenue[zoneKey] = { cash: 0, digital: 0, total: 0 };
+    if (!zoneOutletsMap.has(zoneKey)) zoneOutletsMap.set(zoneKey, []);
+    zoneOutletsMap.get(zoneKey).push(outlet);
+  });
+
+  const dayRows = Array.isArray(rows)
+    ? rows
+        .filter((doc) => normalizeDate(doc.date || doc.createdAt) === today)
+        .sort((a, b) => getDocTimestamp(a) - getDocTimestamp(b))
+    : [];
+
+  zoneOutletsMap.forEach((zoneOutlets, zoneKey) => {
+    const latestValues = new Map();
+
+    dayRows.forEach((doc) => {
+      zoneOutlets.forEach((outlet) => {
+        latestValues.set(outlet.id, getPaymentValueForOutlet(doc, outlet));
+      });
+    });
+
+    zoneRevenue[zoneKey][paymentType] = Array.from(latestValues.values()).reduce((sum, value) => sum + value, 0);
+  });
+};
+
 /**
  * Fetch aggregated reports data for a specific outlet
  * This fetches combined data from daily sales, payments, and NECC rates
@@ -124,8 +232,131 @@ export const exportReports = async (outletId, format = 'excel', filters = {}) =>
   }
 };
 
+/**
+ * Fetch today's revenue data (cash + digital payments)
+ * @returns {Promise<Object>} Object with cashTotal, digitalTotal, and combinedTotal
+ */
+export const fetchTodayRevenue = async () => {
+  try {
+    const dateStr = getLocalIsoDate();
+
+    // Fetch both cash and digital payments
+    const [cashResponse, digitalResponse] = await Promise.all([
+      fetch(`${API_BASE_URL}/cash-payments/all`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      }),
+      fetch(`${API_BASE_URL}/digital-payments/all`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      })
+    ]);
+
+    if (!cashResponse.ok || !digitalResponse.ok) {
+      throw new Error('Failed to fetch payment data');
+    }
+
+    const cashPayments = await cashResponse.json();
+    const digitalPayments = await digitalResponse.json();
+
+    // Sum across all documents for today, not just the first one.
+    const todaysCash = Array.isArray(cashPayments)
+      ? cashPayments.filter(p => normalizeDate(p.date || p.createdAt) === dateStr)
+      : [];
+    const todaysDigital = Array.isArray(digitalPayments)
+      ? digitalPayments.filter(p => normalizeDate(p.date || p.createdAt) === dateStr)
+      : [];
+
+    const cashTotal = todaysCash.reduce((sum, entry) => sum + (Number(entry?.total) || 0), 0);
+    const digitalTotal = todaysDigital.reduce((sum, entry) => sum + (Number(entry?.total) || 0), 0);
+    const combinedTotal = cashTotal + digitalTotal;
+
+    return {
+      cashTotal,
+      digitalTotal,
+      combinedTotal,
+      date: dateStr,
+      success: true
+    };
+  } catch (error) {
+    console.error('Error fetching today\'s revenue:', error);
+    return {
+      cashTotal: 0,
+      digitalTotal: 0,
+      combinedTotal: 0,
+      success: false,
+      error: error.message
+    };
+  }
+};
+
+/**
+ * Fetch revenue broken down by supervisor zones for a specific date
+ * @param {string} selectedDate - ISO date string (YYYY-MM-DD)
+ * @returns {Promise<Object>} Object with zone-wise revenue data
+ */
+export const fetchZoneWiseRevenue = async (selectedDate = getLocalIsoDate()) => {
+  try {
+    const dateStr = selectedDate || getLocalIsoDate();
+
+    // Fetch cash, digital payments, and outlets for real zone mapping
+    const [cashResponse, digitalResponse, outletsResponse] = await Promise.all([
+      fetch(`${API_BASE_URL}/cash-payments/all`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      }),
+      fetch(`${API_BASE_URL}/digital-payments/all`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      }),
+      fetch(`${API_BASE_URL}/outlets/all`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      })
+    ]);
+
+    if (!cashResponse.ok || !digitalResponse.ok || !outletsResponse.ok) {
+      throw new Error('Failed to fetch payment data');
+    }
+
+    const cashPayments = await cashResponse.json();
+    const digitalPayments = await digitalResponse.json();
+    const outlets = await outletsResponse.json();
+
+    const zoneRevenue = createEmptyZoneRevenue();
+    buildZoneTotalsFromPayments(cashPayments, outlets, 'cash', dateStr, zoneRevenue);
+    buildZoneTotalsFromPayments(digitalPayments, outlets, 'digital', dateStr, zoneRevenue);
+
+    // Calculate totals
+    Object.keys(zoneRevenue).forEach(zone => {
+      zoneRevenue[zone].total = zoneRevenue[zone].cash + zoneRevenue[zone].digital;
+    });
+
+    return {
+      zoneRevenue,
+      date: dateStr,
+      success: true
+    };
+  } catch (error) {
+    console.error('Error fetching zone-wise revenue:', error);
+    return {
+      zoneRevenue: {
+        'Zone 1': { cash: 0, digital: 0, total: 0 },
+        'Zone 2': { cash: 0, digital: 0, total: 0 },
+        'Zone 3': { cash: 0, digital: 0, total: 0 },
+        'Zone 4': { cash: 0, digital: 0, total: 0 },
+        'Zone 5': { cash: 0, digital: 0, total: 0 },
+      },
+      success: false,
+      error: error.message
+    };
+  }
+};
+
 export default {
   fetchReportsData,
   fetchOutlets,
-  exportReports
+  exportReports,
+  fetchTodayRevenue,
+  fetchZoneWiseRevenue
 };

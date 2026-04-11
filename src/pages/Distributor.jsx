@@ -1,6 +1,6 @@
 import React from "react";
 import Topbar from "../components/Topbar";
-import Distributorcomp from "../components/Distributorcomp";
+// import Distributorcomp from "../components/Distributorcomp";
 import Supervisor from "../components/Supervisor";
 import { getRoleFlags } from "../utils/role";
 
@@ -14,7 +14,7 @@ const Distributor = () => {
 
       <div className="flex-1 p-4 pt-0 overflow-x-hidden">
         <Topbar />
-        <Distributorcomp />
+        {/* <Distributorcomp /> */}
         <Supervisor />
       </div>
     </div>

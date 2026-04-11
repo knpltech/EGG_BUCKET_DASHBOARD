@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import Rateanalytics from "../components/Rateanalytics";
 import Topbar from "../components/Topbar";
 import { getRoleFlags } from "../utils/role";
+import { getThisWeekRange } from "../utils/dateRange";
 
 const normalizeDate = (d) => {
   try {
@@ -31,16 +32,20 @@ const parseRateValue = (doc) => {
   return null;
 };
 
+const normalizeTextKey = (value) => String(value || "").trim().toUpperCase();
+
 const Neccrate = () => {
   const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
+  const defaultWeekRange = useMemo(() => getThisWeekRange(), []);
 
   const [rawRows, setRawRows] = useState([]);
   const [outlets, setOutlets] = useState([]);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editRow, setEditRow] = useState({});
   const [editValues, setEditValues] = useState({});
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const [isEditSaving, setIsEditSaving] = useState(false);
+  const [fromDate, setFromDate] = useState(defaultWeekRange.from);
+  const [toDate, setToDate] = useState(defaultWeekRange.to);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -48,14 +53,21 @@ const Neccrate = () => {
     const url = isSupervisor && zone ? `${API_URL}/outlets/zone/${zone}` : `${API_URL}/outlets/all`;
 
     fetch(url, { headers })
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok && isSupervisor && zone) {
+          return fetch(`${API_URL}/outlets/all`, { headers }).then((fallback) => fallback.json());
+        }
+        return r.json();
+      })
       .then((d) => setOutlets(Array.isArray(d) ? d : []))
       .catch(() => setOutlets([]));
   }, [isSupervisor, zone]);
 
   const fetchRates = async () => {
     try {
-      const res = await fetch(`${API_URL}/neccrate/all`);
+      const token = localStorage.getItem("token");
+      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+      const res = await fetch(`${API_URL}/neccrate/all`, { headers });
       const data = await res.json();
       setRawRows(Array.isArray(data) ? data.map((d) => ({ id: d.id || d._id, ...d })) : []);
     } catch {
@@ -67,16 +79,42 @@ const Neccrate = () => {
     fetchRates();
   }, []);
 
+  const outletKeyMap = useMemo(() => {
+    const map = new Map();
+
+    outlets.forEach((o) => {
+      const canonicalKey = normalizeTextKey(o.name || o.area || o.id);
+      if (!canonicalKey) return;
+
+      [o.id, o.area, o.name].forEach((value) => {
+        const normalized = normalizeTextKey(value);
+        if (normalized) map.set(normalized, canonicalKey);
+      });
+    });
+
+    return map;
+  }, [outlets]);
+
   const filteredRawRows = useMemo(() => {
-    if (!isSupervisor) return rawRows;
+    if (!isSupervisor || outlets.length === 0) return rawRows;
+
     try {
-      const zoneKeys = new Set(outlets.map((o) => o.id || o.area || o.name));
+      const zoneKeys = new Set();
+      outlets.forEach((o) => {
+        [o.id, o.area, o.name].forEach((value) => {
+          const normalized = normalizeTextKey(value);
+          if (normalized) zoneKeys.add(normalized);
+        });
+      });
+
       return rawRows.filter((doc) => {
-        const outletKey = getOutletKey(doc);
+        const outletKey = normalizeTextKey(getOutletKey(doc));
         if (outletKey && zoneKeys.has(outletKey)) return true;
+
         if (doc.outlets && typeof doc.outlets === "object") {
-          return Object.keys(doc.outlets).some((key) => zoneKeys.has(key));
+          return Object.keys(doc.outlets).some((key) => zoneKeys.has(normalizeTextKey(key)));
         }
+
         return false;
       });
     } catch {
@@ -85,32 +123,44 @@ const Neccrate = () => {
   }, [rawRows, outlets, isSupervisor]);
 
   const getOutletName = (key) => {
-    const found = outlets.find((o) => o.id === key || o.area === key || o.name === key);
+    const normalizedKey = normalizeTextKey(key);
+    const found = outlets.find((o) =>
+      [o.id, o.area, o.name].some((value) => normalizeTextKey(value) === normalizedKey)
+    );
     return found ? found.name || found.area || key : key;
   };
 
   const outletColumns = useMemo(() => {
-    const keysInData = new Set();
+    const ordered = [];
+    const seen = new Set();
 
-    filteredRawRows.forEach((doc) => {
-      const outletKey = getOutletKey(doc);
-      if (outletKey) keysInData.add(outletKey);
-      if (doc.outlets && typeof doc.outlets === "object") {
-        Object.keys(doc.outlets).forEach((key) => keysInData.add(key));
+    outlets.forEach((o) => {
+      const canonicalKey = normalizeTextKey(o.name || o.area || o.id);
+      if (canonicalKey && !seen.has(canonicalKey)) {
+        seen.add(canonicalKey);
+        ordered.push(canonicalKey);
       }
     });
 
-    const ordered = [];
-    outlets.forEach((o) => {
-      const key = o.id || o.area || o.name;
-      if (keysInData.has(key)) ordered.push(key);
-    });
-    keysInData.forEach((key) => {
-      if (!ordered.includes(key)) ordered.push(key);
+    filteredRawRows.forEach((doc) => {
+      const outletKey = outletKeyMap.get(normalizeTextKey(getOutletKey(doc))) || normalizeTextKey(getOutletKey(doc));
+      if (outletKey && !seen.has(outletKey)) {
+        seen.add(outletKey);
+        ordered.push(outletKey);
+      }
+      if (doc.outlets && typeof doc.outlets === "object") {
+        Object.keys(doc.outlets).forEach((key) => {
+          const normalizedKey = outletKeyMap.get(normalizeTextKey(key)) || normalizeTextKey(key);
+          if (normalizedKey && !seen.has(normalizedKey)) {
+            seen.add(normalizedKey);
+            ordered.push(normalizedKey);
+          }
+        });
+      }
     });
 
     return ordered;
-  }, [filteredRawRows, outlets]);
+  }, [outlets, filteredRawRows, outletKeyMap]);
 
   const { pivotMap, sortedDates } = useMemo(() => {
     const nextPivotMap = {};
@@ -124,7 +174,8 @@ const Neccrate = () => {
       if (!nextPivotMap[date]) nextPivotMap[date] = {};
 
       if (outletKey) {
-        nextPivotMap[date][outletKey] = {
+        const normalizedKey = outletKeyMap.get(normalizeTextKey(outletKey)) || normalizeTextKey(outletKey);
+        nextPivotMap[date][normalizedKey] = {
           rate: parsedRate,
           docId,
           remarks: doc.remarks || "",
@@ -135,7 +186,8 @@ const Neccrate = () => {
       if (doc.outlets && typeof doc.outlets === "object") {
         Object.entries(doc.outlets).forEach(([key, rate]) => {
           const parsed = Number(rate);
-          nextPivotMap[date][key] = {
+          const normalizedKey = outletKeyMap.get(normalizeTextKey(key)) || normalizeTextKey(key);
+          nextPivotMap[date][normalizedKey] = {
             rate: Number.isFinite(parsed) ? parsed : null,
             docId,
             remarks: doc.remarks || "",
@@ -146,7 +198,7 @@ const Neccrate = () => {
 
     const nextSortedDates = Object.keys(nextPivotMap).sort((a, b) => new Date(a) - new Date(b));
     return { pivotMap: nextPivotMap, sortedDates: nextSortedDates };
-  }, [filteredRawRows]);
+  }, [filteredRawRows, outletKeyMap]);
 
   const filteredDates = useMemo(() => {
     return sortedDates.filter((date) => {
@@ -163,7 +215,8 @@ const Neccrate = () => {
     const dateData = pivotMap[date] || {};
     const values = {};
     outletColumns.forEach((key) => {
-      values[key] = dateData[key]?.rate ?? "";
+      const value = dateData[key]?.rate;
+      values[key] = value !== null && value !== undefined ? value : "";
     });
 
     setEditRow({ date, dateData });
@@ -172,35 +225,61 @@ const Neccrate = () => {
   };
 
   const handleEditSave = async () => {
+    if (isEditSaving) return;
+
     const { date, dateData } = editRow;
-    const docUpdates = {};
+    const token = localStorage.getItem("token");
+    const authHeaders = {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+
+    const patchTasks = [];
+    const postTasks = [];
 
     outletColumns.forEach((outletKey) => {
-      const existing = dateData[outletKey];
-      const newRate = editValues[outletKey];
+      const rawValue = editValues[outletKey];
+      if (rawValue === "" || rawValue === undefined || rawValue === null) return;
 
+      const numericRate = Number(rawValue);
+      if (!Number.isFinite(numericRate)) return;
+
+      const existing = dateData[outletKey];
       if (existing?.docId) {
-        docUpdates[existing.docId] = {
-          outletId: outletKey,
-          rate: Number(newRate),
-          remarks: existing.remarks,
-        };
+        patchTasks.push(
+          fetch(`${API_URL}/neccrate/${existing.docId}`, {
+            method: "PATCH",
+            headers: authHeaders,
+            body: JSON.stringify({
+              date,
+              outletId: outletKey,
+              rate: numericRate,
+              remarks: existing.remarks || "",
+            }),
+          })
+        );
+      } else {
+        postTasks.push(
+          fetch(`${API_URL}/neccrate/add`, {
+            method: "POST",
+            headers: authHeaders,
+            body: JSON.stringify({
+              date,
+              outletId: outletKey,
+              rate: numericRate,
+              remarks: "",
+            }),
+          })
+        );
       }
     });
 
+    setIsEditSaving(true);
     try {
-      const tasks = Object.entries(docUpdates).map(([docId, payload]) =>
-        fetch(`${API_URL}/neccrate/${docId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ date, ...payload }),
-        })
-      );
-
-      const results = await Promise.all(tasks);
+      const results = await Promise.all([...patchTasks, ...postTasks]);
       for (const result of results) {
         if (!result.ok) {
-          alert("Failed to update one or more entries");
+          alert("Failed to save one or more entries");
           return;
         }
       }
@@ -210,18 +289,24 @@ const Neccrate = () => {
       setEditRow({});
       setEditValues({});
     } catch (err) {
-      alert(`Error updating entries: ${err.message}`);
+      alert(`Error saving entries: ${err.message}`);
+    } finally {
+      setIsEditSaving(false);
     }
   };
 
-  const totalCols = 1 + outletColumns.length + 1 + (isAdmin ? 1 : 0);
+  const editTotal = useMemo(() => {
+    return Object.values(editValues).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  }, [editValues]);
+
+  const totalCols = 1 + outletColumns.length + (isAdmin ? 1 : 0);
 
   return (
     <div className="bg-eggBg min-h-screen p-6">
       <Topbar />
 
       {(isAdmin || isViewer || isDataAgent || isSupervisor) && (
-        <Rateanalytics rows={filteredRawRows} />
+        <Rateanalytics rows={filteredRawRows} outlets={outlets} />
       )}
 
       {(isAdmin || isViewer || isDataAgent || isSupervisor) && (
@@ -272,7 +357,6 @@ const Neccrate = () => {
                       {getOutletName(key)}
                     </th>
                   ))}
-                  <th className="px-5 py-3 font-semibold text-orange-500 whitespace-nowrap">Total</th>
                   {isAdmin && <th className="px-5 py-3 font-semibold text-orange-500 whitespace-nowrap">Edit</th>}
                 </tr>
               </thead>
@@ -286,7 +370,6 @@ const Neccrate = () => {
                 ) : (
                   filteredDates.map((date) => {
                     const dateData = pivotMap[date] || {};
-                    const rowTotal = outletColumns.reduce((sum, key) => sum + (Number(dateData[key]?.rate) || 0), 0);
 
                     return (
                       <tr key={date} className="hover:bg-orange-50/30 transition-colors">
@@ -300,9 +383,6 @@ const Neccrate = () => {
                               : <span className="text-gray-300">—</span>}
                           </td>
                         ))}
-                        <td className="px-5 py-4 font-semibold text-orange-500 whitespace-nowrap">
-                          {rowTotal.toLocaleString("en-IN")}
-                        </td>
                         {isAdmin && (
                           <td className="px-5 py-4 whitespace-nowrap">
                             <button
@@ -335,8 +415,8 @@ const Neccrate = () => {
 
             <div className="space-y-3">
               {outletColumns.map((key) => (
-                <div key={key} className="flex items-center gap-3">
-                  <label className="w-36 text-xs font-medium text-gray-700 shrink-0 uppercase">
+                <div key={key} className="flex flex-col sm:flex-row sm:items-center gap-2">
+                  <label className="w-full sm:w-36 text-xs font-medium text-gray-700 shrink-0 uppercase">
                     {getOutletName(key)}
                   </label>
                   <input
@@ -344,15 +424,20 @@ const Neccrate = () => {
                     step="0.01"
                     value={editValues[key] ?? ""}
                     onChange={(e) => setEditValues((prev) => ({ ...prev, [key]: e.target.value }))}
-                    disabled={!editRow.dateData?.[key]}
-                    className={`flex-1 border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 ${
-                      editRow.dateData?.[key]
-                        ? "border-gray-900"
-                        : "border-gray-200 bg-gray-50 cursor-not-allowed text-gray-400"
-                    }`}
+                    className="flex-1 border border-gray-900 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
                   />
                 </div>
               ))}
+            </div>
+
+            <div className="mt-4 flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
+              <span className="text-xs font-semibold text-gray-600">Total</span>
+              <span className="text-sm font-bold text-orange-600">
+                {editTotal.toLocaleString("en-IN", {
+                  maximumFractionDigits: 2,
+                  minimumFractionDigits: editTotal % 1 ? 2 : 0,
+                })}
+              </span>
             </div>
 
             <div className="flex justify-end gap-2 mt-6">
@@ -361,16 +446,27 @@ const Neccrate = () => {
                   setEditModalOpen(false);
                   setEditRow({});
                   setEditValues({});
+                  setIsEditSaving(false);
                 }}
-                className="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 text-xs font-medium hover:bg-gray-200"
+                disabled={isEditSaving}
+                className="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 text-xs font-medium hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Cancel
               </button>
               <button
                 onClick={handleEditSave}
-                className="px-5 py-2 rounded-xl bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600"
+                disabled={isEditSaving}
+                className="px-5 py-2 rounded-xl bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center"
               >
-                Save
+                {isEditSaving ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Saving...
+                  </>
+                ) : "Save"}
               </button>
             </div>
           </div>

@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import logo from "../assets/Logo.png";
 import egg from "../assets/egg.png";
 
 const API_URL = import.meta.env.VITE_API_URL;
+const API_WARMUP_TIMEOUT_MS = 4000;
+const SIGNIN_TIMEOUT_MS = 12000;
 
 /* =========================
    LOCAL STORAGE HELPERS
@@ -31,23 +33,50 @@ export default function SignIn() {
   const [role, setRole] = useState("admin");
   const [zone, setZone] = useState("");
   const [loading, setLoading] = useState(false);
+  const warmupPromiseRef = useRef(null);
 
   const navigate = useNavigate();
 
   const zones = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"];
 
+  useEffect(() => {
+    if (!API_URL || warmupPromiseRef.current) return;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), API_WARMUP_TIMEOUT_MS);
+
+    warmupPromiseRef.current = fetch(`${API_URL}`, {
+      method: "GET",
+      signal: controller.signal,
+    })
+      .catch(() => null)
+      .finally(() => {
+        clearTimeout(timeoutId);
+      });
+  }, []);
+
   // Add a placeholder for handleSignin to prevent runtime errors
   async function handleSignin(e) {
     e.preventDefault();
     setLoading(true);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), SIGNIN_TIMEOUT_MS);
+
     try {
-      // Example API call for login
+      await Promise.resolve(warmupPromiseRef.current).catch(() => null);
+
       const response = await fetch(`${API_URL}/auth/signin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password, role, zone })
+        body: JSON.stringify({ username, password, role, zone }),
+        signal: controller.signal,
       });
-      const data = await response.json();
+
+      const contentType = response.headers.get("content-type") || "";
+      const data = contentType.includes("application/json")
+        ? await response.json()
+        : {};
+
       if (response.ok && data.user) {
         // Store user info in localStorage
         // Use zoneId from server response (user record) if available
@@ -57,7 +86,6 @@ export default function SignIn() {
         if (role === 'admin' && !userZoneId) {
           userZoneId = "Zone 1";
         }
-        console.log('Login - Server zoneId:', data.user.zoneId, '| Server zone:', data.user.zone, '| Form zone:', zone, '| Using:', userZoneId);
         // Persist token for authenticated requests
         if (data.token) {
           localStorage.setItem('token', data.token);
@@ -80,11 +108,22 @@ export default function SignIn() {
           navigate('/');
         }
       } else {
-        alert(data.message || 'Invalid credentials');
+        if (response.status === 429 && data?.code === 'FIRESTORE_QUOTA_EXCEEDED') {
+          const backendMessage = data?.error || data?.message || 'Service unavailable. Please try again.';
+          const retryText = data?.retryAfterSeconds ? ` Retry in ${data.retryAfterSeconds}s.` : '';
+          alert(`${backendMessage}${retryText}`);
+        } else {
+          alert('Invalid credentials');
+        }
       }
     } catch (err) {
-      alert('Server error');
+      if (err?.name === "AbortError") {
+        alert("Login request timed out. Please try again.");
+      } else {
+        alert(err?.message || 'Server error');
+      }
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   }
@@ -141,13 +180,11 @@ export default function SignIn() {
           >
             <option value="admin">Admin</option>
             <option value="supervisor">Supervisor</option>
-            <option value="dataagent">Data Agent</option>
             <option value="viewer">Viewer</option>
           </select>
-          {/* ZONE (Conditional) */}
+          {/* ZONE (only for data agents and supervisors) */}
           {[
             "dataagent",
-            "viewer",
             "supervisor"
           ].includes(role) && (
             <select

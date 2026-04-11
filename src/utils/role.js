@@ -3,14 +3,14 @@ export const getRoleFlags = () => {
     const user = JSON.parse(localStorage.getItem("user"));
     if (!user) return {};
 
-    const role = user.role;
-    const roles = Array.isArray(user.roles) ? user.roles : [];
+    const role = user.role ? String(user.role).toLowerCase() : "";
+    const roles = Array.isArray(user.roles) ? user.roles.map(r => String(r).toLowerCase()) : [];
 
     return {
-      isAdmin: role === "Admin" || roles.includes("admin"),
-      isViewer: role === "Viewer" || roles.includes("viewer"),
-      isDataAgent: role === "DataAgent" || roles.includes("dataagent"),
-      isSupervisor: role === "Supervisor" || roles.includes("supervisor"),
+      isAdmin: role === "admin" || roles.includes("admin"),
+      isViewer: role === "viewer" || roles.includes("viewer"),
+      isDataAgent: role === "dataagent" || roles.includes("dataagent"),
+      isSupervisor: role === "supervisor" || roles.includes("supervisor"),
       zone: user.zoneId || user.zone || null,
     };
   } catch {

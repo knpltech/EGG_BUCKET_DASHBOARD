@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
-  BarChart,
-  Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -35,17 +35,30 @@ function getYAxisConfig(data, outletKeys) {
 }
 
 
-// Parse both yyyy-mm-dd and dd-mm-yyyy
+// Parse various date formats: yyyy-mm-dd, dd-mm-yyyy, ISO dates, etc.
 function parseAnyDate(dateStr) {
   if (!dateStr) return null;
 
+  // Handle yyyy-mm-dd format
   if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
     return new Date(dateStr);
   }
 
+  // Handle dd-mm-yyyy format
   if (/^\d{2}-\d{2}-\d{4}$/.test(dateStr)) {
     const [dd, mm, yyyy] = dateStr.split("-");
     return new Date(`${yyyy}-${mm}-${dd}`);
+  }
+
+  // Handle ISO date strings (e.g., 2026-03-05T00:00:00.000Z)
+  if (/^\d{4}-\d{2}-\d{2}T/.test(dateStr)) {
+    return new Date(dateStr);
+  }
+
+  // Fallback: try parsing with Date constructor
+  const parsed = new Date(dateStr);
+  if (!isNaN(parsed.getTime())) {
+    return parsed;
   }
 
   return null;
@@ -77,9 +90,27 @@ function formatYAxis(value) {
 
 /* ---------- COMPONENT ---------- */
 
-const Weeklytrend = ({ rows = [] }) => {
+const Weeklytrend = ({ rows = [], outlets: allowedOutlets = [] }) => {
   const [chartData, setChartData] = useState([]);
   const [outletKeys, setOutletKeys] = useState([]);
+
+  // map id -> display name AND create reverse mapping (area -> id)
+  const { nameMap, areaToIdMap } = useMemo(() => {
+    const nameMap = {};
+    const areaToIdMap = {};
+    if (Array.isArray(allowedOutlets)) {
+      allowedOutlets.forEach(o => {
+        const key = typeof o === 'string' ? o : o.id || o.area || o.name;
+        const label = typeof o === 'string' ? o : o.area || o.name || key;
+        nameMap[key] = label;
+        // Map area name back to the key we use (for data lookup)
+        if (typeof o === 'object' && o.area) {
+          areaToIdMap[o.area] = key;
+        }
+      });
+    }
+    return { nameMap, areaToIdMap };
+  }, [allowedOutlets]);
 
   useEffect(() => {
     if (!Array.isArray(rows)) {
@@ -99,15 +130,13 @@ const Weeklytrend = ({ rows = [] }) => {
       days.push(d);
     }
 
-    // Collect all outlet names
-    const outletSet = new Set();
-    rows.forEach(r => {
-      if (r.outlets) {
-        Object.keys(r.outlets).forEach(o => outletSet.add(o));
-      }
-    });
+    // Use allowedOutlets as the only source for outlet keys.
+    // When this list is empty (e.g., supervisor has no outlets), chart should show no outlet bars.
+    let outlets = [];
+    if (Array.isArray(allowedOutlets) && allowedOutlets.length > 0) {
+      outlets = allowedOutlets.map(o => (typeof o === 'string' ? o : o.id || o.area || o.name));
+    }
 
-    const outlets = Array.from(outletSet);
     setOutletKeys(outlets);
 
     // Build chart rows day-by-day
@@ -131,8 +160,18 @@ const Weeklytrend = ({ rows = [] }) => {
       });
 
       if (match?.outlets) {
-        Object.entries(match.outlets).forEach(([o, v]) => {
-          rowData[o] = Number(v) || 0;
+        // Map outlet values properly - data may be keyed by area name or by id
+        outlets.forEach(outletKey => {
+          // Direct match by key (could be id or area)
+          if (match.outlets[outletKey] !== undefined) {
+            rowData[outletKey] = Number(match.outlets[outletKey]) || 0;
+          } else {
+            // Fallback: if key is an id, look up by area name
+            const areaName = nameMap[outletKey]; // nameMap maps id -> area name
+            if (areaName && match.outlets[areaName] !== undefined) {
+              rowData[outletKey] = Number(match.outlets[areaName]) || 0;
+            }
+          }
         });
       }
 
@@ -140,7 +179,7 @@ const Weeklytrend = ({ rows = [] }) => {
     });
 
     setChartData(finalData);
-  }, [rows]);
+  }, [rows, allowedOutlets, nameMap]);
 
   const COLORS = [
     "#f97316",
@@ -172,10 +211,8 @@ const Weeklytrend = ({ rows = [] }) => {
           </p>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart
+            <LineChart
               data={chartData}
-              barGap={6}
-              barCategoryGap={16}
               margin={{ top: 10, right: 20, left: 10, bottom: 10 }}
             >
               <CartesianGrid strokeDasharray="3 3" vertical={false} />
@@ -198,23 +235,28 @@ const Weeklytrend = ({ rows = [] }) => {
 
 
               <Tooltip
+                formatter={(value, name) => [value, nameMap[name] || name]}
                 labelFormatter={(_, payload) =>
                   payload?.[0]?.payload?.fullDate
                 }
               />
 
-              <Legend wrapperStyle={{ fontSize: 11 }} />
+              <Legend wrapperStyle={{ fontSize: 11 }} formatter={(val) => nameMap[val] || val} />
 
               {outletKeys.map((outlet, idx) => (
-                <Bar
+                <Line
                   key={outlet}
+                  type="monotone"
                   dataKey={outlet}
-                  fill={COLORS[idx % COLORS.length]}
-                  radius={[6, 6, 0, 0]}
-                  maxBarSize={26}
+                  name={nameMap[outlet] || outlet}
+                  stroke={COLORS[idx % COLORS.length]}
+                  dot={{ fill: COLORS[idx % COLORS.length], r: 4 }}
+                  activeDot={{ r: 6 }}
+                  strokeWidth={2}
+                  isAnimationActive={true}
                 />
               ))}
-            </BarChart>
+            </LineChart>
           </ResponsiveContainer>
         )}
       </div>

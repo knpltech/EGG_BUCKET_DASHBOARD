@@ -5,6 +5,8 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 
+const API_URL = import.meta.env.VITE_API_URL;
+
 /* =========================
    LOCAL STORAGE HELPERS
 ========================= */
@@ -63,7 +65,7 @@ const Supervisor = () => {
     const zoneNum = parseInt(form.zone.replace(/[^0-9]/g, ""), 10);
 
     // POST to backend
-    fetch("/api/supervisor/add", {
+    fetch(`${API_URL}/supervisor/add`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -76,9 +78,16 @@ const Supervisor = () => {
       .then(data => {
         if (data.success) {
           // Store supervisor in localStorage with numeric zone and zoneId for compatibility
+          // Also keep the plain password so admin can see it in the supervisors display
           const supervisors = getStoredSupervisors();
-          supervisors.push({ username: form.username.trim(), zone: zoneNum, zoneId: zoneNum });
+          const id = form.username.trim();
+          supervisors.push({ id, username: form.username.trim(), zone: zoneNum, zoneId: zoneNum, password: form.password, createdAt: new Date().toISOString() });
           setStoredSupervisors(supervisors);
+          setStoredSupervisors(supervisors);
+          // Notify other parts of the app that supervisors list changed
+          try {
+            window.dispatchEvent(new CustomEvent('egg:supervisors-updated', { detail: supervisors }));
+          } catch (err) {}
           alert("Supervisor created successfully");
           setForm({
             username: "",
@@ -205,18 +214,6 @@ const Supervisor = () => {
             Create Supervisor
           </button>
         </div>
-      </div>
-
-      {/* INFO */}
-      <div className="mt-6 bg-orange-50 border border-black-200 rounded-xl p-4">
-        <h3 className="font-semibold mb-1">
-          Supervisor Rules
-        </h3>
-        <ul className="text-sm ml-5">
-          <li>Only one supervisor per zone</li>
-          <li>Zones are locked once a supervisor is created</li>
-          <li>Deleting a supervisor frees the zone automatically</li>
-        </ul>
       </div>
     </div>
   );

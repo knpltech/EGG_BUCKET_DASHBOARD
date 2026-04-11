@@ -1,15 +1,18 @@
 import express from "express";
-import { addDailySales, getAllDailySales, updateDailySales } from "../controllers/dailysalesController.js";
+import {
+  addDailySales,
+  getAllDailySales,
+  updateDailySales,
+  deleteDailySalesByDate,
+  deleteDailySalesByOutletAndDate
+} from "../controllers/dailysalesController.js";
 
 const router = express.Router();
 
-// Add a new daily sales entry
-router.post("/add", addDailySales);
-
-// Route to update a daily sales entry by ID
-router.patch("/:id", updateDailySales);
-
-// Get all daily sales entries
+router.delete("/date/:date/outlet/:outletId", deleteDailySalesByOutletAndDate);
+router.delete("/date/:date", deleteDailySalesByDate);
 router.get("/all", getAllDailySales);
+router.post("/add", addDailySales);
+router.patch("/:id", updateDailySales);
 
 export default router;

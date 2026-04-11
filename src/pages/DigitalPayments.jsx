@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import * as XLSX from "xlsx";
 const API_URL = import.meta.env.VITE_API_URL;
 import { getRoleFlags, zonesMatch } from "../utils/role";
+import { getThisWeekRange } from "../utils/dateRange";
 
 const STORAGE_KEY = "egg_outlets_v1";
 
@@ -10,13 +11,22 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
-// Memoized utility functions
 const formatCurrencyTwoDecimals = (value) => {
   if (value == null || isNaN(value)) return "₹0.00";
   return "₹" + Number(value).toLocaleString("en-IN", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+};
+
+// Smart formatter: preserves whole numbers, only shows decimals when needed
+const formatSmart = (value, withRupee = true) => {
+  if (value == null || value === "" || isNaN(Number(value))) return withRupee ? "₹0" : "0";
+  const num = Number(value);
+  const formatted = num % 1 === 0
+    ? num.toLocaleString("en-IN")
+    : num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return withRupee ? `₹${formatted}` : formatted;
 };
 
 const formatDateDMY = (iso) => {
@@ -38,7 +48,6 @@ const formatDisplayDate = (iso) => {
   });
 };
 
-/* ----------------- Icons ----------------- */
 const CalendarIcon = ({ className = "" }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
@@ -51,17 +60,6 @@ const CalendarIcon = ({ className = "" }) => (
   </svg>
 );
 
-const DigitalEntryIcon = ({ className = "" }) => (
-  <svg className={className} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <circle cx="16" cy="16" r="16" fill="#FFEFE0" />
-    <rect x="9" y="8" width="10" height="14" rx="1.5" fill="#FF9D3A" />
-    <path d="M19 10L16 10C15.45 10 15 9.55 15 9V6" stroke="#FFEFE0" strokeWidth="1.2" strokeLinecap="round" />
-    <path d="M18.2 18.2L22.5 13.9C22.8 13.6 23.3 13.6 23.6 13.9L24.6 14.9C24.9 15.2 24.9 15.7 24.6 16L20.3 20.3L18.2 18.2Z" fill="#FF7A1A" />
-    <path d="M18 18.5L17.3 21.2C17.2 21.6 17.6 22 18 21.9L20.7 21.2" stroke="#FF7A1A" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-
-/* -------- Base Calendar -------- */
 const BaseCalendar = ({ rows, selectedDate, onSelectDate, showDots }) => {
   const today = new Date();
   const initialDate = selectedDate ? new Date(selectedDate) : today;
@@ -72,68 +70,31 @@ const BaseCalendar = ({ rows, selectedDate, onSelectDate, showDots }) => {
   useEffect(() => {
     if (!selectedDate) return;
     const d = new Date(selectedDate);
-    if (!Number.isNaN(d.getTime())) {
-      setViewMonth(d.getMonth());
-      setViewYear(d.getFullYear());
-    }
+    if (!Number.isNaN(d.getTime())) { setViewMonth(d.getMonth()); setViewYear(d.getFullYear()); }
   }, [selectedDate]);
 
-  const hasEntryForDate = useCallback((iso) => 
-    Array.isArray(rows) && rows.some((row) => row.date === iso),
-    [rows]
-  );
+  const hasEntryForDate = useCallback((iso) =>
+    Array.isArray(rows) && rows.some((row) => row.date === iso), [rows]);
 
-  const { daysInMonth, firstDay, weeks } = useMemo(() => {
+  const { weeks } = useMemo(() => {
     const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
     const firstDay = new Date(viewYear, viewMonth, 1).getDay();
-    
     const weeks = [];
     let day = 1 - firstDay;
-
     for (let w = 0; w < 6; w++) {
       const week = [];
-      for (let i = 0; i < 7; i++, day++) {
-        week.push(day < 1 || day > daysInMonth ? null : day);
-      }
+      for (let i = 0; i < 7; i++, day++) week.push(day < 1 || day > daysInMonth ? null : day);
       weeks.push(week);
     }
-
-    return { daysInMonth, firstDay, weeks };
+    return { weeks };
   }, [viewYear, viewMonth]);
 
   const buildIso = useCallback((year, month, day) =>
-    `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
-    []
-  );
+    `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`, []);
 
-  const goPrevMonth = useCallback(() => {
-    setViewMonth((m) => {
-      if (m === 0) {
-        setViewYear((y) => y - 1);
-        return 11;
-      }
-      return m - 1;
-    });
-  }, []);
-
-  const goNextMonth = useCallback(() => {
-    setViewMonth((m) => {
-      if (m === 11) {
-        setViewYear((y) => y + 1);
-        return 0;
-      }
-      return m + 1;
-    });
-  }, []);
-
-  const yearOptions = useMemo(() => {
-    const options = [];
-    for (let y = viewYear - 3; y <= viewYear + 3; y++) {
-      options.push(y);
-    }
-    return options;
-  }, [viewYear]);
-
+  const goPrevMonth = useCallback(() => setViewMonth((m) => { if (m === 0) { setViewYear((y) => y - 1); return 11; } return m - 1; }), []);
+  const goNextMonth = useCallback(() => setViewMonth((m) => { if (m === 11) { setViewYear((y) => y + 1); return 0; } return m + 1; }), []);
+  const yearOptions = useMemo(() => { const opts = []; for (let y = viewYear - 3; y <= viewYear + 3; y++) opts.push(y); return opts; }, [viewYear]);
   const selectedIso = selectedDate || "";
 
   return (
@@ -150,21 +111,17 @@ const BaseCalendar = ({ rows, selectedDate, onSelectDate, showDots }) => {
         </div>
         <button type="button" onClick={goNextMonth} className="flex h-7 w-7 items-center justify-center rounded-full text-gray-500 hover:bg-gray-100">›</button>
       </div>
-
       <div className="mt-1 grid grid-cols-7 gap-y-1 px-4 text-center text-[11px] font-medium text-gray-400">
         <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
       </div>
-
       <div className="mt-1 grid grid-cols-7 gap-y-1 px-3 pb-3 text-center text-xs">
         {weeks.map((week, wIdx) =>
           week.map((d, idx) => {
             if (!d) return <div key={`${wIdx}-${idx}`} />;
-
             const iso = buildIso(viewYear, viewMonth, d);
             const hasEntry = showDots && hasEntryForDate(iso);
             const isSelected = selectedIso === iso;
             const isToday = today.getFullYear() === viewYear && today.getMonth() === viewMonth && today.getDate() === d;
-
             return (
               <button key={`${wIdx}-${idx}`} type="button" onClick={() => onSelectDate(iso)} className={showDots ? "flex flex-col items-center gap-1" : "flex h-8 items-center justify-center"}>
                 <div className={`flex h-7 w-7 items-center justify-center rounded-full ${isSelected ? "bg-green-500 text-white" : isToday ? "border border-green-500 text-green-600" : "text-gray-700 hover:bg-gray-100"}`}>{d}</div>
@@ -180,22 +137,21 @@ const BaseCalendar = ({ rows, selectedDate, onSelectDate, showDots }) => {
 
 export default function DigitalPayments() {
   const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
-  // Supervisors can view but should not enter data here
+  const defaultWeekRange = useMemo(() => getThisWeekRange(), []);
   const showForms = isAdmin || isDataAgent;
+  const showTable = isAdmin || isDataAgent || isSupervisor || isViewer;
 
-  // Refs
   const entryCalendarRef = useRef(null);
   const filterFromRef = useRef(null);
   const filterToRef = useRef(null);
 
-  // State
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editRow, setEditRow] = useState({});
+  // editValues keyed by AREA (not outlet id) to match how data is stored
   const [editValues, setEditValues] = useState({});
   const [rows, setRows] = useState([]);
   const [outlets, setOutlets] = useState([]);
 
-  // formOutlets: zone-filtered for data entry
   const formOutlets = useMemo(() => {
     if (zone && Array.isArray(outlets)) {
       return outlets.filter(o => typeof o === 'object' && zonesMatch(o.zoneId, zone));
@@ -203,10 +159,10 @@ export default function DigitalPayments() {
     return outlets;
   }, [outlets, zone]);
 
-  // For display, supervisors should only see their zone's outlets
-  const displayedOutlets = (isSupervisor ? formOutlets : outlets).map(o => typeof o === 'string' ? o : o.id);
-  const [filterFrom, setFilterFrom] = useState("");
-  const [filterTo, setFilterTo] = useState("");
+  const displayedOutlets = isSupervisor ? formOutlets : outlets;
+
+  const [filterFrom, setFilterFrom] = useState(defaultWeekRange.from);
+  const [filterTo, setFilterTo] = useState(defaultWeekRange.to);
   const [entryDate, setEntryDate] = useState("");
   const [entryValues, setEntryValues] = useState({});
   const [isEntryCalendarOpen, setIsEntryCalendarOpen] = useState(false);
@@ -215,7 +171,6 @@ export default function DigitalPayments() {
   const [isSaving, setIsSaving] = useState(false);
   const [isEditSaving, setIsEditSaving] = useState(false);
 
-  // Click outside handlers
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (entryCalendarRef.current && !entryCalendarRef.current.contains(event.target)) setIsEntryCalendarOpen(false);
@@ -226,138 +181,66 @@ export default function DigitalPayments() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Load outlets from backend (zone-specific for any user with zone)
   const loadOutlets = useCallback(async () => {
     try {
-      // Always load all outlets for display
-      const url = `${API_URL}/outlets/all`;
-      console.log('DigitalPayments loadOutlets URL:', url);
-      const res = await fetch(url);
+      const res = await fetch(`${API_URL}/outlets/all`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
           setOutlets(data);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-        } else {
-          setOutlets([]);
-        }
+        } else setOutlets([]);
       }
     } catch (err) {
-      console.error("Error fetching outlets:", err);
-      // Fallback to localStorage if fetch fails
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setOutlets(parsed);
-          }
-        } catch (parseErr) {
-          console.error("Error parsing saved outlets:", parseErr);
-          setOutlets([]);
-        }
-      } else {
-        setOutlets([]);
-      }
+      if (saved) { try { const p = JSON.parse(saved); if (Array.isArray(p) && p.length > 0) setOutlets(p); } catch {} }
+      else setOutlets([]);
     }
   }, []);
 
+  useEffect(() => { loadOutlets(); }, []);
+
   useEffect(() => {
-    loadOutlets();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Listen for outlet updates from other pages
-  useEffect(() => {
-    const handleOutletsUpdated = (event) => {
-      if (event.detail && Array.isArray(event.detail)) {
-        // Immediately update outlets from the event
-        setOutlets(event.detail);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(event.detail));
-      }
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        loadOutlets();
-      }
-    };
-
-    // Also listen for storage events from other tabs
-    const handleStorageChange = (e) => {
-      if (e.key === STORAGE_KEY && e.newValue) {
-        try {
-          const parsed = JSON.parse(e.newValue);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setOutlets(parsed);
-          }
-        } catch (err) {
-          console.error("Error parsing storage event:", err);
-        }
-      }
-    };
-
+    const handleOutletsUpdated = (e) => { if (e.detail && Array.isArray(e.detail)) { setOutlets(e.detail); localStorage.setItem(STORAGE_KEY, JSON.stringify(e.detail)); } };
+    const handleVisibility = () => { if (document.visibilityState === 'visible') loadOutlets(); };
+    const handleStorage = (e) => { if (e.key === STORAGE_KEY && e.newValue) { try { const p = JSON.parse(e.newValue); if (Array.isArray(p) && p.length > 0) setOutlets(p); } catch {} } };
     window.addEventListener('egg:outlets-updated', handleOutletsUpdated);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('storage', handleStorageChange);
-
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('storage', handleStorage);
     return () => {
       window.removeEventListener('egg:outlets-updated', handleOutletsUpdated);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('storage', handleStorageChange);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('storage', handleStorage);
     };
   }, [loadOutlets]);
 
-  // Fetch payments
   useEffect(() => {
     const fetchPayments = async () => {
       try {
         const res = await fetch(`${API_URL}/digital-payments/all`);
         const data = await res.json();
         setRows(Array.isArray(data) ? data.map(d => ({ id: d.id || d._id, ...d })) : []);
-      } catch (err) {
-        console.error("Error fetching payments:", err);
-        setRows([]);
-      }
+      } catch { setRows([]); }
     };
     fetchPayments();
   }, []);
 
-  // Check if entry exists for user's outlets (formOutlets)
   const hasEntry = useMemo(() => {
     if (!entryDate) return false;
     const existing = rows.find((r) => r.date === entryDate);
     if (!existing) return false;
-    // Check if any of user's outlets have data > 0
     return formOutlets.some((outlet) => {
       const area = outlet.area || outlet;
       return Number(existing.outlets?.[area] || 0) > 0;
     });
   }, [entryDate, rows, formOutlets]);
 
-  const entryTotal = useMemo(() => {
-    if (!entryDate) return 0;
-    const existing = rows.find((r) => r.date === entryDate);
-    return existing?.totalAmount || Object.values(entryValues || {}).reduce((sum, v) => sum + (Number(v) || 0), 0);
-  }, [entryDate, rows, entryValues]);
-
-  // Load entry values when date changes (only for user's outlets)
   useEffect(() => {
-    if (!entryDate) {
-      const reset = {};
-      formOutlets.forEach((o) => { reset[o.area || o] = ""; });
-      setEntryValues(reset);
-      return;
-    }
-
+    if (!entryDate) { const reset = {}; formOutlets.forEach((o) => { reset[o.area || o] = ""; }); setEntryValues(reset); return; }
     const existing = rows.find((r) => r.date === entryDate);
     if (existing) {
-      // Load only user's outlet values
       const vals = {};
-      formOutlets.forEach((o) => {
-        const area = o.area || o;
-        vals[area] = existing.outlets?.[area] ?? "";
-      });
+      formOutlets.forEach((o) => { const area = o.area || o; vals[area] = existing.outlets?.[area] ?? ""; });
       setEntryValues(vals);
     } else {
       const reset = {};
@@ -366,63 +249,41 @@ export default function DigitalPayments() {
     }
   }, [entryDate, rows, formOutlets]);
 
-  // Filtered rows with memoization
   const filteredRows = useMemo(() => {
-    const sortedRows = [...rows].sort((a, b) => new Date(a.date) - new Date(b.date));
-
-    if (filterFrom && filterTo) {
-      const from = new Date(filterFrom);
-      const to = new Date(filterTo);
-      return sortedRows.filter((row) => {
-        const rowDate = new Date(row.date);
-        return rowDate >= from && rowDate <= to;
-      });
-    }
-
-    if (filterFrom) {
-      const from = new Date(filterFrom);
-      return sortedRows.filter((row) => new Date(row.date) >= from);
-    }
-
-    if (filterTo) {
-      const to = new Date(filterTo);
-      return sortedRows.filter((row) => new Date(row.date) <= to);
-    }
-
-    return sortedRows;
+    const sorted = [...rows].sort((a, b) => new Date(a.date) - new Date(b.date));
+    if (filterFrom && filterTo) { const from = new Date(filterFrom); const to = new Date(filterTo); return sorted.filter(r => { const d = new Date(r.date); return d >= from && d <= to; }); }
+    if (filterFrom) { const from = new Date(filterFrom); return sorted.filter(r => new Date(r.date) >= from); }
+    if (filterTo) { const to = new Date(filterTo); return sorted.filter(r => new Date(r.date) <= to); }
+    return sorted;
   }, [rows, filterFrom, filterTo]);
 
-  // Column totals with memoization
+  // Recompute totals from outlets object (area-keyed) so edits reflect immediately
+  const getRowOutletValue = useCallback((row, outlet) => {
+    const area = outlet.area || outlet.name || outlet.id;
+    return Number(row.outlets?.[area] || 0);
+  }, []);
+
+  const getRowTotal = useCallback((row) => {
+    return displayedOutlets.reduce((s, o) => s + getRowOutletValue(row, o), 0);
+  }, [displayedOutlets, getRowOutletValue]);
+
   const columnTotals = useMemo(() => {
     const totals = {};
-    outlets.forEach((outlet) => {
-      const area = outlet.area || outlet;
-      totals[area] = filteredRows.reduce((sum, r) => sum + (r.outlets?.[area] ? Number(r.outlets[area]) : 0), 0);
+    displayedOutlets.forEach((outlet) => {
+      const area = outlet.area || outlet.name || outlet.id;
+      totals[area] = filteredRows.reduce((sum, r) => sum + Number(r.outlets?.[area] || 0), 0);
     });
-    totals.grandTotal = filteredRows.reduce((sum, r) => 
-      sum + (typeof r.totalAmount === 'number' ? r.totalAmount : Object.values(r.outlets || {}).reduce((s, v) => s + (Number(v) || 0), 0)),
-      0
-    );
+    totals.grandTotal = filteredRows.reduce((sum, r) => sum + getRowTotal(r), 0);
     return totals;
-  }, [filteredRows, outlets]);
+  }, [filteredRows, displayedOutlets, getRowTotal]);
 
-  // Handlers with useCallback
   const handleQuickRange = useCallback((type) => {
     const today = new Date();
-    const to = today.toISOString().slice(0, 10);
-    let fromDate;
-
-    if (type === "lastWeek") {
-      const d = new Date(today);
-      d.setDate(d.getDate() - 7);
-      fromDate = d.toISOString().slice(0, 10);
-    } else if (type === "lastMonth") {
-      const d = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-      fromDate = d.toISOString().slice(0, 10);
-    }
-
-    setFilterFrom(fromDate || "");
-    setFilterTo(to);
+    const iso = (d) => d.toISOString().slice(0, 10);
+    if (type === "thisMonth") { setFilterFrom(iso(new Date(today.getFullYear(), today.getMonth(), 1))); setFilterTo(iso(today)); }
+    else if (type === "lastMonth") { setFilterFrom(iso(new Date(today.getFullYear(), today.getMonth() - 1, 1))); setFilterTo(iso(new Date(today.getFullYear(), today.getMonth(), 0))); }
+    else if (type === "thisWeek") { const s = new Date(today); s.setDate(today.getDate() - today.getDay()); setFilterFrom(iso(s)); setFilterTo(iso(today)); }
+    else if (type === "lastWeek") { const e = new Date(today); e.setDate(today.getDate() - today.getDay() - 1); const s = new Date(e); s.setDate(e.getDate() - 6); setFilterFrom(iso(s)); setFilterTo(iso(e)); }
   }, []);
 
   const handleEntryChange = useCallback((outlet, value) => {
@@ -431,207 +292,106 @@ export default function DigitalPayments() {
 
   const handleSaveEntry = useCallback(async (e) => {
     e.preventDefault();
-    
-    // Prevent double submission
-    if (isSaving) return;
-    
-    // Check if user's outlets already have data (hasEntry already does this check)
-    if (!entryDate || hasEntry) {
-      if (hasEntry) alert("You have already entered data for your outlets on this date");
-      return;
-    }
-
-    // Only save data for user's outlets (formOutlets)
+    if (isSaving || !entryDate || hasEntry) { if (hasEntry) alert("Already entered for your outlets on this date"); return; }
     const outletAmounts = {};
-    formOutlets.forEach((o) => {
-      const area = o.area || o;
-      outletAmounts[area] = Number(entryValues[area]) || 0;
-    });
+    formOutlets.forEach((o) => { const area = o.area || o; outletAmounts[area] = Number(entryValues[area]) || 0; });
+
+    let user = null;
+    try { user = JSON.parse(localStorage.getItem("user")); } catch {}
+    const addedBy = user ? {
+      username: user.username || user.uid || "Unknown",
+      zone: user.zoneId || user.zone || "No Zone",
+      role: user.role || "unknown",
+      timestamp: new Date().toISOString(),
+    } : null;
 
     setIsSaving(true);
     try {
-      const response = await fetch(`${API_URL}/digital-payments/add`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: entryDate, outlets: outletAmounts }),
-      });
-
-      if (!response.ok) {
-        alert('Failed to add payment');
-        return;
-      }
-
+      const response = await fetch(`${API_URL}/digital-payments/add`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date: entryDate, outlets: outletAmounts, addedBy }) });
+      if (!response.ok) { alert('Failed to add payment'); return; }
       const res = await fetch(`${API_URL}/digital-payments/all`);
       const data = await res.json();
       setRows(Array.isArray(data) ? data.map(d => ({ id: d.id || d._id, ...d })) : []);
-
-      // Keep date selected - shows "Locked" status like DailyDamages
       alert(`Saved digital payment entry for ${entryDate}`);
-      setHasEntry(true);
-    } catch (err) {
-      console.error('Error adding payment:', err);
-      alert('Error adding payment');
-    } finally {
-      setIsSaving(false);
-    }
+    } catch { alert('Error adding payment'); } finally { setIsSaving(false); }
   }, [entryDate, entryValues, formOutlets, hasEntry, isSaving]);
 
+  // Open edit modal: populate editValues keyed by AREA
   const handleEditClick = useCallback((row) => {
     const fullRow = { ...row };
-    if (!row.id) {
-      const found = rows.find(r => r.date === row.date);
-      if (found?.id) fullRow.id = found.id;
-    }
+    if (!row.id) { const found = rows.find(r => r.date === row.date); if (found?.id) fullRow.id = found.id; }
     setEditRow(fullRow);
-    setEditValues({ ...(row.outlets || {}) });
+    // Key editValues by area (how data is actually stored in row.outlets)
+    const vals = {};
+    outlets.forEach((o) => {
+      const area = o.area || o.name || o.id;
+      // Preserve the user's number exactly as stored — no coercion to decimal
+      vals[area] = row.outlets?.[area] ?? "";
+    });
+    setEditValues(vals);
     setEditModalOpen(true);
-  }, [rows]);
+  }, [rows, outlets]);
 
   const handleEditSave = useCallback(async () => {
-    if (isEditSaving) return; // Prevent double submission
-    
-    if (!editRow.id) {
-      alert("No ID found. Cannot update.");
-      return;
-    }
+    if (isEditSaving || !editRow.id) { if (!editRow.id) alert("No ID found. Cannot update."); return; }
+    // Build updatedOutlets keyed by area, preserving user input
     const updatedOutlets = {};
     outlets.forEach((o) => {
-      const area = o.area || o;
-      updatedOutlets[area] = Number(editValues[area]) || 0;
+      const area = o.area || o.name || o.id;
+      const raw = editValues[area];
+      updatedOutlets[area] = raw === "" || raw == null ? 0 : Number(raw) || 0;
     });
+    const totalAmount = Object.values(updatedOutlets).reduce((s, v) => s + v, 0);
 
     setIsEditSaving(true);
     try {
       const response = await fetch(`${API_URL}/digital-payments/${editRow.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: editRow.date, outlets: updatedOutlets }),
+        body: JSON.stringify({ date: editRow.date, outlets: updatedOutlets, totalAmount }),
       });
+      if (!response.ok) { alert("Failed to update entry"); return; }
 
-      if (!response.ok) {
-        alert("Failed to update entry");
-        return;
-      }
-
-      const res = await fetch(`${API_URL}/digital-payments/all`);
-      const data = await res.json();
-      setRows(Array.isArray(data) ? data.map(d => ({ id: d.id || d._id, ...d })) : []);
+      // Optimistic update: reflect changes immediately in the table
+      setRows((prev) => prev.map(r => {
+        if (r.id !== editRow.id) return r;
+        return { ...r, outlets: { ...(r.outlets || {}), ...updatedOutlets }, totalAmount };
+      }));
       setEditModalOpen(false);
       setEditRow({});
       setEditValues({});
-    } catch (err) {
-      alert("Error updating entry: " + err.message);
-    } finally {
-      setIsEditSaving(false);
-    }
+    } catch (err) { alert("Error updating entry: " + err.message); } finally { setIsEditSaving(false); }
   }, [editRow, editValues, outlets, isEditSaving]);
 
-  const downloadExcel = useCallback(() => {
-    if (!filteredRows || filteredRows.length === 0) {
-      alert("No data available");
-      return;
-    }
+  const editTotal = useMemo(() => {
+    return Object.values(editValues).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  }, [editValues]);
 
+  const downloadExcel = useCallback(() => {
+    if (!filteredRows?.length) { alert("No data available"); return; }
     const data = filteredRows.map((row) => {
-      const obj = { Date: row.date };
-      outlets.forEach((o) => {
-        const area = o.area || o;
-        obj[area] = row.outlets[area] ?? 0;
-      });
-      obj.Total = row.totalAmount;
+      const obj = { Date: formatDateDMY(row.date) };
+      outlets.forEach((o) => { const area = o.area || o; obj[area] = Number(row.outlets?.[area] ?? 0); });
+      obj.Total = getRowTotal(row);
       return obj;
     });
-
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Digital Payments");
     XLSX.writeFile(wb, "Digital_Payments_Report.xlsx");
-  }, [filteredRows, outlets]);
+  }, [filteredRows, outlets, getRowTotal]);
 
   return (
     <div className="min-h-screen bg-eggBg px-4 py-6 md:px-8 flex flex-col">
-      {showForms && formOutlets.length > 0 && (
+      {showTable && (
         <>
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-2xl md:text-3xl font-semibold text-gray-900">Digital Payments</h1>
               <p className="mt-1 text-sm md:text-base text-gray-500">Track UPI and online collections per outlet.</p>
             </div>
-            <button onClick={downloadExcel} className="inline-flex items-center rounded-full bg-[#ff7518] px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90">
-              Download Data
-            </button>
+            <button onClick={downloadExcel} className="inline-flex items-center rounded-full bg-[#ff7518] px-4 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90">Download Data</button>
           </div>
-
-          {showForms && (
-            <div className="mb-6 rounded-2xl bg-eggWhite p-4 shadow-sm sm:p-6">
-              <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-orange-100">
-                  <DigitalEntryIcon className="h-6 w-6" />
-                </div>
-                <div>
-                  <h2 className="text-base font-semibold text-gray-900 md:text-lg">Digital Payment Entry</h2>
-                  <p className="text-xs text-gray-500 md:text-sm">Add new UPI/online collection amounts for each outlet.</p>
-                </div>
-              </div>
-
-              <form onSubmit={handleSaveEntry} className="space-y-5">
-                <div className="grid gap-4 sm:grid-cols-[160px,1fr] sm:items-center">
-                  <label className="text-xs font-medium text-gray-700 md:text-sm">Select Date</label>
-                  <div className="relative w-full z-30" ref={entryCalendarRef}>
-                    <button type="button" onClick={() => setIsEntryCalendarOpen((o) => !o)} className="flex w-full items-center justify-between rounded-xl border border-gray-200 bg-eggBg px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm">
-                      <span>{entryDate ? formatDateDMY(entryDate) : "dd-mm-yyyy"}</span>
-                      <CalendarIcon className="h-4 w-4 text-gray-500" />
-                    </button>
-                    {hasEntry && (
-                      <div className="mt-2 flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-green-500" />
-                        <div className="text-xs font-medium text-green-700">Entry ({formatCurrencyTwoDecimals(entryTotal)}) • Locked</div>
-                      </div>
-                    )}
-                    {isEntryCalendarOpen && (
-                      <div className="absolute right-0 top-full z-50 mt-2">
-                        <BaseCalendar rows={rows} selectedDate={entryDate} onSelectDate={(iso) => { setEntryDate(iso); setIsEntryCalendarOpen(false); }} showDots={true} />
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-                  {formOutlets.map((outlet) => {
-                    const area = outlet.area || outlet;
-                    const isActive = !outlet.status || outlet.status === "Active";
-                    return (
-                      <div key={area} className="space-y-1">
-                        <p className="text-xs font-medium text-gray-600">
-                          {area.toUpperCase()}
-                          {!isActive && <span className="text-red-500 ml-1">(Inactive)</span>}
-                        </p>
-                        <div className="relative">
-                          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">₹</span>
-                          <input type="number" min="0" step="0.01" value={entryValues[area] || ""} onChange={(e) => handleEntryChange(area, e.target.value)} disabled={hasEntry || !isActive} className={`w-full rounded-xl border border-gray-200 bg-eggBg pl-7 pr-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm ${(hasEntry || !isActive) ? 'bg-gray-50 cursor-not-allowed' : ''}`} />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="flex flex-col items-center gap-2 pt-4">
-                  <button type="submit" disabled={hasEntry || isSaving} className={`inline-flex items-center justify-center rounded-2xl px-6 py-2.5 text-sm font-semibold text-white shadow-md ${hasEntry || isSaving ? 'bg-gray-400 cursor-not-allowed' : 'bg-orange-500 hover:bg-orange-600'}`}>
-                    {isSaving ? (
-                      <>
-                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Saving...
-                      </>
-                    ) : hasEntry ? 'Locked' : 'Save Entry'}
-                  </button>
-                  <p className="text-center text-[11px] text-gray-500 md:text-xs">Values support decimals for exact UPI/online amounts.</p>
-                </div>
-              </form>
-            </div>
-          )}
 
           <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap gap-3">
@@ -649,7 +409,6 @@ export default function DigitalPayments() {
                   )}
                 </div>
               </div>
-
               <div className="flex items-center gap-2">
                 <label className="text-xs md:text-sm font-medium text-gray-700">Date To</label>
                 <div className="relative z-30" ref={filterToRef}>
@@ -665,22 +424,23 @@ export default function DigitalPayments() {
                 </div>
               </div>
             </div>
-
             <div className="flex flex-wrap gap-2">
-              <button type="button" onClick={() => handleQuickRange("lastWeek")} className="rounded-full border border-gray-200 bg-eggWhite px-4 py-2 text-xs md:text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">Last Week</button>
-              <button type="button" onClick={() => handleQuickRange("lastMonth")} className="rounded-full border border-gray-200 bg-eggWhite px-4 py-2 text-xs md:text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">Last Month</button>
+              {[["thisMonth","This Month"],["lastMonth","Last Month"],["thisWeek","This Week"],["lastWeek","Last Week"]].map(([k, l]) => (
+                <button key={k} type="button" onClick={() => handleQuickRange(k)} className="rounded-full border border-gray-200 bg-eggWhite px-4 py-2 text-xs md:text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50">{l}</button>
+              ))}
             </div>
           </div>
 
+          {/* Table */}
           <div className="overflow-hidden rounded-2xl bg-eggWhite shadow-sm">
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead className="bg-gray-50">
                   <tr className="text-left text-xs font-semibold text-gray-500">
                     <th className="sticky left-0 bg-gray-50 z-10 min-w-[120px] px-4 py-3">Date</th>
-                    {outlets.map((outlet) => {
-                      const outletId = typeof outlet === 'string' ? outlet : outlet.id;
-                      const name = typeof outlet === 'string' ? outlet : outlet.area || outletId;
+                    {displayedOutlets.map((outlet) => {
+                      const outletId = outlet.id;
+                      const name = outlet.area || outlet.name || outletId;
                       const isActive = !outlet.status || outlet.status === "Active";
                       return (
                         <th key={outletId} className="min-w-[100px] px-4 py-3 whitespace-nowrap">
@@ -690,41 +450,46 @@ export default function DigitalPayments() {
                       );
                     })}
                     <th className="sticky right-0 bg-gray-50 z-10 px-4 py-3 whitespace-nowrap text-right">TOTAL AMOUNT</th>
-                    {isAdmin && <th className="sticky right-0 bg-gray-50 z-10 px-4 py-3 whitespace-nowrap text-right">Edit</th>}
+                    {isAdmin && <th className="px-4 py-3 whitespace-nowrap text-right">Edit</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {filteredRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={outlets.length + 2 + (isAdmin ? 1 : 0)} className="text-center py-6 text-gray-500">No data available</td>
-                    </tr>
+                    <tr><td colSpan={displayedOutlets.length + 2 + (isAdmin ? 1 : 0)} className="text-center py-6 text-gray-500">No data available</td></tr>
                   ) : (
                     <>
-                      {filteredRows.map((row, idx) => (
-                        <tr key={row.id} className={`text-xs text-gray-700 md:text-sm ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/60"}`}>
-                          <td className="sticky left-0 bg-inherit z-10 whitespace-nowrap px-4 py-3">{formatDisplayDate(row.date)}</td>
-                          {displayedOutlets.map((outlet) => {
-                            const outletId = typeof outlet === 'string' ? outlet : outlet.id;
-                            return <td key={outletId} className="whitespace-nowrap px-4 py-3">{formatCurrencyTwoDecimals(row.outlets[outletId])}</td>;
-                          })}
-                          <td className="sticky right-0 bg-inherit z-10 whitespace-nowrap px-4 py-3 text-right font-semibold">
-                            {formatCurrencyTwoDecimals(typeof row.totalAmount === 'number' ? row.totalAmount : Object.values(row.outlets || {}).reduce((sum, v) => sum + (Number(v) || 0), 0))}
-                          </td>
-                          {isAdmin && (
-                            <td className="sticky right-0 bg-inherit z-10 whitespace-nowrap px-4 py-3 text-right">
-                              <button className="text-blue-600 hover:underline text-xs font-medium" onClick={() => handleEditClick(row)}>Edit</button>
+                      {filteredRows.map((row, idx) => {
+                        // Recompute total from outlets (area-keyed) so edits reflect immediately
+                        const rowTotal = displayedOutlets.reduce((s, o) => {
+                          const area = o.area || o.name || o.id;
+                          return s + Number(row.outlets?.[area] || 0);
+                        }, 0);
+                        return (
+                          <tr key={row.id} className={`text-xs text-gray-700 md:text-sm ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/60"}`}>
+                            <td className="sticky left-0 bg-inherit z-10 whitespace-nowrap px-4 py-3">{formatDisplayDate(row.date)}</td>
+                            {displayedOutlets.map((outlet) => {
+                              const area = outlet.area || outlet.name || outlet.id;
+                              return <td key={outlet.id} className="whitespace-nowrap px-4 py-3">{formatSmart(row.outlets?.[area])}</td>;
+                            })}
+                            <td className="sticky right-0 bg-inherit z-10 whitespace-nowrap px-4 py-3 text-right font-semibold">
+                              {formatSmart(rowTotal)}
                             </td>
-                          )}
-                        </tr>
-                      ))}
+                            {isAdmin && (
+                              <td className="whitespace-nowrap px-4 py-3 text-right">
+                                <button className="text-blue-600 hover:underline text-xs font-medium" onClick={() => handleEditClick(row)}>Edit</button>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
                       <tr className="bg-orange-50 font-semibold text-orange-700 border-t-2 border-orange-200">
                         <td className="sticky left-0 bg-orange-50 z-10 whitespace-nowrap px-4 py-3">Grand Total</td>
                         {displayedOutlets.map((outlet) => {
-                          const outletId = typeof outlet === 'string' ? outlet : outlet.id;
-                          return <td key={outletId} className="whitespace-nowrap px-4 py-3">{formatCurrencyTwoDecimals(columnTotals[outletId])}</td>;
+                          const area = outlet.area || outlet.name || outlet.id;
+                          return <td key={outlet.id} className="whitespace-nowrap px-4 py-3">{formatSmart(columnTotals[area])}</td>;
                         })}
-                        <td className="sticky right-0 bg-orange-50 z-10 whitespace-nowrap px-4 py-3 text-right">{formatCurrencyTwoDecimals(columnTotals.grandTotal)}</td>
-                        {isAdmin && <td className="sticky right-0 bg-orange-50 z-10 whitespace-nowrap px-4 py-3"></td>}
+                        <td className="sticky right-0 bg-orange-50 z-10 whitespace-nowrap px-4 py-3 text-right">{formatSmart(columnTotals.grandTotal)}</td>
+                        {isAdmin && <td className="px-4 py-3" />}
                       </tr>
                     </>
                   )}
@@ -733,33 +498,38 @@ export default function DigitalPayments() {
             </div>
           </div>
 
+          {/* Edit Modal — labels by area name, inputs preserve user's numbers */}
           {editModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30 p-4">
               <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
                 <h2 className="text-base sm:text-lg font-semibold mb-4">Edit Digital Payment ({formatDisplayDate(editRow.date)})</h2>
                 <div className="space-y-3">
-                  {displayedOutlets.map((outlet) => {
-                    const area = outlet.area || outlet;
+                  {outlets.map((outlet) => {
+                    const area = outlet.area || outlet.name || outlet.id;
+                    const displayName = outlet.area || outlet.name || area;
                     return (
                       <div key={area} className="flex flex-col sm:flex-row sm:items-center gap-2">
-                        <label className="w-full sm:w-32 text-xs font-medium text-gray-700">{area.toUpperCase()}</label>
-                        <input type="number" min="0" step="0.01" value={editValues[area] || ""} onChange={e => setEditValues((prev) => ({ ...prev, [area]: e.target.value }))} className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400" />
+                        <label className="w-full sm:w-36 text-xs font-medium text-gray-700">{displayName}</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={editValues[area] ?? ""}
+                          onChange={e => setEditValues((prev) => ({ ...prev, [area]: e.target.value }))}
+                          className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                        />
                       </div>
                     );
                   })}
                 </div>
+                <div className="mt-4 flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
+                  <span className="text-xs font-semibold text-gray-600">Total</span>
+                  <span className="text-sm font-bold text-orange-600">{formatSmart(editTotal)}</span>
+                </div>
                 <div className="flex justify-end gap-2 mt-6">
-                  <button onClick={() => { setEditModalOpen(false); setEditRow({}); setEditValues({}); }} disabled={isEditSaving} className="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 text-xs font-medium hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed">Cancel</button>
-                  <button onClick={handleEditSave} disabled={isEditSaving} className="px-4 py-2 rounded-lg bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center">
-                    {isEditSaving ? (
-                      <>
-                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Saving...
-                      </>
-                    ) : 'Save'}
+                  <button onClick={() => { setEditModalOpen(false); setEditRow({}); setEditValues({}); }} disabled={isEditSaving} className="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 text-xs font-medium hover:bg-gray-300 disabled:opacity-50">Cancel</button>
+                  <button onClick={handleEditSave} disabled={isEditSaving} className="px-4 py-2 rounded-lg bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600 disabled:opacity-50 inline-flex items-center">
+                    {isEditSaving ? (<><svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>Saving...</>) : 'Save'}
                   </button>
                 </div>
               </div>

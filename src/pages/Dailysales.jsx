@@ -3,64 +3,116 @@ const API_URL = import.meta.env.VITE_API_URL;
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { getRoleFlags, zonesMatch } from "../utils/role";
 import * as XLSX from "xlsx";
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import Topbar from "../components/Topbar";
 import Dailyheader from "../components/Dailyheader";
 import DailyTable from "../components/DailyTable";
-import Dailyentryform from "../components/Dailyentryform";
 import Weeklytrend from "../components/Weeklytrend";
+import { getThisWeekRange } from "../utils/dateRange";
 
 const OUTLETS_KEY = "egg_outlets_v1";
 
+const formatDateDMY = (iso) => {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return `${String(date.getDate()).padStart(2, "0")}-${String(date.getMonth() + 1).padStart(2, "0")}-${date.getFullYear()}`;
+};
+
+function DailySalesAnalytics({ rows }) {
+  const chartData = useMemo(() => {
+    return rows.map((row) => ({
+      date: formatDateDMY(row.date),
+      total: Number(row.total) || 0,
+    }));
+  }, [rows]);
+
+  if (!chartData.length) return null;
+
+  return (
+    <div className="mt-6 rounded-2xl bg-white p-6 shadow-md">
+      <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-700">
+        Daily Sales Trend by Date
+      </h2>
+      <div style={{ width: "100%", height: 260 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={chartData}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="date" />
+            <YAxis />
+            <Tooltip
+              formatter={(value, name) => [
+                Number(value).toLocaleString("en-IN"),
+                name === "total" ? "Total" : name,
+              ]}
+            />
+            <Line
+              type="monotone"
+              dataKey="total"
+              stroke="#f97316"
+              strokeWidth={3}
+              dot={{ r: 5 }}
+              activeDot={{ r: 7 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
 const Dailysales = () => {
   const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
-  // Supervisors can view but not enter data here
+  const defaultWeekRange = useMemo(() => getThisWeekRange(), []);
   const showForms = isAdmin || isDataAgent;
+  const isReadOnly = isViewer;
 
   const [rows, setRows] = useState([]);
   const [outlets, setOutlets] = useState([]);
   const [outletLoading, setOutletLoading] = useState(true);
-  
-  // formOutlets: zone-filtered for data entry, filter active only for data agent
+
   const formOutlets = useMemo(() => {
     let list = outlets;
-    // Filter by zone for any user with zone
-    if (zone && Array.isArray(list)) {
-      list = list.filter(o => typeof o === 'object' && zonesMatch(o.zoneId, zone));
+    if (!isViewer && !isAdmin && zone && Array.isArray(list)) {
+      list = list.filter((o) => typeof o === "object" && zonesMatch(o.zoneId, zone));
     }
-    // Filter active only for data agent
     if (isDataAgent && Array.isArray(list) && list.length > 0) {
-      list = list.filter(o => {
-        if (typeof o === 'string') return true;
-        if (typeof o === 'object' && o.status) return o.status === 'Active';
+      list = list.filter((o) => {
+        if (typeof o === "string") return true;
+        if (typeof o === "object" && o.status) return o.status === "Active";
         return true;
       });
     }
     return list;
-  }, [outlets, isDataAgent, zone]);
-    
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  }, [outlets, isAdmin, isDataAgent, zone, isViewer]);
+
+  const [fromDate, setFromDate] = useState(defaultWeekRange.from);
+  const [toDate, setToDate] = useState(defaultWeekRange.to);
 
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editRow, setEditRow] = useState({});
   const [editValues, setEditValues] = useState({});
+  const [isEditSaving, setIsEditSaving] = useState(false);
 
-  /* ================= FETCH SALES ================= */
   const fetchSales = useCallback(async () => {
     try {
-      console.log('Fetching sales data...');
       const res = await fetch(`${API_URL}/dailysales/all`);
       const data = await res.json();
-
       if (Array.isArray(data)) {
-        setRows(data.map(d => ({ id: d.id || d._id, ...d })));
+        setRows(data.map((d) => ({ id: d.id || d._id, ...d })));
       } else if (data.success && Array.isArray(data.data)) {
-        setRows(data.data.map(d => ({ id: d.id || d._id, ...d })));
+        setRows(data.data.map((d) => ({ id: d.id || d._id, ...d })));
       } else {
         setRows([]);
       }
-      console.log('Sales data updated:', Array.isArray(data) ? data.length : data.data?.length || 0);
     } catch (err) {
       console.error("Error fetching sales:", err);
       setRows([]);
@@ -69,47 +121,33 @@ const Dailysales = () => {
 
   useEffect(() => {
     fetchSales();
-    // Auto-refresh sales every 30 seconds
     const salesInterval = setInterval(fetchSales, 30000);
     return () => clearInterval(salesInterval);
   }, [fetchSales]);
 
-  /* ================= OUTLETS - LOAD ONCE ON MOUNT ================= */
   const loadOutlets = useCallback(async () => {
     setOutletLoading(true);
     try {
-      console.log('Loading outlets...');
-      // Always load all outlets for display
-      const url = `${API_URL}/outlets/all`;
-      console.log('Dailysales loadOutlets URL:', url);
-      const res = await fetch(url);
+      const res = await fetch(`${API_URL}/outlets/all`);
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
-          console.log('Outlets loaded from backend:', data.length);
           setOutlets(data);
           localStorage.setItem(OUTLETS_KEY, JSON.stringify(data));
         } else {
-          throw new Error('Empty outlets response');
+          throw new Error("Empty outlets response");
         }
       } else {
-        throw new Error('Failed to fetch outlets');
+        throw new Error("Failed to fetch outlets");
       }
-    } catch (err) {
-      console.error("Error fetching outlets:", err);
-      // Try localStorage as fallback
+    } catch {
       const saved = localStorage.getItem(OUTLETS_KEY);
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            console.log('Using cached outlets from localStorage');
-            setOutlets(parsed);
-          } else {
-            setOutlets([]);
-          }
-        } catch (parseErr) {
-          console.error("Error parsing saved outlets:", parseErr);
+          if (Array.isArray(parsed) && parsed.length > 0) setOutlets(parsed);
+          else setOutlets([]);
+        } catch {
           setOutlets([]);
         }
       } else {
@@ -120,90 +158,110 @@ const Dailysales = () => {
     }
   }, []);
 
-  // Load outlets only on component mount
   useEffect(() => {
     loadOutlets();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadOutlets]);
 
-  /* ================= OUTLET SYNC - LISTEN FOR UPDATES ================= */
   useEffect(() => {
-    const handleOutletsUpdated = (event) => {
-      console.log('Outlets updated event received');
-      if (event.detail && Array.isArray(event.detail) && event.detail.length > 0) {
-        setOutlets(event.detail);
-        localStorage.setItem(OUTLETS_KEY, JSON.stringify(event.detail));
+    const handleOutletsUpdated = (e) => {
+      if (e.detail && Array.isArray(e.detail) && e.detail.length > 0) {
+        setOutlets(e.detail);
+        localStorage.setItem(OUTLETS_KEY, JSON.stringify(e.detail));
       }
     };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        console.log('Page visible, reloading outlets');
-        loadOutlets();
-      }
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") loadOutlets();
     };
-
-    const handleStorageChange = (e) => {
+    const handleStorage = (e) => {
       if (e.key === OUTLETS_KEY && e.newValue) {
         try {
           const parsed = JSON.parse(e.newValue);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            console.log('Outlets updated from storage event');
-            setOutlets(parsed);
-          }
-        } catch (err) {
-          console.error("Error parsing storage event:", err);
-        }
+          if (Array.isArray(parsed) && parsed.length > 0) setOutlets(parsed);
+        } catch {}
       }
     };
 
-    window.addEventListener('egg:outlets-updated', handleOutletsUpdated);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('storage', handleStorageChange);
-
+    window.addEventListener("egg:outlets-updated", handleOutletsUpdated);
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("storage", handleStorage);
     return () => {
-      window.removeEventListener('egg:outlets-updated', handleOutletsUpdated);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener("egg:outlets-updated", handleOutletsUpdated);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("storage", handleStorage);
     };
   }, [loadOutlets]);
 
-  /* ================= FILTER LOGIC ================= */
-  const getFilteredRows = () => {
-    const sortedRows = [...rows].sort((a, b) => new Date(a.date) - new Date(b.date));
-
+  const filteredRows = useMemo(() => {
+    const sorted = [...rows].sort((a, b) => new Date(a.date) - new Date(b.date));
     if (fromDate && toDate) {
-      return sortedRows.filter(row => {
-        const rowDate = new Date(row.date);
-        return rowDate >= new Date(fromDate) && rowDate <= new Date(toDate);
+      return sorted.filter((r) => {
+        const date = new Date(r.date);
+        return date >= new Date(fromDate) && date <= new Date(toDate);
       });
     }
+    if (fromDate) return sorted.filter((r) => new Date(r.date) >= new Date(fromDate));
+    if (toDate) return sorted.filter((r) => new Date(r.date) <= new Date(toDate));
+    return sorted;
+  }, [rows, fromDate, toDate]);
 
-    if (fromDate) {
-      return sortedRows.filter(row => new Date(row.date) >= new Date(fromDate));
-    }
+  const visibleOutlets = useMemo(() => (isSupervisor ? formOutlets : outlets), [isSupervisor, formOutlets, outlets]);
 
-    if (toDate) {
-      return sortedRows.filter(row => new Date(row.date) <= new Date(toDate));
-    }
+  const getOutletSaleValue = useCallback((row, outletRef) => {
+    const outletObj = typeof outletRef === "object" ? outletRef : null;
+    const outletId = outletObj?.id || outletRef;
+    const outletArea = outletObj?.area || outletObj?.name;
+    const values = row?.outlets || {};
+    if (values[outletId] !== undefined) return Number(values[outletId]) || 0;
+    if (outletArea && values[outletArea] !== undefined) return Number(values[outletArea]) || 0;
+    return 0;
+  }, []);
 
-    return sortedRows;
-  };
+  const getOutletEditKey = useCallback((row, outletRef) => {
+    const outletObj = typeof outletRef === "object" ? outletRef : null;
+    const outletId = outletObj?.id || outletRef;
+    const outletArea = outletObj?.area || outletObj?.name || outletId;
+    const values = row?.outlets || {};
 
-  const filteredRows = getFilteredRows();
+    if (values[outletId] !== undefined) return outletId;
+    if (outletArea && values[outletArea] !== undefined) return outletArea;
+    return outletArea || outletId;
+  }, []);
 
-  /* ================= EDIT (ADMIN ONLY) ================= */
+  const scopedRows = useMemo(() => {
+    if (!Array.isArray(filteredRows)) return [];
+    const refs = Array.isArray(visibleOutlets) ? visibleOutlets : [];
+
+    return filteredRows.map((row) => {
+      const scopedOutlets = {};
+      refs.forEach((outletRef) => {
+        const outletObj = typeof outletRef === "object" ? outletRef : null;
+        const outletId = outletObj?.id || outletRef;
+        scopedOutlets[outletId] = getOutletSaleValue(row, outletRef);
+      });
+
+      const scopedTotal = Object.values(scopedOutlets).reduce((sum, value) => sum + (Number(value) || 0), 0);
+      return { ...row, outlets: scopedOutlets, total: scopedTotal };
+    });
+  }, [filteredRows, visibleOutlets, getOutletSaleValue]);
+
   const handleEditClick = (row) => {
-    if (!isAdmin) return;
-    
+    if (!isAdmin || isReadOnly) return;
+
     const fullRow = { ...row };
     if (!row.id) {
-      const found = rows.find(r => r.date === row.date);
+      const found = rows.find((r) => r.date === row.date);
       if (found?.id) fullRow.id = found.id;
     }
-    
+
     setEditRow(fullRow);
-    setEditValues({ ...row.outlets });
+
+    const values = {};
+    outlets.forEach((outletRef) => {
+      const editKey = getOutletEditKey(fullRow, outletRef);
+      values[editKey] = String(getOutletSaleValue(fullRow, outletRef) ?? 0);
+    });
+
+    setEditValues(values);
     setEditModalOpen(true);
   };
 
@@ -211,29 +269,34 @@ const Dailysales = () => {
     setEditModalOpen(false);
     setEditRow({});
     setEditValues({});
+    setIsEditSaving(false);
   };
 
+  const editTotal = useMemo(() => {
+    return Object.values(editValues).reduce((sum, value) => sum + (Number(value) || 0), 0);
+  }, [editValues]);
+
   const handleEditSave = async () => {
+    if (!isAdmin || isReadOnly) return;
+    if (isEditSaving) return;
     if (!editRow.id) {
       alert("No ID found. Cannot update.");
       return;
     }
 
-    const updatedOutlets = { ...editValues };
-    const total = Object.values(updatedOutlets).reduce(
-      (s, v) => s + (Number(v) || 0),
-      0
-    );
+    const updatedOutlets = { ...(editRow.outlets || {}) };
+    Object.entries(editValues).forEach(([key, value]) => {
+      const num = value === "" || value == null ? 0 : Number(value);
+      updatedOutlets[key] = Number.isNaN(num) ? 0 : num;
+    });
+    const total = Object.values(updatedOutlets).reduce((sum, value) => sum + (Number(value) || 0), 0);
 
+    setIsEditSaving(true);
     try {
       const response = await fetch(`${API_URL}/dailysales/${editRow.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          date: editRow.date,
-          outlets: updatedOutlets,
-          total,
-        }),
+        body: JSON.stringify({ date: editRow.date, outlets: updatedOutlets, total }),
       });
 
       if (!response.ok) {
@@ -241,31 +304,35 @@ const Dailysales = () => {
         return;
       }
 
-      // Refetch all data after successful update
       await fetchSales();
-      setEditModalOpen(false);
-      setEditRow({});
-      setEditValues({});
+      handleEditCancel();
     } catch (err) {
       alert("Error updating entry: " + err.message);
+    } finally {
+      setIsEditSaving(false);
     }
   };
 
-  /* ================= ADD ROW ================= */
   const addrow = async (newrow) => {
+    let user = null;
+    try { user = JSON.parse(localStorage.getItem("user")); } catch {}
+    const addedBy = user ? {
+      username: user.username || user.uid || "Unknown",
+      zone: user.zoneId || user.zone || "No Zone",
+      role: user.role || "unknown",
+      timestamp: new Date().toISOString(),
+    } : null;
+
     try {
       const response = await fetch(`${API_URL}/dailysales/add`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newrow),
+        body: JSON.stringify({ ...newrow, addedBy }),
       });
-
       if (!response.ok) {
         alert("Failed to add entry");
         return;
       }
-
-      // Refetch all data after successful add
       await fetchSales();
     } catch (err) {
       console.error("Error adding sale:", err);
@@ -273,15 +340,20 @@ const Dailysales = () => {
     }
   };
 
-  /* ================= DOWNLOAD ================= */
   const handleDownload = () => {
+    const fmt = (iso) => {
+      const date = new Date(iso);
+      if (Number.isNaN(date.getTime())) return iso;
+      return `${String(date.getDate()).padStart(2, "0")}-${String(date.getMonth() + 1).padStart(2, "0")}-${date.getFullYear()}`;
+    };
+
     const data = filteredRows.map((row) => {
-      const obj = { Date: row.date };
+      const obj = { Date: fmt(row.date) };
       outlets.forEach((o) => {
         const area = o.area || o;
-        obj[area] = row.outlets?.[area] ?? 0;
+        obj[area] = Number(row.outlets?.[area] ?? 0);
       });
-      obj.Total = row.total || 0;
+      obj.Total = Number(row.total ?? outlets.reduce((sum, o) => sum + Number(row.outlets?.[(o.area || o)] || 0), 0));
       return obj;
     });
 
@@ -291,7 +363,6 @@ const Dailysales = () => {
     XLSX.writeFile(wb, "Daily_Sales_Report.xlsx");
   };
 
-  // Show loading state while outlets are loading
   if (outletLoading) {
     return (
       <div className="flex">
@@ -310,72 +381,54 @@ const Dailysales = () => {
       <div className="bg-eggBg min-h-screen p-6 w-full">
         <Topbar />
 
-        {/* ================= ENTRY FORM (ADMIN + DATA AGENT + SUPERVISOR) ================= */}
-        {showForms && outlets.length > 0 && (
-          <div className="mt-4 mb-8">
-            <Dailyentryform
-              addrow={addrow}
-              blockeddates={rows.filter((r) => r.locked).map((r) => r.date)}
-              rows={rows}
-              outlets={formOutlets}
-            />
-          </div>
-        )}
-
-        {/* No outlets warning */}
         {showForms && outlets.length === 0 && (
           <div className="mt-4 mb-8 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
             <p className="text-sm text-yellow-800">No outlets available. Please add outlets first.</p>
           </div>
         )}
 
-        {/* ================= HEADER ================= */}
         {(isAdmin || isViewer || isDataAgent || isSupervisor) && outlets.length > 0 && (
-          <Dailyheader 
-            dailySalesData={filteredRows}
+          <Dailyheader
+            title={"Daily Sales Entry"}
+            subtitle={isReadOnly ? "View daily sales entries." : "Manage and track daily sales entries."}
+            dailySalesData={scopedRows}
             fromDate={fromDate}
             toDate={toDate}
             setFromDate={setFromDate}
             setToDate={setToDate}
             allRows={rows}
+            onExport={handleDownload}
           />
         )}
 
-        {/* ================= TABLE (ADMIN + VIEWER + DATA AGENT + SUPERVISOR) ================= */}
         {(isAdmin || isViewer || isDataAgent || isSupervisor) && outlets.length > 0 && (
           <DailyTable
-            rows={filteredRows}
-            outlets={(isSupervisor ? formOutlets : outlets).map(o => typeof o === 'string' ? o : o.id)}
-            allOutlets={outlets}
-            onEdit={isAdmin ? handleEditClick : null}
+            rows={scopedRows}
+            outlets={visibleOutlets.map((o) => (typeof o === "string" ? o : o.id))}
+            allOutlets={visibleOutlets}
+            onEdit={isAdmin && !isReadOnly ? handleEditClick : null}
           />
         )}
 
-        {/* ================= EDIT MODAL (ADMIN ONLY) ================= */}
-        {isAdmin && editModalOpen && outlets.length > 0 && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
-            <div className="bg-white rounded-xl p-6 min-w-[320px] max-w-full max-h-[80vh] overflow-y-auto">
-              <h2 className="font-semibold mb-4 text-lg">
-                Edit Daily Sales ({editRow.date})
-              </h2>
-
+        {isAdmin && !isReadOnly && editModalOpen && outlets.length > 0 && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30 p-4">
+            <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
+              <h2 className="font-semibold mb-4 text-lg">Edit Daily Sales ({editRow.date})</h2>
               <div className="space-y-3">
-                {outlets.map((o) => {
-                  const area = o.area || o;
+                {outlets.map((outletRef) => {
+                  const area = typeof outletRef === "string" ? outletRef : (outletRef.area || outletRef.id);
+                  const name = typeof outletRef === "string" ? outletRef : (outletRef.area || outletRef.name || outletRef.id);
+                  const editKey = getOutletEditKey(editRow, outletRef);
+
                   return (
-                    <div key={area} className="flex items-center gap-2">
-                      <label className="w-32 text-xs font-medium text-gray-700">{area}</label>
+                    <div key={area} className="flex flex-col sm:flex-row sm:items-center gap-2">
+                      <label className="w-full sm:w-32 text-xs font-medium text-gray-700">{name}</label>
                       <input
                         type="number"
                         min="0"
-                        step="0.01"
-                        value={editValues[area] ?? 0}
-                        onChange={(e) =>
-                          setEditValues((p) => ({
-                            ...p,
-                            [area]: Number(e.target.value),
-                          }))
-                        }
+                        step="any"
+                        value={editValues[editKey] ?? ""}
+                        onChange={(e) => setEditValues((prev) => ({ ...prev, [editKey]: e.target.value }))}
                         className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400"
                       />
                     </div>
@@ -383,28 +436,45 @@ const Dailysales = () => {
                 })}
               </div>
 
+              <div className="mt-4 flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
+                <span className="text-xs font-semibold text-gray-600">Total</span>
+                <span className="text-sm font-bold text-orange-600">
+                  {editTotal.toLocaleString("en-IN")}
+                </span>
+              </div>
+
               <div className="flex justify-end gap-2 mt-6">
                 <button
                   onClick={handleEditCancel}
-                  className="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 text-xs font-medium hover:bg-gray-300"
+                  disabled={isEditSaving}
+                  className="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 text-xs font-medium hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleEditSave}
-                  className="px-4 py-2 rounded-lg bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600"
+                  disabled={isEditSaving}
+                  className="px-4 py-2 rounded-lg bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center"
                 >
-                  Save
+                  {isEditSaving ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Saving...
+                    </>
+                  ) : "Save"}
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* ================= WEEKLY TREND (ADMIN + SUPERVISOR) ================= */}
-        {(isAdmin || isSupervisor) && outlets.length > 0 && (
+        {(isAdmin || isSupervisor || isViewer) && outlets.length > 0 && (
           <div className="mt-10">
-            <Weeklytrend rows={rows} />
+            <Weeklytrend rows={scopedRows} outlets={visibleOutlets} />
+            <DailySalesAnalytics rows={scopedRows} />
           </div>
         )}
       </div>

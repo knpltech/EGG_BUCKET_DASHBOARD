@@ -98,6 +98,18 @@ export const getReports = async (req, res) => {
 
     console.log('📊 Fetching reports for outlet:', outletId);
 
+    const outletAliases = await resolveOutletAliases(outletId);
+    const hasOutletAlias = (value) => outletAliases.has(normalizeOutletKey(value));
+    const getOutletValue = (mapObj = {}) => {
+      if (!mapObj || typeof mapObj !== 'object') return null;
+      for (const [key, value] of Object.entries(mapObj)) {
+        if (hasOutletAlias(key)) {
+          return Number(value) || 0;
+        }
+      }
+      return null;
+    };
+
 
     // Fetch all collections in parallel, including dailyDamages
     const [salesSnapshot, digitalPaymentsSnapshot, cashPaymentsSnapshot, neccRateSnapshot, dailyDamagesSnapshot] = await Promise.all([
@@ -118,9 +130,9 @@ export const getReports = async (req, res) => {
     salesSnapshot.forEach(doc => {
       const data = doc.data();
       const dateKey = formatDate(data.date || data.createdAt);
-      
-      // Check if this document has data for our outlet
-      if (data.outlets && data.outlets[outletId] !== undefined) {
+
+      const salesValue = getOutletValue(data.outlets);
+      if (salesValue !== null) {
         if (!dateMap[dateKey]) {
           dateMap[dateKey] = { 
             date: dateKey, 
@@ -133,9 +145,8 @@ export const getReports = async (req, res) => {
             difference: 0 
           };
         }
-        
-        // The value in outlets[outletName] is the quantity/amount
-        dateMap[dateKey].salesQty += parseFloat(data.outlets[outletId] || 0);
+
+        dateMap[dateKey].salesQty += salesValue;
       }
     });
 
@@ -143,8 +154,9 @@ export const getReports = async (req, res) => {
     digitalPaymentsSnapshot.forEach(doc => {
       const data = doc.data();
       const dateKey = formatDate(data.date || data.createdAt);
-      
-      if (data.outlets && data.outlets[outletId] !== undefined) {
+
+      const digitalValue = getOutletValue(data.outlets);
+      if (digitalValue !== null) {
         if (!dateMap[dateKey]) {
           dateMap[dateKey] = { 
             date: dateKey, 
@@ -157,7 +169,7 @@ export const getReports = async (req, res) => {
             difference: 0 
           };
         }
-        dateMap[dateKey].digitalPay += parseFloat(data.outlets[outletId] || 0);
+        dateMap[dateKey].digitalPay += digitalValue;
       }
     });
 
@@ -165,8 +177,9 @@ export const getReports = async (req, res) => {
     cashPaymentsSnapshot.forEach(doc => {
       const data = doc.data();
       const dateKey = formatDate(data.date || data.createdAt);
-      
-      if (data.outlets && data.outlets[outletId] !== undefined) {
+
+      const cashValue = getOutletValue(data.outlets);
+      if (cashValue !== null) {
         if (!dateMap[dateKey]) {
           dateMap[dateKey] = { 
             date: dateKey, 
@@ -179,44 +192,38 @@ export const getReports = async (req, res) => {
             difference: 0 
           };
         }
-        dateMap[dateKey].cashPay += parseFloat(data.outlets[outletId] || 0);
+        dateMap[dateKey].cashPay += cashValue;
       }
     });
 
-    // Process NECC rate - might be stored differently
+    const neccRateMeta = {};
+
+    // Process NECC rate - outlet specific, supports legacy and current formats
     neccRateSnapshot.forEach(doc => {
       const data = doc.data();
-      // Normalize NECC rate entry date to report dateKey format
-      let entryDate = data.date;
-      if (typeof entryDate === 'string') {
-        // Try to parse DD-MM-YYYY or YYYY-MM-DD
-        const parts = entryDate.split('-');
-        if (parts.length === 3) {
-          // If DD-MM-YYYY
-          if (parts[0].length === 2 && parts[1].length === 2 && parts[2].length === 4) {
-            entryDate = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-          } else {
-            entryDate = new Date(entryDate);
-          }
-        } else {
-          entryDate = new Date(entryDate);
-        }
-      } else if (entryDate && entryDate.toDate) {
-        entryDate = entryDate.toDate();
-      } else {
-        entryDate = new Date(entryDate);
+
+      const dateKey = formatDate(data.date || data.createdAt);
+      if (!dateMap[dateKey]) {
+        return;
       }
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const normalizedDateKey = `${months[entryDate.getMonth()]} ${String(entryDate.getDate()).padStart(2, '0')}, ${entryDate.getFullYear()}`;
-      // Always use the 'rate' field from neccrate collection for the date
-      if (dateMap[normalizedDateKey] && data.rate !== undefined) {
-        let rateValue = data.rate;
-        if (typeof rateValue === 'string') {
-          // Extract first number (integer or decimal) from string
-          const match = rateValue.match(/([0-9]+(\.[0-9]+)?)/);
-          rateValue = match ? parseFloat(match[1]) : 0;
+
+      let matched = hasOutletAlias(data.outletId) || hasOutletAlias(data.outlet);
+      let rateValue = parseNeccRateValue(data);
+
+      if (!matched && data.outlets && typeof data.outlets === 'object') {
+        const mapRateValue = getOutletValue(data.outlets);
+        if (mapRateValue !== null) {
+          matched = true;
+          rateValue = mapRateValue;
         }
-        dateMap[normalizedDateKey].neccRate = typeof rateValue === 'number' ? rateValue : 0;
+      }
+
+      if (matched) {
+        const eventTime = getEntryTimeMs(data);
+        if (!neccRateMeta[dateKey] || eventTime >= neccRateMeta[dateKey]) {
+          dateMap[dateKey].neccRate = Number(rateValue) || 0;
+          neccRateMeta[dateKey] = eventTime;
+        }
       }
     });
 
@@ -225,7 +232,8 @@ export const getReports = async (req, res) => {
     dailyDamagesSnapshot.forEach(doc => {
       const data = doc.data();
       const dateKey = formatDate(data.date || data.createdAt);
-      if (data.damages && data.damages[outletId] !== undefined) {
+      const damagesValue = getOutletValue(data.damages);
+      if (damagesValue !== null) {
         if (!dateMap[dateKey]) {
           dateMap[dateKey] = {
             date: dateKey,
@@ -239,7 +247,7 @@ export const getReports = async (req, res) => {
             damages: 0
           };
         }
-        dateMap[dateKey].damages = parseFloat(data.damages[outletId] || 0);
+        dateMap[dateKey].damages = damagesValue;
       }
     });
 
@@ -343,4 +351,73 @@ function formatDate(date) {
   } catch (error) {
     return 'Invalid Date';
   }
+}
+
+function normalizeOutletKey(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+async function resolveOutletAliases(requestedOutletId) {
+  const aliases = new Set();
+  const addAlias = (value) => {
+    const key = normalizeOutletKey(value);
+    if (key) aliases.add(key);
+  };
+
+  addAlias(requestedOutletId);
+
+  try {
+    const outletsSnapshot = await db.collection('outlets').get();
+    outletsSnapshot.forEach((doc) => {
+      const outlet = doc.data() || {};
+      const rawKeys = [outlet.id, outlet.name, outlet.area, doc.id];
+      const normalizedKeys = rawKeys.map(normalizeOutletKey).filter(Boolean);
+      const matchesRequested = normalizedKeys.includes(normalizeOutletKey(requestedOutletId));
+
+      if (matchesRequested) {
+        rawKeys.forEach(addAlias);
+      }
+    });
+  } catch (error) {
+    console.warn('Failed to resolve outlet aliases, using requested outlet only:', error.message);
+  }
+
+  return aliases;
+}
+
+function parseNeccRateValue(data = {}) {
+  if (typeof data.rate === 'number' && Number.isFinite(data.rate)) {
+    return data.rate;
+  }
+
+  if (typeof data.rateValue === 'number' && Number.isFinite(data.rateValue)) {
+    return data.rateValue;
+  }
+
+  if (typeof data.rate === 'string') {
+    const match = data.rate.replace(/,/g, '').match(/([0-9]+(\.[0-9]+)?)/);
+    return match ? Number(match[1]) : 0;
+  }
+
+  return 0;
+}
+
+function getEntryTimeMs(data = {}) {
+  const candidates = [data.updatedAt, data.createdAt, data.date];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    if (candidate && typeof candidate.toDate === 'function') {
+      const t = candidate.toDate().getTime();
+      if (!Number.isNaN(t)) return t;
+      continue;
+    }
+
+    const d = new Date(candidate);
+    if (!Number.isNaN(d.getTime())) {
+      return d.getTime();
+    }
+  }
+
+  return 0;
 }
