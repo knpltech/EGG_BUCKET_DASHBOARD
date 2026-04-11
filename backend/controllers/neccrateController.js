@@ -1,12 +1,40 @@
 import { db } from "../config/firebase.js";
 import { validateSupervisorSameDayEntry } from "../utils/entryCutoff.js";
 
-// Add a new NECC rate entry to Firestore
+const parseNumericRate = (value) => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const cleaned = value.replace(/[^\d.-]/g, "");
+    const parsed = Number(cleaned);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const getOutletKey = (payload = {}) => payload.outletId || payload.outlet || null;
+
+const normalizeNeccDoc = (id, data = {}) => {
+  const outletKey = data.outlet || data.outletId || null;
+  const rateValue = parseNumericRate(data.rateValue) ?? parseNumericRate(data.rate) ?? 0;
+
+  return {
+    id,
+    ...data,
+    outlet: outletKey,
+    outletId: data.outletId || outletKey,
+    rateValue,
+    rate: `₹${rateValue.toFixed(2)} per egg`,
+    remarks: data.remarks || "—",
+  };
+};
+
 export const addNeccRate = async (req, res) => {
   try {
-    const { date, outletId, outlet, rate, remarks, addedBy } = req.body;
-    const outletValue = outletId || outlet;
-    if (!date || !outletValue || rate === undefined || rate === null) {
+    const { date, remarks, addedBy } = req.body;
+    const outletKey = getOutletKey(req.body);
+    const numericRate = parseNumericRate(req.body.rate);
+
+    if (!date || !outletKey || numericRate === null) {
       return res.status(400).json({ message: "Missing required field: date, outletId/outlet, or rate" });
     }
 
@@ -19,16 +47,12 @@ export const addNeccRate = async (req, res) => {
       });
     }
 
-    const numericRate = Number(rate);
-    if (!Number.isFinite(numericRate)) {
-      return res.status(400).json({ message: "Rate must be a valid number" });
-    }
     const docData = {
       date,
-      outletId: outletValue,
-      outlet: outletValue,
-      rate: `₹${numericRate.toFixed(2)} per egg`,
+      outletId: outletKey,
+      outlet: outletKey,
       rateValue: numericRate,
+      rate: `₹${numericRate.toFixed(2)} per egg`,
       remarks: remarks || "—",
       createdAt: new Date(),
     };
@@ -38,7 +62,7 @@ export const addNeccRate = async (req, res) => {
         username: addedBy.username,
         zone: addedBy.zone,
         role: addedBy.role,
-        timestamp: addedBy.timestamp
+        timestamp: addedBy.timestamp,
       };
     }
 
@@ -49,73 +73,77 @@ export const addNeccRate = async (req, res) => {
   }
 };
 
-// Get all NECC rate entries from Firestore
 export const getAllNeccRates = async (req, res) => {
   try {
     const snapshot = await db.collection("neccRates").orderBy("date", "desc").get();
-    const rates = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    const rates = snapshot.docs.map((doc) => normalizeNeccDoc(doc.id, doc.data()));
     res.status(200).json(rates);
   } catch (error) {
     res.status(500).json({ message: "Error fetching NECC rates", error: error.message });
   }
 };
 
-// PATCH controller to update a NECC rate entry by ID
 export const updateNeccRate = async (req, res) => {
   try {
     const { id } = req.params;
-    const { date, outletId, outlet, rate, remarks } = req.body;
-    const outletValue = outletId || outlet;
-    if (!date || !outletValue || rate === undefined || rate === null) {
+    const { date, remarks } = req.body;
+    const outletKey = getOutletKey(req.body);
+    const numericRate = parseNumericRate(req.body.rate);
+
+    if (!date || !outletKey || numericRate === null) {
       return res.status(400).json({ message: "Missing required field: date, outletId/outlet, or rate" });
     }
-    const numericRate = Number(rate);
-    if (!Number.isFinite(numericRate)) {
-      return res.status(400).json({ message: "Rate must be a valid number" });
-    }
+
     const updateData = {
       date,
-      outletId: outletValue,
-      outlet: outletValue,
-      rate: `₹${numericRate.toFixed(2)} per egg`,
+      outletId: outletKey,
+      outlet: outletKey,
       rateValue: numericRate,
+      rate: `₹${numericRate.toFixed(2)} per egg`,
       remarks: remarks || "—",
       updatedAt: new Date(),
     };
+
     const docRef = db.collection("neccRates").doc(id);
     await docRef.update(updateData);
     const updatedDoc = await docRef.get();
-    res.status(200).json({ id, ...updatedDoc.data() });
+    res.status(200).json(normalizeNeccDoc(id, updatedDoc.data()));
   } catch (error) {
     res.status(500).json({ message: "Error updating NECC rate", error: error.message });
   }
 };
 
-// Delete ALL NECC rate entries for a specific date (admin only)
 export const deleteNeccRatesByDate = async (req, res) => {
   try {
     const { date } = req.params;
     if (!date) return res.status(400).json({ message: "Date is required" });
 
     const snapshot = await db.collection("neccRates").where("date", "==", date).get();
-
-    let deletedCount = 0;
     const batch = db.batch();
-    snapshot.docs.forEach(doc => { batch.delete(doc.ref); deletedCount++; });
+    let deletedCount = 0;
+
+    snapshot.docs.forEach((doc) => {
+      batch.delete(doc.ref);
+      deletedCount += 1;
+    });
+
     await batch.commit();
 
-    res.status(200).json({ message: `Deleted ${deletedCount} entry(ies) for date ${date}`, count: deletedCount });
+    res.status(200).json({
+      message: `Deleted ${deletedCount} entry(ies) for date ${date}`,
+      count: deletedCount,
+    });
   } catch (error) {
     res.status(500).json({ message: "Error deleting NECC rates", error: error.message });
   }
 };
 
-// Delete a specific OUTLET's NECC rate for a specific date (admin only)
-// NECC stores one doc per outlet, so we delete the whole doc
 export const deleteNeccRateByOutletAndDate = async (req, res) => {
   try {
     const { date, outletId } = req.params;
-    if (!date || !outletId) return res.status(400).json({ message: "Date and outletId are required" });
+    if (!date || !outletId) {
+      return res.status(400).json({ message: "Date and outletId are required" });
+    }
 
     const snapshot = await db.collection("neccRates")
       .where("date", "==", date)
@@ -123,7 +151,9 @@ export const deleteNeccRateByOutletAndDate = async (req, res) => {
       .limit(1)
       .get();
 
-    if (snapshot.empty) return res.status(404).json({ message: "No NECC entry found for this outlet and date" });
+    if (snapshot.empty) {
+      return res.status(404).json({ message: "No NECC entry found for this outlet and date" });
+    }
 
     await snapshot.docs[0].ref.delete();
     res.status(200).json({ message: `NECC rate for outlet ${outletId} on ${date} deleted`, count: 1 });
