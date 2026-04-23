@@ -111,13 +111,15 @@ export const getReports = async (req, res) => {
     };
 
 
-    // Fetch all collections in parallel, including dailyDamages
+    // Fetch all collections in parallel, including dailyDamages.
+    // Avoid hard limits here so reports always see the correct NECC entry
+    // for the selected outlet/date range.
     const [salesSnapshot, digitalPaymentsSnapshot, cashPaymentsSnapshot, neccRateSnapshot, dailyDamagesSnapshot] = await Promise.all([
-      db.collection('dailySales').limit(100).get(),
-      db.collection('digitalPayments').limit(100).get(),
-      db.collection('cashPayments').limit(100).get(),
-      db.collection('neccRates').limit(100).get(),
-      db.collection('dailyDamages').limit(100).get()
+      db.collection('dailySales').get(),
+      db.collection('digitalPayments').get(),
+      db.collection('cashPayments').get(),
+      db.collection('neccRates').get(),
+      db.collection('dailyDamages').get()
     ]);
 
     const fetchTime = Date.now() - startTime;
@@ -125,74 +127,57 @@ export const getReports = async (req, res) => {
 
     // Process data - extract values for the specific outlet
     const dateMap = {};
+    const ensureDateEntry = (dateKey) => {
+      if (!dateKey) return null;
+      if (!dateMap[dateKey]) {
+        dateMap[dateKey] = {
+          date: dateKey,
+          salesQty: 0,
+          neccRate: 0,
+          totalAmount: 0,
+          digitalPay: 0,
+          cashPay: 0,
+          totalRecv: 0,
+          difference: 0,
+          damages: 0,
+        };
+      }
+      return dateMap[dateKey];
+    };
 
     // Process sales data
     salesSnapshot.forEach(doc => {
       const data = doc.data();
-      const dateKey = formatDate(data.date || data.createdAt);
+      const dateKey = normalizeDateKey(data.date || data.createdAt);
+      if (!dateKey) return;
 
       const salesValue = getOutletValue(data.outlets);
       if (salesValue !== null) {
-        if (!dateMap[dateKey]) {
-          dateMap[dateKey] = { 
-            date: dateKey, 
-            salesQty: 0, 
-            neccRate: 0, 
-            totalAmount: 0, 
-            digitalPay: 0, 
-            cashPay: 0, 
-            totalRecv: 0, 
-            difference: 0 
-          };
-        }
-
-        dateMap[dateKey].salesQty += salesValue;
+        ensureDateEntry(dateKey).salesQty += salesValue;
       }
     });
 
     // Process digital payments
     digitalPaymentsSnapshot.forEach(doc => {
       const data = doc.data();
-      const dateKey = formatDate(data.date || data.createdAt);
+      const dateKey = normalizeDateKey(data.date || data.createdAt);
+      if (!dateKey) return;
 
       const digitalValue = getOutletValue(data.outlets);
       if (digitalValue !== null) {
-        if (!dateMap[dateKey]) {
-          dateMap[dateKey] = { 
-            date: dateKey, 
-            salesQty: 0, 
-            neccRate: 0, 
-            totalAmount: 0, 
-            digitalPay: 0, 
-            cashPay: 0, 
-            totalRecv: 0, 
-            difference: 0 
-          };
-        }
-        dateMap[dateKey].digitalPay += digitalValue;
+        ensureDateEntry(dateKey).digitalPay += digitalValue;
       }
     });
 
     // Process cash payments
     cashPaymentsSnapshot.forEach(doc => {
       const data = doc.data();
-      const dateKey = formatDate(data.date || data.createdAt);
+      const dateKey = normalizeDateKey(data.date || data.createdAt);
+      if (!dateKey) return;
 
       const cashValue = getOutletValue(data.outlets);
       if (cashValue !== null) {
-        if (!dateMap[dateKey]) {
-          dateMap[dateKey] = { 
-            date: dateKey, 
-            salesQty: 0, 
-            neccRate: 0, 
-            totalAmount: 0, 
-            digitalPay: 0, 
-            cashPay: 0, 
-            totalRecv: 0, 
-            difference: 0 
-          };
-        }
-        dateMap[dateKey].cashPay += cashValue;
+        ensureDateEntry(dateKey).cashPay += cashValue;
       }
     });
 
@@ -202,10 +187,8 @@ export const getReports = async (req, res) => {
     neccRateSnapshot.forEach(doc => {
       const data = doc.data();
 
-      const dateKey = formatDate(data.date || data.createdAt);
-      if (!dateMap[dateKey]) {
-        return;
-      }
+      const dateKey = normalizeDateKey(data.date || data.createdAt);
+      if (!dateKey) return;
 
       let matched = hasOutletAlias(data.outletId) || hasOutletAlias(data.outlet);
       let rateValue = parseNeccRateValue(data);
@@ -219,9 +202,11 @@ export const getReports = async (req, res) => {
       }
 
       if (matched) {
+        const entry = ensureDateEntry(dateKey);
+        if (!entry) return;
         const eventTime = getEntryTimeMs(data);
         if (!neccRateMeta[dateKey] || eventTime >= neccRateMeta[dateKey]) {
-          dateMap[dateKey].neccRate = Number(rateValue) || 0;
+          entry.neccRate = Number(rateValue) || 0;
           neccRateMeta[dateKey] = eventTime;
         }
       }
@@ -231,23 +216,11 @@ export const getReports = async (req, res) => {
     // Add damages from dailyDamages collection
     dailyDamagesSnapshot.forEach(doc => {
       const data = doc.data();
-      const dateKey = formatDate(data.date || data.createdAt);
+      const dateKey = normalizeDateKey(data.date || data.createdAt);
+      if (!dateKey) return;
       const damagesValue = getOutletValue(data.damages);
       if (damagesValue !== null) {
-        if (!dateMap[dateKey]) {
-          dateMap[dateKey] = {
-            date: dateKey,
-            salesQty: 0,
-            neccRate: 0,
-            totalAmount: 0,
-            digitalPay: 0,
-            cashPay: 0,
-            totalRecv: 0,
-            difference: 0,
-            damages: 0
-          };
-        }
-        dateMap[dateKey].damages = damagesValue;
+        ensureDateEntry(dateKey).damages = damagesValue;
       }
     });
 
@@ -262,17 +235,21 @@ export const getReports = async (req, res) => {
     });
 
     // Sort by date
-    transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+    transactions.sort((a, b) => b.date.localeCompare(a.date));
 
     // Apply date filtering
     if (dateFrom || dateTo) {
-      const startDate = dateFrom ? new Date(dateFrom) : new Date('2000-01-01');
-      const endDate = dateTo ? new Date(dateTo) : new Date('2100-12-31');
+      const startDate = normalizeDateKey(dateFrom) || '2000-01-01';
+      const endDate = normalizeDateKey(dateTo) || '2100-12-31';
       transactions = transactions.filter(t => {
-        const tDate = new Date(t.date);
-        return tDate >= startDate && tDate <= endDate;
+        return t.date >= startDate && t.date <= endDate;
       });
     }
+
+    transactions = transactions.map((transaction) => ({
+      ...transaction,
+      date: formatDisplayDate(transaction.date),
+    }));
 
 
     // Calculate summary
@@ -330,27 +307,43 @@ export const exportReports = async (req, res) => {
   }
 };
 
-function formatDate(date) {
-  if (!date) return 'Unknown Date';
-  try {
-    // Handle string dates like "2026-01-03"
-    if (typeof date === 'string') {
-      const d = new Date(date);
-      if (!isNaN(d.getTime())) {
-        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-        return `${months[d.getMonth()]} ${String(d.getDate()).padStart(2, '0')}, ${d.getFullYear()}`;
-      }
+function normalizeDateKey(value) {
+  if (!value) return '';
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return trimmed;
     }
-    
-    // Handle Firestore timestamp
-    const d = date.toDate ? date.toDate() : new Date(date);
-    if (isNaN(d.getTime())) return 'Invalid Date';
-    
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return `${months[d.getMonth()]} ${String(d.getDate()).padStart(2, '0')}, ${d.getFullYear()}`;
-  } catch (error) {
-    return 'Invalid Date';
+
+    if (/^\d{2}-\d{2}-\d{4}$/.test(trimmed)) {
+      const [day, month, year] = trimmed.split('-');
+      return `${year}-${month}-${day}`;
+    }
   }
+
+  try {
+    const parsedValue = value && typeof value.toDate === 'function' ? value.toDate() : new Date(value);
+    if (Number.isNaN(parsedValue.getTime())) return '';
+
+    const year = parsedValue.getFullYear();
+    const month = String(parsedValue.getMonth() + 1).padStart(2, '0');
+    const day = String(parsedValue.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  } catch {
+    return '';
+  }
+}
+
+function formatDisplayDate(isoDate) {
+  if (!isoDate) return 'Unknown Date';
+  const [year, month, day] = String(isoDate).split('-');
+  const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+  if (Number.isNaN(parsed.getTime())) return isoDate;
+
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[parsed.getMonth()]} ${String(parsed.getDate()).padStart(2, '0')}, ${parsed.getFullYear()}`;
 }
 
 function normalizeOutletKey(value) {

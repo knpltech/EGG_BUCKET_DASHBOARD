@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { fetchReportsData, fetchOutlets, exportReports } from '../context/reportsApi';
 import { getRoleFlags, zonesMatch } from '../utils/role';
+import { getThisWeekRange } from '../utils/dateRange';
 
 // DEBUG: Fetch all outlet names from backend data for troubleshooting
 async function fetchAllOutletNames() {
@@ -64,6 +65,7 @@ import {
 const Reports = () => {
   // Role-based access: admins see all outlets, supervisors see only their zone's outlets
   const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
+  const defaultWeekRange = useMemo(() => getThisWeekRange(), []);
 
   const [outlets, setOutlets] = useState([]);       // raw full outlet objects from backend
   const [selectedOutlet, setSelectedOutlet] = useState(null);
@@ -71,7 +73,7 @@ const Reports = () => {
   const [loading, setLoading] = useState(false);
   const [outletsLoading, setOutletsLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [dateRange, setDateRange] = useState({ from: '', to: '' });
+  const [dateRange, setDateRange] = useState(defaultWeekRange);
   const [debugOutletNames, setDebugOutletNames] = useState([]);
   const [showFromCalendar, setShowFromCalendar] = useState(false);
   const [showToCalendar, setShowToCalendar] = useState(false);

@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { getRoleFlags, zonesMatch } from "../utils/role";
+import { getThisWeekRange } from "../utils/dateRange";
 import * as XLSX from "xlsx";
 import DailyTable from "../components/DailyTable";
 
@@ -172,6 +173,7 @@ const CashCalendar = ({ rows, selectedDate, onSelectDate, showDots = true }) => 
 
 export default function CashPayments() {
   const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
+  const defaultWeekRange = useMemo(() => getThisWeekRange(), []);
   // Supervisors can view but should not enter data here
   const showForms = isAdmin || isDataAgent;
 
@@ -205,9 +207,9 @@ export default function CashPayments() {
     return outlets;
   }, [outlets, zone, isViewer]);
   const displayedOutlets = (isSupervisor ? formOutlets : outlets).map(o => typeof o === 'string' ? o : o.id);
-  const [rangeType, setRangeType] = useState("");
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
+  const [rangeType, setRangeType] = useState("thisWeek");
+  const [customFrom, setCustomFrom] = useState(defaultWeekRange.from);
+  const [customTo, setCustomTo] = useState(defaultWeekRange.to);
   const [entryDate, setEntryDate] = useState("");
   const [entryValues, setEntryValues] = useState({});
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);

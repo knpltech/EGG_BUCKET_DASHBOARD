@@ -17,6 +17,8 @@ import {
 import Topbar from "../components/Topbar";
 import Dailyheader from "../components/Dailyheader";
 import DailyTable from "../components/DailyTable";
+import Weeklytrend from "../components/Weeklytrend";
+import { getThisWeekRange } from "../utils/dateRange";
 
 const OUTLETS_KEY = "egg_outlets_v1";
 
@@ -95,6 +97,7 @@ function DailySalesAnalytics({ rows, outlets = [] }) {
 
 const Dailysales = () => {
   const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
+  const defaultWeekRange = useMemo(() => getThisWeekRange(), []);
   const showForms = isAdmin || isDataAgent;
   const isReadOnly = isViewer;
 
@@ -117,8 +120,8 @@ const Dailysales = () => {
     return list;
   }, [outlets, isAdmin, isDataAgent, zone, isViewer]);
 
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const [fromDate, setFromDate] = useState(defaultWeekRange.from);
+  const [toDate, setToDate] = useState(defaultWeekRange.to);
 
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editRow, setEditRow] = useState({});

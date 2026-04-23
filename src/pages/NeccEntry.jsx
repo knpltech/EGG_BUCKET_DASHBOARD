@@ -151,7 +151,7 @@ export default function NeccEntry() {
     allNecc.forEach(doc => {
       const docDate = (doc.date || doc.createdAt || "").slice(0, 10);
       // per-outlet record
-      if (doc.outlet === outlet) s.add(docDate);
+      if (doc.outlet === outlet || doc.outletId === outlet) s.add(docDate);
       // outlets map structure
       if (doc.outlets && doc.outlets[outlet] !== undefined) s.add(docDate);
     });
@@ -170,10 +170,18 @@ export default function NeccEntry() {
     if (isLocked) {
       const found = allNecc.find(doc => {
         const docDate = (doc.date || doc.createdAt || "").slice(0, 10);
-        return docDate === date && (doc.outlet === outlet || (doc.outlets && doc.outlets[outlet] !== undefined));
+        return docDate === date && (
+          doc.outlet === outlet ||
+          doc.outletId === outlet ||
+          (doc.outlets && doc.outlets[outlet] !== undefined)
+        );
       });
       if (found) {
-        setRate(found.outlets ? (found.outlets[outlet] ?? found.rate ?? "") : (found.rate ?? ""));
+        setRate(
+          found.outlets
+            ? (found.outlets[outlet] ?? found.rateValue ?? found.rate ?? "")
+            : (found.rateValue ?? found.rate ?? "")
+        );
         setRemarks(found.remarks || "");
       }
     } else {
@@ -193,7 +201,7 @@ export default function NeccEntry() {
       const response = await fetch(`${API_URL}/neccrate/add`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, outlet, rate: Number(rate), remarks }),
+        body: JSON.stringify({ date, outletId: outlet, rate: Number(rate), remarks }),
       });
 
       if (!response.ok) { alert("Failed to save NECC rate"); return; }
