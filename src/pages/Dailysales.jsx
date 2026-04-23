@@ -5,8 +5,9 @@ import { getRoleFlags, zonesMatch } from "../utils/role";
 import * as XLSX from "xlsx";
 import {
   CartesianGrid,
-  Line,
-  LineChart,
+  Bar,
+  BarChart,
+  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -16,7 +17,6 @@ import {
 import Topbar from "../components/Topbar";
 import Dailyheader from "../components/Dailyheader";
 import DailyTable from "../components/DailyTable";
-import Weeklytrend from "../components/Weeklytrend";
 
 const OUTLETS_KEY = "egg_outlets_v1";
 
@@ -26,13 +26,45 @@ const formatDateDMY = (iso) => {
   return `${String(date.getDate()).padStart(2, "0")}-${String(date.getMonth() + 1).padStart(2, "0")}-${date.getFullYear()}`;
 };
 
-function DailySalesAnalytics({ rows }) {
+function DailySalesAnalytics({ rows, outlets = [] }) {
+  const colors = ["#f97316", "#3b82f6", "#22c55e", "#a855f7", "#ef4444", "#06b6d4", "#f59e0b"];
+
+  const outletKeys = useMemo(() => {
+    return Array.isArray(outlets)
+      ? outlets
+          .map((outlet) => (typeof outlet === "string" ? outlet : outlet?.id || outlet?.area || outlet?.name))
+          .filter(Boolean)
+      : [];
+  }, [outlets]);
+
+  const outletNames = useMemo(() => {
+    return new Map(
+      (Array.isArray(outlets) ? outlets : []).map((outlet) => {
+        const key = typeof outlet === "string" ? outlet : outlet?.id || outlet?.area || outlet?.name;
+        const label = typeof outlet === "string" ? outlet : outlet?.area || outlet?.name || key;
+        return [key, label];
+      }).filter(([key]) => Boolean(key))
+    );
+  }, [outlets]);
+
   const chartData = useMemo(() => {
-    return rows.map((row) => ({
-      date: formatDateDMY(row.date),
-      total: Number(row.total) || 0,
-    }));
-  }, [rows]);
+    return rows.map((row) => {
+      const dataPoint = {
+        date: formatDateDMY(row.date),
+      };
+
+      outletKeys.forEach((outletKey) => {
+        const outletValues = row?.outlets || {};
+        if (outletValues[outletKey] !== undefined) {
+          dataPoint[outletKey] = Number(outletValues[outletKey]) || 0;
+        } else {
+          dataPoint[outletKey] = 0;
+        }
+      });
+
+      return dataPoint;
+    });
+  }, [rows, outletKeys]);
 
   if (!chartData.length) return null;
 
@@ -41,27 +73,20 @@ function DailySalesAnalytics({ rows }) {
       <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-700">
         Daily Sales Trend by Date
       </h2>
-      <div style={{ width: "100%", height: 260 }}>
+      <div style={{ width: "100%", height: 360 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartData}>
+          <BarChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" />
-            <YAxis />
+            <XAxis dataKey="date" tickMargin={10} />
+            <YAxis width={42} />
             <Tooltip
-              formatter={(value, name) => [
-                Number(value).toLocaleString("en-IN"),
-                name === "total" ? "Total" : name,
-              ]}
+              formatter={(value, name) => [Number(value).toLocaleString("en-IN"), outletNames.get(name) || name]}
             />
-            <Line
-              type="monotone"
-              dataKey="total"
-              stroke="#f97316"
-              strokeWidth={3}
-              dot={{ r: 5 }}
-              activeDot={{ r: 7 }}
-            />
-          </LineChart>
+            <Legend formatter={(value) => outletNames.get(value) || value} />
+            {outletKeys.map((outletKey, index) => (
+              <Bar key={outletKey} dataKey={outletKey} fill={colors[index % colors.length]} radius={[8, 8, 0, 0]} />
+            ))}
+          </BarChart>
         </ResponsiveContainer>
       </div>
     </div>
@@ -471,8 +496,7 @@ const Dailysales = () => {
 
         {(isAdmin || isSupervisor || isViewer) && outlets.length > 0 && (
           <div className="mt-10">
-            <Weeklytrend rows={scopedRows} outlets={visibleOutlets} />
-            <DailySalesAnalytics rows={scopedRows} />
+            <DailySalesAnalytics rows={scopedRows} outlets={visibleOutlets} />
           </div>
         )}
       </div>

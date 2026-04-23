@@ -79,6 +79,8 @@ const Reports = () => {
   // Daily damages state
   const [damagesData, setDamagesData] = useState([]);
   const [damagesLoading, setDamagesLoading] = useState(false);
+  const [quantityTrendData, setQuantityTrendData] = useState([]);
+  const [quantityTrendLoading, setQuantityTrendLoading] = useState(false);
 
   const fromCalendarRef = useRef(null);
   const toCalendarRef = useRef(null);
@@ -190,6 +192,122 @@ const Reports = () => {
     loadDamages();
   }, [selectedOutlet, dateRange]);
 
+  const quantityTrendOutlets = useMemo(() => {
+    return visibleOutlets
+      .filter((outlet) => outlet && outlet.status !== 'Inactive')
+      .map((outlet) => ({
+        key: String(outlet.id || outlet.area || outlet.name || '').trim(),
+        label: outlet.area || outlet.name || outlet.id || '',
+      }))
+      .filter((outlet) => outlet.key);
+  }, [visibleOutlets]);
+
+  useEffect(() => {
+    if (!quantityTrendOutlets.length) {
+      setQuantityTrendData([]);
+      return;
+    }
+
+    const loadQuantityTrend = async () => {
+      setQuantityTrendLoading(true);
+      try {
+        const API_URL = import.meta.env.VITE_API_URL;
+        const res = await fetch(`${API_URL}/dailysales/all`);
+        if (!res.ok) {
+          setQuantityTrendData([]);
+          return;
+        }
+
+        const data = await res.json();
+        const rows = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+
+        const normaliseDate = (value) => {
+          const date = new Date(value);
+          if (Number.isNaN(date.getTime())) return null;
+          date.setHours(0, 0, 0, 0);
+          return date;
+        };
+
+        const outletValueForRow = (row, outlet) => {
+          const values = row?.outlets || {};
+          if (values[outlet.key] !== undefined) return Number(values[outlet.key]) || 0;
+
+          const fallbacks = [outlet.label, outlet.key].filter(Boolean);
+          for (const fallback of fallbacks) {
+            if (values[fallback] !== undefined) return Number(values[fallback]) || 0;
+          }
+
+          return 0;
+        };
+
+        const filteredRows = rows
+          .map((row) => ({ ...row, parsedDate: normaliseDate(row.date) }))
+          .filter((row) => row.parsedDate)
+          .filter((row) => {
+            if (!dateRange.from && !dateRange.to) return true;
+            if (dateRange.from && row.parsedDate < normaliseDate(dateRange.from)) return false;
+            if (dateRange.to) {
+              const toDate = normaliseDate(dateRange.to);
+              toDate.setHours(23, 59, 59, 999);
+              if (row.parsedDate > toDate) return false;
+            }
+            return true;
+          })
+          .sort((a, b) => a.parsedDate - b.parsedDate);
+
+        const rowsByDate = new Map(
+          filteredRows.map((row) => [row.parsedDate.toISOString().slice(0, 10), row])
+        );
+
+        let startDate = dateRange.from ? normaliseDate(dateRange.from) : null;
+        let endDate = dateRange.to ? normaliseDate(dateRange.to) : null;
+
+        if (!startDate || !endDate) {
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          endDate = endDate || today;
+          if (!startDate) {
+            startDate = new Date(endDate);
+            startDate.setDate(endDate.getDate() - 13);
+          }
+        }
+
+        const chartRows = [];
+        const cursor = new Date(startDate);
+        while (cursor <= endDate) {
+          const key = cursor.toISOString().slice(0, 10);
+          const sourceRow = rowsByDate.get(key);
+          const point = {
+            date: key,
+            label: cursor.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
+            fullDate: cursor.toLocaleDateString('en-IN', {
+              weekday: 'short',
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+            }),
+          };
+
+          quantityTrendOutlets.forEach((outlet) => {
+            point[outlet.key] = sourceRow ? outletValueForRow(sourceRow, outlet) : 0;
+          });
+
+          chartRows.push(point);
+          cursor.setDate(cursor.getDate() + 1);
+        }
+
+        setQuantityTrendData(chartRows);
+      } catch (err) {
+        console.error('Failed to load quantity trend chart:', err);
+        setQuantityTrendData([]);
+      } finally {
+        setQuantityTrendLoading(false);
+      }
+    };
+
+    loadQuantityTrend();
+  }, [quantityTrendOutlets, dateRange]);
+
   const handleQuickRange = (type) => {
     const today = new Date();
     const to = today.toISOString().slice(0, 10);
@@ -285,10 +403,10 @@ const Reports = () => {
 
   const salesVsPaymentsData = useMemo(() => {
     if (!reportData?.transactions) return [];
-    return reportData.transactions.map(t => ({
+    return reportData.transactions.map((t) => ({
       date: t.date.split(' ')[1] + ' ' + t.date.split(' ')[0],
       sales: t.totalAmount,
-      received: t.totalRecv
+      received: t.totalRecv,
     }));
   }, [reportData?.transactions]);
 
@@ -341,6 +459,20 @@ const Reports = () => {
       <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 14px', fontSize: 13, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
         <p style={{ fontWeight: 600, color: '#374151', marginBottom: 4 }}>{formatChartDate(label)}</p>
         <p style={{ color: '#dc2626' }}>Damages: <strong>{payload[0].value} eggs</strong></p>
+      </div>
+    );
+  };
+
+  const QuantityTrendTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div style={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 14px', fontSize: 13, boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}>
+        <p style={{ fontWeight: 600, color: '#374151', marginBottom: 4 }}>{label}</p>
+        {payload.map((entry) => (
+          <p key={entry.dataKey} style={{ color: entry.color }}>
+            {entry.name}: <strong>{Number(entry.value || 0).toLocaleString('en-IN')} eggs</strong>
+          </p>
+        ))}
       </div>
     );
   };
@@ -569,25 +701,67 @@ const Reports = () => {
               </div>
             </div>
 
-            {/* Charts Row 1: Sales vs Payments + Digital vs Cash */}
+            {/* Charts Row 1: Quantity trend + Sales vs Payments */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
               <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
-                <h3 className="text-lg font-semibold text-gray-900 mb-6">Sales vs Payments</h3>
-                <ResponsiveContainer width="100%" height={280}>
+                <div className="mb-2 flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">Quantity vs Date</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">Outlet-wise daily sales quantity trend</p>
+                  </div>
+                </div>
+
+                {quantityTrendLoading ? (
+                  <div className="flex items-center justify-center h-[280px]">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-400"></div>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height={320}>
+                    <LineChart data={quantityTrendData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                      <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#666' }} axisLine={{ stroke: '#e5e7eb' }} tickMargin={10} />
+                      <YAxis tick={{ fontSize: 12, fill: '#666' }} axisLine={{ stroke: '#e5e7eb' }} width={40} />
+                      <Tooltip content={<QuantityTrendTooltip />} />
+                      <Legend formatter={(value) => quantityTrendOutlets.find((outlet) => outlet.key === value)?.label || value} />
+                      {quantityTrendOutlets.map((outlet, index) => (
+                        <Line
+                          key={outlet.key}
+                          type="monotone"
+                          dataKey={outlet.key}
+                          name={outlet.key}
+                          stroke={['#ff7518', '#3b82f6', '#22c55e', '#a855f7', '#ef4444', '#06b6d4', '#f59e0b'][index % 7]}
+                          strokeWidth={2.5}
+                          dot={{ r: 3 }}
+                          activeDot={{ r: 5 }}
+                          connectNulls
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+
+              <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Sales vs Payments</h3>
+                <p className="text-xs text-gray-500 mb-6">Daily sales amount compared with total received amount</p>
+                <ResponsiveContainer width="100%" height={320}>
                   <BarChart data={salesVsPaymentsData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#666' }} axisLine={{ stroke: '#e5e7eb' }} />
                     <YAxis tick={{ fontSize: 12, fill: '#666' }} axisLine={{ stroke: '#e5e7eb' }} />
                     <Tooltip contentStyle={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', fontSize: '13px' }} />
-                    <Bar dataKey="sales" fill="#ffa866" radius={[6, 6, 0, 0]} />
-                    <Bar dataKey="received" fill="#ff7518" radius={[6, 6, 0, 0]} />
+                    <Legend />
+                    <Bar dataKey="sales" name="Sales" fill="#ffa866" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="received" name="Received" fill="#ff7518" radius={[6, 6, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
+            </div>
 
-              <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
+            <div className="mb-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100 lg:col-span-2">
                 <h3 className="text-lg font-semibold text-gray-900 mb-6">Digital vs Cash</h3>
-                <ResponsiveContainer width="100%" height={280}>
+                <ResponsiveContainer width="100%" height={320}>
                   <PieChart>
                     <Pie data={pieChartData} cx="50%" cy="50%" innerRadius={70} outerRadius={110} paddingAngle={2} dataKey="value">
                       {pieChartData.map((entry, index) => (
