@@ -195,14 +195,19 @@ const Reports = () => {
   }, [selectedOutlet, dateRange]);
 
   const quantityTrendOutlets = useMemo(() => {
-    return visibleOutlets
-      .filter((outlet) => outlet && outlet.status !== 'Inactive')
-      .map((outlet) => ({
-        key: String(outlet.id || outlet.area || outlet.name || '').trim(),
-        label: outlet.area || outlet.name || outlet.id || '',
-      }))
-      .filter((outlet) => outlet.key);
-  }, [visibleOutlets]);
+    if (!selectedOutlet) return [];
+
+    const outlet = visibleOutlets.find((item) => item?.id === selectedOutlet);
+    if (!outlet || outlet.status === 'Inactive') return [];
+
+    const key = String(outlet.id || outlet.area || outlet.name || '').trim();
+    if (!key) return [];
+
+    return [{
+      key,
+      label: outlet.area || outlet.name || outlet.id || key,
+    }];
+  }, [visibleOutlets, selectedOutlet]);
 
   useEffect(() => {
     if (!quantityTrendOutlets.length) {
@@ -709,7 +714,7 @@ const Reports = () => {
                 <div className="mb-2 flex items-start justify-between gap-3">
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">Quantity vs Date</h3>
-                    <p className="text-xs text-gray-500 mt-0.5">Outlet-wise daily sales quantity trend</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Selected outlet daily sales quantity trend</p>
                   </div>
                 </div>
 
