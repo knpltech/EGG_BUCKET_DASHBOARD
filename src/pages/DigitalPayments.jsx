@@ -145,10 +145,6 @@ export default function DigitalPayments() {
   const filterFromRef = useRef(null);
   const filterToRef = useRef(null);
 
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editRow, setEditRow] = useState({});
-  // editValues keyed by AREA (not outlet id) to match how data is stored
-  const [editValues, setEditValues] = useState({});
   const [rows, setRows] = useState([]);
   const [outlets, setOutlets] = useState([]);
 
@@ -169,7 +165,6 @@ export default function DigitalPayments() {
   const [isFilterFromOpen, setIsFilterFromOpen] = useState(false);
   const [isFilterToOpen, setIsFilterToOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isEditSaving, setIsEditSaving] = useState(false);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -316,57 +311,6 @@ export default function DigitalPayments() {
     } catch { alert('Error adding payment'); } finally { setIsSaving(false); }
   }, [entryDate, entryValues, formOutlets, hasEntry, isSaving]);
 
-  // Open edit modal: populate editValues keyed by AREA
-  const handleEditClick = useCallback((row) => {
-    const fullRow = { ...row };
-    if (!row.id) { const found = rows.find(r => r.date === row.date); if (found?.id) fullRow.id = found.id; }
-    setEditRow(fullRow);
-    // Key editValues by area (how data is actually stored in row.outlets)
-    const vals = {};
-    outlets.forEach((o) => {
-      const area = o.area || o.name || o.id;
-      // Preserve the user's number exactly as stored — no coercion to decimal
-      vals[area] = row.outlets?.[area] ?? "";
-    });
-    setEditValues(vals);
-    setEditModalOpen(true);
-  }, [rows, outlets]);
-
-  const handleEditSave = useCallback(async () => {
-    if (isEditSaving || !editRow.id) { if (!editRow.id) alert("No ID found. Cannot update."); return; }
-    // Build updatedOutlets keyed by area, preserving user input
-    const updatedOutlets = {};
-    outlets.forEach((o) => {
-      const area = o.area || o.name || o.id;
-      const raw = editValues[area];
-      updatedOutlets[area] = raw === "" || raw == null ? 0 : Number(raw) || 0;
-    });
-    const totalAmount = Object.values(updatedOutlets).reduce((s, v) => s + v, 0);
-
-    setIsEditSaving(true);
-    try {
-      const response = await fetch(`${API_URL}/digital-payments/${editRow.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: editRow.date, outlets: updatedOutlets, totalAmount }),
-      });
-      if (!response.ok) { alert("Failed to update entry"); return; }
-
-      // Optimistic update: reflect changes immediately in the table
-      setRows((prev) => prev.map(r => {
-        if (r.id !== editRow.id) return r;
-        return { ...r, outlets: { ...(r.outlets || {}), ...updatedOutlets }, totalAmount };
-      }));
-      setEditModalOpen(false);
-      setEditRow({});
-      setEditValues({});
-    } catch (err) { alert("Error updating entry: " + err.message); } finally { setIsEditSaving(false); }
-  }, [editRow, editValues, outlets, isEditSaving]);
-
-  const editTotal = useMemo(() => {
-    return Object.values(editValues).reduce((sum, value) => sum + (Number(value) || 0), 0);
-  }, [editValues]);
-
   const downloadExcel = useCallback(() => {
     if (!filteredRows?.length) { alert("No data available"); return; }
     const data = filteredRows.map((row) => {
@@ -450,7 +394,7 @@ export default function DigitalPayments() {
                       );
                     })}
                     <th className="sticky right-0 bg-gray-50 z-10 px-4 py-3 whitespace-nowrap text-right">TOTAL AMOUNT</th>
-                    {isAdmin && <th className="px-4 py-3 whitespace-nowrap text-right">Edit</th>}
+
                   </tr>
                 </thead>
                 <tbody>
@@ -474,11 +418,6 @@ export default function DigitalPayments() {
                             <td className="sticky right-0 bg-inherit z-10 whitespace-nowrap px-4 py-3 text-right font-semibold">
                               {formatSmart(rowTotal)}
                             </td>
-                            {isAdmin && (
-                              <td className="whitespace-nowrap px-4 py-3 text-right">
-                                <button className="text-blue-600 hover:underline text-xs font-medium" onClick={() => handleEditClick(row)}>Edit</button>
-                              </td>
-                            )}
                           </tr>
                         );
                       })}
@@ -489,7 +428,6 @@ export default function DigitalPayments() {
                           return <td key={outlet.id} className="whitespace-nowrap px-4 py-3">{formatSmart(columnTotals[area])}</td>;
                         })}
                         <td className="sticky right-0 bg-orange-50 z-10 whitespace-nowrap px-4 py-3 text-right">{formatSmart(columnTotals.grandTotal)}</td>
-                        {isAdmin && <td className="px-4 py-3" />}
                       </tr>
                     </>
                   )}
@@ -498,43 +436,6 @@ export default function DigitalPayments() {
             </div>
           </div>
 
-          {/* Edit Modal — labels by area name, inputs preserve user's numbers */}
-          {editModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30 p-4">
-              <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
-                <h2 className="text-base sm:text-lg font-semibold mb-4">Edit Digital Payment ({formatDisplayDate(editRow.date)})</h2>
-                <div className="space-y-3">
-                  {outlets.map((outlet) => {
-                    const area = outlet.area || outlet.name || outlet.id;
-                    const displayName = outlet.area || outlet.name || area;
-                    return (
-                      <div key={area} className="flex flex-col sm:flex-row sm:items-center gap-2">
-                        <label className="w-full sm:w-36 text-xs font-medium text-gray-700">{displayName}</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="any"
-                          value={editValues[area] ?? ""}
-                          onChange={e => setEditValues((prev) => ({ ...prev, [area]: e.target.value }))}
-                          className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400"
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="mt-4 flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
-                  <span className="text-xs font-semibold text-gray-600">Total</span>
-                  <span className="text-sm font-bold text-orange-600">{formatSmart(editTotal)}</span>
-                </div>
-                <div className="flex justify-end gap-2 mt-6">
-                  <button onClick={() => { setEditModalOpen(false); setEditRow({}); setEditValues({}); }} disabled={isEditSaving} className="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 text-xs font-medium hover:bg-gray-300 disabled:opacity-50">Cancel</button>
-                  <button onClick={handleEditSave} disabled={isEditSaving} className="px-4 py-2 rounded-lg bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600 disabled:opacity-50 inline-flex items-center">
-                    {isEditSaving ? (<><svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/></svg>Saving...</>) : 'Save'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </>
       )}
     </div>

@@ -40,10 +40,6 @@ const Neccrate = () => {
 
   const [rawRows, setRawRows] = useState([]);
   const [outlets, setOutlets] = useState([]);
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editRow, setEditRow] = useState({});
-  const [editValues, setEditValues] = useState({});
-  const [isEditSaving, setIsEditSaving] = useState(false);
   const [fromDate, setFromDate] = useState(defaultWeekRange.from);
   const [toDate, setToDate] = useState(defaultWeekRange.to);
 
@@ -209,95 +205,7 @@ const Neccrate = () => {
     });
   }, [sortedDates, fromDate, toDate]);
 
-  const handleEditClick = (date) => {
-    if (!isAdmin) return;
 
-    const dateData = pivotMap[date] || {};
-    const values = {};
-    outletColumns.forEach((key) => {
-      const value = dateData[key]?.rate;
-      values[key] = value !== null && value !== undefined ? value : "";
-    });
-
-    setEditRow({ date, dateData });
-    setEditValues(values);
-    setEditModalOpen(true);
-  };
-
-  const handleEditSave = async () => {
-    if (isEditSaving) return;
-
-    const { date, dateData } = editRow;
-    const token = localStorage.getItem("token");
-    const authHeaders = {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
-
-    const patchTasks = [];
-    const postTasks = [];
-
-    outletColumns.forEach((outletKey) => {
-      const rawValue = editValues[outletKey];
-      if (rawValue === "" || rawValue === undefined || rawValue === null) return;
-
-      const numericRate = Number(rawValue);
-      if (!Number.isFinite(numericRate)) return;
-
-      const existing = dateData[outletKey];
-      if (existing?.docId) {
-        patchTasks.push(
-          fetch(`${API_URL}/neccrate/${existing.docId}`, {
-            method: "PATCH",
-            headers: authHeaders,
-            body: JSON.stringify({
-              date,
-              outletId: outletKey,
-              rate: numericRate,
-              remarks: existing.remarks || "",
-            }),
-          })
-        );
-      } else {
-        postTasks.push(
-          fetch(`${API_URL}/neccrate/add`, {
-            method: "POST",
-            headers: authHeaders,
-            body: JSON.stringify({
-              date,
-              outletId: outletKey,
-              rate: numericRate,
-              remarks: "",
-            }),
-          })
-        );
-      }
-    });
-
-    setIsEditSaving(true);
-    try {
-      const results = await Promise.all([...patchTasks, ...postTasks]);
-      for (const result of results) {
-        if (!result.ok) {
-          alert("Failed to save one or more entries");
-          return;
-        }
-      }
-
-      await fetchRates();
-      setEditModalOpen(false);
-      setEditRow({});
-      setEditValues({});
-    } catch (err) {
-      alert(`Error saving entries: ${err.message}`);
-    } finally {
-      setIsEditSaving(false);
-    }
-  };
-
-  const editTotal = useMemo(() => {
-    return Object.values(editValues).reduce((sum, value) => sum + (Number(value) || 0), 0);
-  }, [editValues]);
 
   const totalCols = 1 + outletColumns.length + (isAdmin ? 1 : 0);
 
@@ -357,7 +265,7 @@ const Neccrate = () => {
                       {getOutletName(key)}
                     </th>
                   ))}
-                  {isAdmin && <th className="px-5 py-3 font-semibold text-orange-500 whitespace-nowrap">Edit</th>}
+
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -383,16 +291,6 @@ const Neccrate = () => {
                               : <span className="text-gray-300">—</span>}
                           </td>
                         ))}
-                        {isAdmin && (
-                          <td className="px-5 py-4 whitespace-nowrap">
-                            <button
-                              onClick={() => handleEditClick(date)}
-                              className="text-orange-500 font-semibold hover:text-orange-700 text-xs md:text-sm"
-                            >
-                              Edit
-                            </button>
-                          </td>
-                        )}
                       </tr>
                     );
                   })
@@ -403,72 +301,6 @@ const Neccrate = () => {
 
           <div className="px-5 py-3 border-t border-gray-100 text-xs text-gray-400">
             Showing {filteredDates.length} date{filteredDates.length !== 1 ? "s" : ""}
-          </div>
-        </div>
-      )}
-
-      {isAdmin && editModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30 p-4">
-          <div className="bg-white rounded-2xl shadow-lg p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
-            <h2 className="text-base font-semibold mb-1 text-gray-900">Edit NECC Rates</h2>
-            <p className="text-xs text-gray-500 mb-4">{formatDisplayDate(editRow.date)}</p>
-
-            <div className="space-y-3">
-              {outletColumns.map((key) => (
-                <div key={key} className="flex flex-col sm:flex-row sm:items-center gap-2">
-                  <label className="w-full sm:w-36 text-xs font-medium text-gray-700 shrink-0 uppercase">
-                    {getOutletName(key)}
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={editValues[key] ?? ""}
-                    onChange={(e) => setEditValues((prev) => ({ ...prev, [key]: e.target.value }))}
-                    className="flex-1 border border-gray-900 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                  />
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-4 flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
-              <span className="text-xs font-semibold text-gray-600">Total</span>
-              <span className="text-sm font-bold text-orange-600">
-                {editTotal.toLocaleString("en-IN", {
-                  maximumFractionDigits: 2,
-                  minimumFractionDigits: editTotal % 1 ? 2 : 0,
-                })}
-              </span>
-            </div>
-
-            <div className="flex justify-end gap-2 mt-6">
-              <button
-                onClick={() => {
-                  setEditModalOpen(false);
-                  setEditRow({});
-                  setEditValues({});
-                  setIsEditSaving(false);
-                }}
-                disabled={isEditSaving}
-                className="px-4 py-2 rounded-xl bg-gray-100 text-gray-700 text-xs font-medium hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleEditSave}
-                disabled={isEditSaving}
-                className="px-5 py-2 rounded-xl bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center"
-              >
-                {isEditSaving ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    Saving...
-                  </>
-                ) : "Save"}
-              </button>
-            </div>
           </div>
         </div>
       )}

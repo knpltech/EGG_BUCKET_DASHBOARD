@@ -302,11 +302,6 @@ export default function DailyDamages() {
   const showForms = isAdmin || isDataAgent;
   const { damages, setDamages, addDamage } = useDamage();
 
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editRow,       setEditRow]       = useState({});
-  const [editValues,    setEditValues]    = useState({});
-  const [isEditSaving,  setIsEditSaving]  = useState(false);
-
   const fromCalendarRef = useRef(null);
   const toCalendarRef   = useRef(null);
 
@@ -412,56 +407,7 @@ export default function DailyDamages() {
 
 
 
-  const handleEditClick = (row) => {
-    const fullRow = { ...row };
-    if (!row.id) { const found = damages.find(d => d.date === row.date); if (found && found.id) fullRow.id = found.id; }
-    setEditRow(fullRow);
-    const vals = {};
-    outlets.forEach((outlet) => { const area = typeof outlet === 'string' ? outlet : outlet.area; vals[area] = row[area] ?? 0; });
-    setEditValues(vals);
-    setEditModalOpen(true);
-  };
 
-  const handleEditValueChange = (name, value) => setEditValues((prev) => ({ ...prev, [name]: Math.round(Number(value) || 0) }));
-  const handleEditCancel = () => { setEditModalOpen(false); setEditRow({}); setEditValues({}); setIsEditSaving(false); };
-  const editTotal = useMemo(() => Object.values(editValues).reduce((sum, value) => sum + Math.round(Number(value) || 0), 0), [editValues]);
-
-  const handleEditSave = async () => {
-    if (isEditSaving) return;
-    if (!editRow.id) { alert("No ID found for entry. Cannot update."); return; }
-    // Force all values to whole integers
-    const updatedDamages = {};
-    outlets.forEach((outlet) => {
-      const area = typeof outlet === 'string' ? outlet : outlet.area;
-      updatedDamages[area] = Math.round(Number(editValues[area] || 0));
-    });
-    const total = Object.values(updatedDamages).reduce((s, v) => s + v, 0);
-    setIsEditSaving(true);
-    try {
-      const response = await fetch(`${API_URL}/daily-damage/${editRow.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: editRow.date, damages: updatedDamages, total }),
-      });
-      if (!response.ok) { alert("Failed to update entry: " + response.status); return; }
-      const res  = await fetch(`${API_URL}/daily-damage/all`);
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        setDamages(data.map(d => ({
-          id: d.id,
-          date: d.date,
-          // Spread outlet values from damages object so each outlet column updates
-          ...((d.damages && typeof d.damages === 'object') ? d.damages : {}),
-          // Recalculate total from damages to guarantee consistency
-          total: d.damages
-            ? Object.values(d.damages).reduce((s, v) => s + Math.round(Number(v) || 0), 0)
-            : (d.total || 0),
-        })));
-      }
-      handleEditCancel();
-    } catch (err) { alert("Error updating entry: " + err.message); }
-    finally { setIsEditSaving(false); }
-  };
 
 
 
@@ -590,7 +536,6 @@ export default function DailyDamages() {
                       );
                     })}
                     <th className="p-3 text-center font-semibold min-w-[100px] sticky right-0 bg-orange-100 z-10">Total</th>
-                    {isAdmin && <th className="p-3 text-center min-w-[80px]">Edit</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -613,11 +558,6 @@ export default function DailyDamages() {
                         <td className="p-3 text-center font-bold text-orange-600 sticky right-0 bg-white z-10">
                           {rowTotal}
                         </td>
-                        {isAdmin && (
-                          <td className="p-3 text-center">
-                            <button className="text-blue-600 hover:underline text-xs font-medium" onClick={() => handleEditClick(d)}>Edit</button>
-                          </td>
-                        )}
                       </tr>
                     );
                   })}
@@ -637,7 +577,6 @@ export default function DailyDamages() {
                         }, 0);
                       }, 0)}
                     </td>
-                    {isAdmin && <td className="p-3"></td>}
                   </tr>
                 </tbody>
               </table>
@@ -646,52 +585,6 @@ export default function DailyDamages() {
 
           {/* ── GRAPH ANALYSIS (reads same filteredData + outlets) ── */}
           <DamageAnalytics filteredData={filteredData} outlets={displayedOutletObjects} />
-
-          {/* Edit Modal */}
-          {editModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30 p-4">
-              <div className="bg-white rounded-xl shadow-lg p-4 sm:p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
-                <h2 className="text-lg font-semibold mb-4">Edit Daily Damage ({formatDateDisplay(editRow.date)})</h2>
-                <div className="space-y-3">
-                  {outlets.map((outlet) => {
-                    const area = typeof outlet === 'string' ? outlet : outlet.area;
-                    const name = typeof outlet === 'string' ? outlet : (outlet.area || outlet.name || outlet.id || area);
-                    return (
-                      <div key={area} className="flex flex-col sm:flex-row sm:items-center gap-2">
-                        <label className="w-full sm:w-32 text-xs font-medium text-gray-700">{name}</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          value={editValues[area] ?? 0}
-                          onChange={e => handleEditValueChange(area, e.target.value)}
-                          className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400"
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="mt-4 flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
-                  <span className="text-xs font-semibold text-gray-600">Total</span>
-                  <span className="text-sm font-bold text-orange-600">{editTotal.toLocaleString("en-IN")}</span>
-                </div>
-                <div className="flex justify-end gap-2 mt-6">
-                  <button onClick={handleEditCancel} disabled={isEditSaving} className="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 text-xs font-medium hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed">Cancel</button>
-                  <button onClick={handleEditSave} disabled={isEditSaving} className="px-4 py-2 rounded-lg bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center">
-                    {isEditSaving ? (
-                      <>
-                        <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Saving...
-                      </>
-                    ) : "Save"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </>
       )}
     </div>

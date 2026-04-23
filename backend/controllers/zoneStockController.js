@@ -113,16 +113,44 @@ const getZoneOutletMap = (outlets) => {
     const zone = normalizeZoneLabel(outlet?.zoneId || outlet?.zone || outlet?.zoneNumber);
     if (!zone || !map.has(zone)) continue;
     if (outlet?.status && outlet.status !== "Active") continue;
-    const keys = [outlet?.id, outlet?.area, outlet?.name].filter(Boolean);
-    if (keys.length) map.get(zone).push(...keys);
+    const outletRef = {
+      id: outlet?.id,
+      area: outlet?.area,
+      name: outlet?.name,
+    };
+    if (outletRef.id || outletRef.area || outletRef.name) {
+      map.get(zone).push(outletRef);
+    }
   }
   for (const zone of map.keys()) {
-    map.set(zone, Array.from(new Set(map.get(zone))));
+    const uniqueById = new Map();
+    for (const outletRef of map.get(zone)) {
+      const uniqueKey = normalizeTextKey(outletRef.id || outletRef.area || outletRef.name);
+      if (!uniqueKey || uniqueById.has(uniqueKey)) continue;
+      uniqueById.set(uniqueKey, outletRef);
+    }
+    map.set(zone, Array.from(uniqueById.values()));
   }
   return map;
 };
 
-const sumValuesByKeys = (values, keys) => {
+const getValueForOutletRef = (values, outletRef, normalizedValueMap) => {
+  const directKeys = [outletRef?.id, outletRef?.area, outletRef?.name].filter(Boolean);
+  for (const key of directKeys) {
+    if (values[key] !== undefined) return toNumber(values[key]);
+  }
+
+  for (const key of directKeys) {
+    const normalizedKey = normalizeTextKey(key);
+    if (normalizedKey && normalizedValueMap.has(normalizedKey)) {
+      return toNumber(normalizedValueMap.get(normalizedKey));
+    }
+  }
+
+  return 0;
+};
+
+const sumValuesByOutletRefs = (values, outletRefs) => {
   if (!values || typeof values !== "object" || Array.isArray(values)) return 0;
 
   const normalizedValueMap = new Map();
@@ -132,20 +160,8 @@ const sumValuesByKeys = (values, keys) => {
     normalizedValueMap.set(normalizedKey, toNumber(rawValue));
   }
 
-  const matchedKeys = new Set();
-  return (keys || []).reduce((sum, key) => {
-    const normalizedKey = normalizeTextKey(key);
-    if (!normalizedKey || matchedKeys.has(normalizedKey)) return sum;
-
-    let value = 0;
-    if (values[key] !== undefined) {
-      value = toNumber(values[key]);
-    } else if (normalizedValueMap.has(normalizedKey)) {
-      value = toNumber(normalizedValueMap.get(normalizedKey));
-    }
-
-    matchedKeys.add(normalizedKey);
-    return sum + value;
+  return (outletRefs || []).reduce((sum, outletRef) => {
+    return sum + getValueForOutletRef(values, outletRef, normalizedValueMap);
   }, 0);
 };
 
@@ -182,8 +198,8 @@ const computeZoneDayTotals = async (zone, dateIso) => {
   const damagesDoc = getLatestDocByDate(damageRows, dateIso);
 
   return {
-    salesQty: sumValuesByKeys(salesDoc?.outlets, outletKeys),
-    damagesQty: sumValuesByKeys(damagesDoc?.damages, outletKeys),
+    salesQty: sumValuesByOutletRefs(salesDoc?.outlets, outletKeys),
+    damagesQty: sumValuesByOutletRefs(damagesDoc?.damages, outletKeys),
   };
 };
 
@@ -258,8 +274,8 @@ const recalculateZoneStockFromDate = async (zone, startDate) => {
 
   for (const row of rowsToRecalculate) {
     const rowDate = row.normalizedDate;
-    const salesQty = sumValuesByKeys(latestSalesByDate.get(rowDate), outletKeys);
-    const damagesQty = sumValuesByKeys(latestDamagesByDate.get(rowDate), outletKeys);
+    const salesQty = sumValuesByOutletRefs(latestSalesByDate.get(rowDate), outletKeys);
+    const damagesQty = sumValuesByOutletRefs(latestDamagesByDate.get(rowDate), outletKeys);
     const stockIn = toNumber(row.stockIn);
     const closingStock = previousClosing + stockIn - salesQty - damagesQty;
 
@@ -363,8 +379,8 @@ const ensureZoneStockDefaults = async () => {
       const salesDoc = getLatestDocByDate(salesRows, date);
       const damagesDoc = getLatestDocByDate(damageRows, date);
       const outletKeys = zoneOutletsMap.get(zone) || [];
-      const salesQty = sumValuesByKeys(salesDoc?.outlets, outletKeys);
-      const damagesQty = sumValuesByKeys(damagesDoc?.damages, outletKeys);
+      const salesQty = sumValuesByOutletRefs(salesDoc?.outlets, outletKeys);
+      const damagesQty = sumValuesByOutletRefs(damagesDoc?.damages, outletKeys);
       const openingStock = previousClosing;
       const stockIn = 0;
       const closingStock = openingStock + stockIn - salesQty - damagesQty;
@@ -435,6 +451,39 @@ const dedupeZoneStockRows = (rows) => {
   }
 
   return Array.from(byZoneDate.values());
+};
+
+const getEarliestDateByZone = (rows) => {
+  const earliestByZone = new Map();
+
+  for (const row of rows || []) {
+    const zone = normalizeZoneLabel(row?.zone);
+    const date = normalizeDate(row?.date || row?.createdAt);
+    if (!zone || !date) continue;
+
+    const existing = earliestByZone.get(zone);
+    if (!existing || String(date).localeCompare(String(existing)) < 0) {
+      earliestByZone.set(zone, date);
+    }
+  }
+
+  return earliestByZone;
+};
+
+const recalculateAllZonesFromEarliestDate = async () => {
+  const snapshot = await db.collection(COLLECTION).get();
+  if (snapshot.empty) return;
+
+  const rows = snapshot.docs.map(mapDoc);
+  const earliestByZone = getEarliestDateByZone(rows);
+  if (!earliestByZone.size) return;
+
+  const tasks = [];
+  for (const [zone, earliestDate] of earliestByZone.entries()) {
+    tasks.push(recalculateZoneStockFromDate(zone, earliestDate));
+  }
+
+  await Promise.all(tasks);
 };
 
 export const upsertZoneStockEntry = async (req, res) => {
@@ -547,6 +596,7 @@ export const upsertZoneStockEntry = async (req, res) => {
 export const getAllZoneStockEntries = async (_req, res) => {
   try {
     await ensureZoneStockDefaults();
+    await recalculateAllZonesFromEarliestDate();
     const snapshot = await db.collection(COLLECTION).get();
     const data = dedupeZoneStockRows(snapshot.docs.map(mapDoc))
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
@@ -561,6 +611,19 @@ export const getZoneStockEntriesByZone = async (req, res) => {
     await ensureZoneStockDefaults();
     const zone = normalizeZoneLabel(req.params.zone);
     if (!zone) return res.status(400).json({ message: "zone is required" });
+
+    const zoneSnapshot = await db.collection(COLLECTION).where("zone", "==", zone).get();
+    if (!zoneSnapshot.empty) {
+      const earliestDate = zoneSnapshot.docs
+        .map(mapDoc)
+        .map((row) => normalizeDate(row?.date || row?.createdAt))
+        .filter(Boolean)
+        .sort((a, b) => String(a).localeCompare(String(b)))[0];
+
+      if (earliestDate) {
+        await recalculateZoneStockFromDate(zone, earliestDate);
+      }
+    }
 
     const snapshot = await db.collection(COLLECTION).where("zone", "==", zone).get();
     const data = dedupeZoneStockRows(snapshot.docs.map(mapDoc))
