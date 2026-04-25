@@ -708,54 +708,36 @@ const Reports = () => {
               </div>
             </div>
 
-            {/* Charts Row 1: Quantity trend + Sales vs Payments */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-              <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
-                <div className="mb-2 flex items-start justify-between gap-3">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">Quantity vs Date</h3>
-                    <p className="text-xs text-gray-500 mt-0.5">Selected outlet daily sales quantity trend</p>
+            {/* Top Charts: compact pie + Sales vs Payments */}
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 mb-6">
+              <div className="rounded-2xl bg-white p-5 shadow-sm border border-gray-100 xl:col-span-4">
+                <h3 className="text-base md:text-lg font-semibold text-gray-900 mb-3">Digital vs Cash</h3>
+                <ResponsiveContainer width="100%" height={220}>
+                  <PieChart>
+                    <Pie data={pieChartData} cx="50%" cy="50%" innerRadius={45} outerRadius={76} paddingAngle={2} dataKey="value">
+                      {pieChartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', fontSize: '13px' }} formatter={(value) => `₹${value.toLocaleString()}`} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="text-center mt-2">
+                  <div className="text-[11px] text-gray-500 mb-1 uppercase tracking-wide">Total</div>
+                  <div className="text-xl font-semibold text-gray-900">
+                    ₹{digitalVsCashData ? (digitalVsCashData.digital + digitalVsCashData.cash).toLocaleString() : '0'}
                   </div>
                 </div>
-
-                {quantityTrendLoading ? (
-                  <div className="flex items-center justify-center h-[280px]">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-400"></div>
-                  </div>
-                ) : (
-                  <ResponsiveContainer width="100%" height={320}>
-                    <LineChart data={quantityTrendData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                      <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#666' }} axisLine={{ stroke: '#e5e7eb' }} tickMargin={10} />
-                      <YAxis tick={{ fontSize: 12, fill: '#666' }} axisLine={{ stroke: '#e5e7eb' }} width={40} />
-                      <Tooltip content={<QuantityTrendTooltip />} />
-                      <Legend formatter={(value) => quantityTrendOutlets.find((outlet) => outlet.key === value)?.label || value} />
-                      {quantityTrendOutlets.map((outlet, index) => (
-                        <Line
-                          key={outlet.key}
-                          type="monotone"
-                          dataKey={outlet.key}
-                          name={outlet.key}
-                          stroke={['#ff7518', '#3b82f6', '#22c55e', '#a855f7', '#ef4444', '#06b6d4', '#f59e0b'][index % 7]}
-                          strokeWidth={2.5}
-                          dot={{ r: 3 }}
-                          activeDot={{ r: 5 }}
-                          connectNulls
-                        />
-                      ))}
-                    </LineChart>
-                  </ResponsiveContainer>
-                )}
               </div>
 
-              <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
+              <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100 xl:col-span-8">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Sales vs Payments</h3>
-                <p className="text-xs text-gray-500 mb-6">Daily sales amount compared with total received amount</p>
-                <ResponsiveContainer width="100%" height={320}>
-                  <BarChart data={salesVsPaymentsData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#666' }} axisLine={{ stroke: '#e5e7eb' }} />
-                    <YAxis tick={{ fontSize: 12, fill: '#666' }} axisLine={{ stroke: '#e5e7eb' }} />
+                <p className="text-xs text-gray-500 mb-5">Daily sales amount compared with total received amount</p>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={salesVsPaymentsData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                    <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#666' }} axisLine={{ stroke: '#e5e7eb' }} tickMargin={8} />
+                    <YAxis tick={{ fontSize: 12, fill: '#666' }} axisLine={{ stroke: '#e5e7eb' }} width={44} />
                     <Tooltip contentStyle={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', fontSize: '13px' }} />
                     <Legend />
                     <Bar dataKey="sales" name="Sales" fill="#ffa866" radius={[6, 6, 0, 0]} />
@@ -765,26 +747,45 @@ const Reports = () => {
               </div>
             </div>
 
-            <div className="mb-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="rounded-2xl bg-white p-6 shadow-sm border border-gray-100 lg:col-span-2">
-                <h3 className="text-lg font-semibold text-gray-900 mb-6">Digital vs Cash</h3>
-                <ResponsiveContainer width="100%" height={320}>
-                  <PieChart>
-                    <Pie data={pieChartData} cx="50%" cy="50%" innerRadius={70} outerRadius={110} paddingAngle={2} dataKey="value">
-                      {pieChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={{ background: 'white', border: '1px solid #e5e7eb', borderRadius: '6px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', fontSize: '13px' }} formatter={(value) => `₹${value.toLocaleString()}`} />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="text-center mt-4">
-                  <div className="text-xs text-gray-600 mb-1 uppercase tracking-wide">Total</div>
-                  <div className="text-2xl font-semibold text-gray-900">
-                    ₹{digitalVsCashData ? (digitalVsCashData.digital + digitalVsCashData.cash).toLocaleString() : '0'}
-                  </div>
+            {/* Large clear line graph */}
+            <div className="mb-6 rounded-2xl bg-white p-6 shadow-sm border border-gray-100">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Quantity vs Date</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">Selected outlet daily sales quantity trend</p>
                 </div>
               </div>
+
+              {quantityTrendLoading ? (
+                <div className="flex items-center justify-center h-[360px]">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-400"></div>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={420}>
+                  <LineChart data={quantityTrendData} margin={{ top: 8, right: 20, left: 8, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                    <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#666' }} axisLine={{ stroke: '#e5e7eb' }} tickMargin={12} />
+                    <YAxis tick={{ fontSize: 12, fill: '#666' }} axisLine={{ stroke: '#e5e7eb' }} width={46} />
+                    <Tooltip content={<QuantityTrendTooltip />} />
+                    {quantityTrendOutlets.length > 1 && (
+                      <Legend formatter={(value) => quantityTrendOutlets.find((outlet) => outlet.key === value)?.label || value} />
+                    )}
+                    {quantityTrendOutlets.map((outlet, index) => (
+                      <Line
+                        key={outlet.key}
+                        type="monotone"
+                        dataKey={outlet.key}
+                        name={outlet.key}
+                        stroke={['#ff7518', '#3b82f6', '#22c55e', '#a855f7', '#ef4444', '#06b6d4', '#f59e0b'][index % 7]}
+                        strokeWidth={3}
+                        dot={{ r: 3 }}
+                        activeDot={{ r: 6 }}
+                        connectNulls
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
             </div>
 
             {/* Daily Damages Chart — full width */}
