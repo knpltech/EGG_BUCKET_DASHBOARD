@@ -9,6 +9,7 @@ import authRoutes from "./routes/authRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import incentiveRoutes from "./routes/incentiveRoutes.js";
 import advanceRoutes from "./routes/advanceRoutes.js";
+import foodAllowanceRoutes from "./routes/foodAllowanceRoutes.js";
 import dailyDamageRoutes from "./routes/dailyDamageRoutes.js";
 import neccrateRoutes from "./routes/neccrateRoutes.js";
 import dailysalesRoutes from "./routes/dailysalesRoutes.js";
@@ -20,6 +21,7 @@ import reportsRoutes from "./routes/reportsRoutes.js"; // ← ADD THIS LINE
 import supervisorRoutes from "./routes/supervisorRoutes.js";
 import dataEntryRoutes from "./routes/dataEntryRoutes.js";
 import zoneStockRoutes from "./routes/zoneStockRoutes.js";
+import remarksRoutes from "./routes/remarksRoutes.js";
 
 const app = express();
 
@@ -47,6 +49,7 @@ app.get("/api", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/incentive", incentiveRoutes);
 app.use("/api/advance", advanceRoutes);
+app.use("/api/food-allowance", foodAllowanceRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/daily-damage", dailyDamageRoutes);
 app.use("/api/neccrate", neccrateRoutes);
@@ -59,6 +62,7 @@ app.use("/api/reports", reportsRoutes); // ← ADD THIS LINE
 app.use("/api/supervisor", supervisorRoutes);
 app.use("/api/data-entry", dataEntryRoutes);
 app.use("/api/zone-stock", zoneStockRoutes);
+app.use("/api/remarks", remarksRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () =>

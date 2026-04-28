@@ -14,6 +14,8 @@ import Outlets from "./pages/Outlets";
 import Users from "./pages/Users";
 import IncentivePage from "./pages/IncentivePage";
 import AdvancePage from "./pages/AdvancePage";
+import FoodAllowancePage from "./pages/FoodAllowancePage";
+import RemarksPage from "./pages/RemarksPage";
 import DailyRevenue from "./pages/DailyRevenue";
 import Reports from "./pages/Reports";
 import { Navigate } from "react-router-dom";
@@ -85,6 +87,14 @@ function App() {
               element={<ProtectedRoute element={<AdminLayoutWithPanel><AdvancePage /></AdminLayoutWithPanel>} requiredRole="advance" />}
             />
             <Route
+              path="/admin/food-allowance"
+              element={<ProtectedRoute element={<AdminLayoutWithPanel><FoodAllowancePage /></AdminLayoutWithPanel>} requiredRole="food_allowance" />}
+            />
+            <Route
+              path="/admin/remarks"
+              element={<ProtectedRoute element={<AdminLayoutWithPanel><RemarksPage /></AdminLayoutWithPanel>} requiredRole={null} />}
+            />
+            <Route
               path="/admin/daily-revenue"
               element={<ProtectedRoute element={<AdminLayoutWithPanel><DailyRevenue /></AdminLayoutWithPanel>} requiredRole={null} />}
             />
@@ -137,6 +147,8 @@ function App() {
             <Route path="/supervisor/inventory" element={<ProtectedRoute element={<SupervisorLayout><ZoneStockEntry /></SupervisorLayout>} requiredRole="supervisor" />} />
             <Route path="/supervisor/incentive" element={<ProtectedRoute element={<SupervisorLayout><IncentivePage supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
             <Route path="/supervisor/advance" element={<ProtectedRoute element={<SupervisorLayout><AdvancePage supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
+            <Route path="/supervisor/food-allowance" element={<ProtectedRoute element={<SupervisorLayout><FoodAllowancePage supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
+            <Route path="/supervisor/remarks" element={<ProtectedRoute element={<SupervisorLayout><RemarksPage supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
 
             {/* DATA AGENT ROUTES */}
             <Route path="/dataagent/dashboard" element={<ProtectedRoute element={<DataAgentDashboard />} requiredRole="dataagent" />} />
