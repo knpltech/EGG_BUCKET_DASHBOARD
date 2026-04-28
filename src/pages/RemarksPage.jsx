@@ -35,14 +35,11 @@ const RemarksPage = () => {
   const fetchRemarks = useCallback(async () => {
     try {
       const res = await fetch(`${API_URL}/remarks/all`);
-
       if (!res.ok) {
         setRows([]);
         return;
       }
-
       const data = await res.json();
-
       if (Array.isArray(data)) {
         setRows(data.map((d) => ({ id: d.id, ...d })));
       } else {
@@ -62,11 +59,9 @@ const RemarksPage = () => {
 
   const loadOutlets = useCallback(async () => {
     setOutletLoading(true);
-
     try {
       const res = await fetch(`${API_URL}/outlets/all`);
       const data = await res.json();
-
       if (Array.isArray(data)) setOutlets(data);
       else setOutlets([]);
     } catch (err) {
@@ -82,17 +77,14 @@ const RemarksPage = () => {
 
   const filteredRows = useMemo(() => {
     const sorted = [...rows].sort((a, b) => new Date(a.date) - new Date(b.date));
-
     if (fromDate && toDate) {
       return sorted.filter((r) => {
         const d = new Date(r.date);
         return d >= new Date(fromDate) && d <= new Date(toDate);
       });
     }
-
     if (fromDate) return sorted.filter((r) => new Date(r.date) >= new Date(fromDate));
     if (toDate) return sorted.filter((r) => new Date(r.date) <= new Date(toDate));
-
     return sorted;
   }, [rows, fromDate, toDate]);
 
@@ -104,20 +96,16 @@ const RemarksPage = () => {
 
     const data = filteredRows.map((row) => {
       const obj = { Date: row.date };
-
       displayedOutlets.forEach((o) => {
         const area = o.area || o;
         obj[area] = String(row.outlets?.[area] ?? "");
       });
-
       return obj;
     });
 
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-
     XLSX.utils.book_append_sheet(wb, ws, "Remarks");
-
     XLSX.writeFile(wb, "Remarks_Report.xlsx");
   };
 
