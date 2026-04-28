@@ -189,8 +189,12 @@ export default function DataEntry() {
   const [allNeccData,      setAllNeccData]      = useState([]);
   const [allIncentiveData, setAllIncentiveData] = useState([]);
   const [allAdvanceData,   setAllAdvanceData]   = useState([]);
+  const [allFoodAllowanceData, setAllFoodAllowanceData] = useState([]);
+  const [allRemarksData,   setAllRemarksData]   = useState([]);
   const [incentive,        setIncentive]        = useState("");
   const [advance,          setAdvance]          = useState("");
+  const [foodAllowance,    setFoodAllowance]    = useState("");
+  const [remarks,          setRemarks]          = useState("");
 
   const [supervisorInfo, setSupervisorInfo] = useState(null);
   const [supervisorZones, setSupervisorZones] = useState([]);
@@ -207,6 +211,8 @@ export default function DataEntry() {
   const [digitalLocked,   setDigitalLocked]   = useState(false);
   const [incentiveLocked, setIncentiveLocked] = useState(false);
   const [advanceLocked,   setAdvanceLocked]   = useState(false);
+  const [foodAllowanceLocked, setFoodAllowanceLocked] = useState(false);
+  const [remarksLocked,   setRemarksLocked]   = useState(false);
   const [isSubmitting,    setIsSubmitting]    = useState(false);
   const [isDeleting,      setIsDeleting]      = useState(false);
 
@@ -243,7 +249,7 @@ export default function DataEntry() {
   /* ================= LOAD ALL COLLECTIONS ================= */
   const loadAllData = useCallback(async () => {
     try {
-      const [sRes, cRes, dRes, dmRes, nRes, iRes, aRes] = await Promise.all([
+      const [sRes, cRes, dRes, dmRes, nRes, iRes, aRes, fRes, rRes] = await Promise.all([
         fetch(`${API}/dailysales/all`),
         fetch(`${API}/cash-payments/all`),
         fetch(`${API}/digital-payments/all`),
@@ -251,8 +257,10 @@ export default function DataEntry() {
         fetch(`${API}/neccrate/all`),
         fetch(`${API}/incentive/all`),
         fetch(`${API}/advance/all`),
+        fetch(`${API}/food-allowance/all`),
+        fetch(`${API}/remarks/all`),
       ]);
-      const [sData, cData, dData, dmData, nData, iData, aData] = await Promise.all([
+      const [sData, cData, dData, dmData, nData, iData, aData, fData, rData] = await Promise.all([
         sRes.ok  ? sRes.json()  : [],
         cRes.ok  ? cRes.json()  : [],
         dRes.ok  ? dRes.json()  : [],
@@ -260,6 +268,8 @@ export default function DataEntry() {
         nRes.ok  ? nRes.json()  : [],
         iRes.ok  ? iRes.json()  : [],
         aRes.ok  ? aRes.json()  : [],
+        fRes.ok  ? fRes.json()  : [],
+        rRes.ok  ? rRes.json()  : [],
       ]);
       setAllSalesData(Array.isArray(sData)  ? sData  : []);
       setAllCashData(Array.isArray(cData)   ? cData  : []);
@@ -268,6 +278,8 @@ export default function DataEntry() {
       setAllNeccData(Array.isArray(nData)   ? nData  : []);
       setAllIncentiveData(Array.isArray(iData) ? iData : []);
       setAllAdvanceData(Array.isArray(aData) ? aData : []);
+      setAllFoodAllowanceData(Array.isArray(fData) ? fData : []);
+      setAllRemarksData(Array.isArray(rData) ? rData : []);
     } catch (err) {
       console.error("Error loading all data:", err);
     }
@@ -292,6 +304,8 @@ export default function DataEntry() {
     const hasInIncentive = (d) => allIncentiveData.some(doc =>
       normalizeDate(doc.date || doc.createdAt) === d && doc.outlets && doc.outlets[outlet] !== undefined);
     const hasInAdvance = (d) => allAdvanceData.some(doc =>
+      normalizeDate(doc.date || doc.createdAt) === d && doc.outlets && doc.outlets[outlet] !== undefined);
+    const hasInFoodAllowance = (d) => allFoodAllowanceData.some(doc =>
       normalizeDate(doc.date || doc.createdAt) === d && doc.outlets && doc.outlets[outlet] !== undefined);
 
     const allDates = new Set();
@@ -319,15 +333,19 @@ export default function DataEntry() {
       if (doc.outlets && doc.outlets[outlet] !== undefined)
         allDates.add(normalizeDate(doc.date || doc.createdAt));
     });
+    allFoodAllowanceData.forEach(doc => {
+      if (doc.outlets && doc.outlets[outlet] !== undefined)
+        allDates.add(normalizeDate(doc.date || doc.createdAt));
+    });
 
     const completed = new Set();
     allDates.forEach(d => {
-      if ([hasInSales(d), hasInCash(d), hasInDigital(d), hasInDamages(d), hasInNecc(d), hasInIncentive(d), hasInAdvance(d)].every(Boolean))
+      if ([hasInSales(d), hasInCash(d), hasInDigital(d), hasInDamages(d), hasInNecc(d), hasInIncentive(d), hasInAdvance(d), hasInFoodAllowance(d)].every(Boolean))
         completed.add(d);
     });
 
     return { completedDates: completed };
-  }, [outlet, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allAdvanceData]);
+  }, [outlet, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allAdvanceData, allFoodAllowanceData]);
 
   /* ================= SUPERVISOR INFO ================= */
   useEffect(() => {
@@ -390,9 +408,23 @@ export default function DataEntry() {
       if (supervisor?.zone) allZones.add(supervisor.zone);
     }
 
+    const foodAllowanceEntry = allFoodAllowanceData.find(doc => normalizeDate(doc.date || doc.createdAt) === date);
+    if (foodAllowanceEntry?.addedByPerOutlet?.[outlet]) {
+      const supervisor = foodAllowanceEntry.addedByPerOutlet[outlet];
+      if (!firstSupervisor) firstSupervisor = supervisor;
+      if (supervisor?.zone) allZones.add(supervisor.zone);
+    }
+
+    const remarksEntry = allRemarksData.find(doc => normalizeDate(doc.date || doc.createdAt) === date);
+    if (remarksEntry?.addedByPerOutlet?.[outlet]) {
+      const supervisor = remarksEntry.addedByPerOutlet[outlet];
+      if (!firstSupervisor) firstSupervisor = supervisor;
+      if (supervisor?.zone) allZones.add(supervisor.zone);
+    }
+
     setSupervisorInfo(firstSupervisor);
     setSupervisorZones(Array.from(allZones).sort());
-  }, [date, outlet, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allAdvanceData]);
+  }, [date, outlet, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allAdvanceData, allFoodAllowanceData, allRemarksData]);
 
   /* ================= LOCK CHECK ================= */
   useEffect(() => {
@@ -404,6 +436,7 @@ export default function DataEntry() {
       setDigital(""); setDigitalLocked(false);
       setIncentive(""); setIncentiveLocked(false);
       setAdvance(""); setAdvanceLocked(false);
+      setRemarks(""); setRemarksLocked(false);
       return;
     }
 
@@ -442,7 +475,17 @@ export default function DataEntry() {
     if (foundAdvance) { setAdvance(foundAdvance.outlets[outlet]); setAdvanceLocked(true); }
     else { setAdvance(""); setAdvanceLocked(false); }
 
-  }, [outlet, date, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allAdvanceData]);
+    const foundFoodAllowance = allFoodAllowanceData.find(doc =>
+      normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
+    if (foundFoodAllowance) { setFoodAllowance(foundFoodAllowance.outlets[outlet]); setFoodAllowanceLocked(true); }
+    else { setFoodAllowance(""); setFoodAllowanceLocked(false); }
+
+    const foundRemarks = allRemarksData.find(doc =>
+      normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
+    if (foundRemarks) { setRemarks(foundRemarks.outlets[outlet]); setRemarksLocked(true); }
+    else { setRemarks(""); setRemarksLocked(false); }
+
+  }, [outlet, date, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allAdvanceData, allFoodAllowanceData, allRemarksData]);
 
   /* ================= RESET ================= */
   const handleReset = () => {
@@ -453,6 +496,8 @@ export default function DataEntry() {
     if (!digitalLocked)   setDigital("");
     if (!incentiveLocked) setIncentive("");
     if (!advanceLocked)   setAdvance("");
+    if (!foodAllowanceLocked) setFoodAllowance("");
+    if (!remarksLocked)   setRemarks("");
   };
 
   /* ================= DELETE OUTLET DATA FOR DATE (admin only) ================= */
@@ -477,6 +522,8 @@ export default function DataEntry() {
         `${API}/neccrate/date/${date}/outlet/${encoded}`,
         `${API}/incentive/date/${date}/outlet/${encoded}`,
         `${API}/advance/date/${date}/outlet/${encoded}`,
+        `${API}/food-allowance/date/${date}/outlet/${encoded}`,
+        `${API}/remarks/date/${date}/outlet/${encoded}`,
       ];
 
       const results = await Promise.all(endpoints.map(url =>
@@ -505,6 +552,8 @@ export default function DataEntry() {
       setDigital(""); setDigitalLocked(false);
       setIncentive(""); setIncentiveLocked(false);
       setAdvance(""); setAdvanceLocked(false);
+      setFoodAllowance(""); setFoodAllowanceLocked(false);
+      setRemarks(""); setRemarksLocked(false);
       setSupervisorInfo(null);
       setSupervisorZones([]);
 
@@ -531,7 +580,8 @@ export default function DataEntry() {
 
     const allAlreadyLocked =
       neccrateLocked && salesLocked && damagesLocked &&
-      cashLocked && digitalLocked && incentiveLocked && advanceLocked;
+      cashLocked && digitalLocked && incentiveLocked && advanceLocked &&
+      foodAllowanceLocked;
 
     if (allAlreadyLocked) {
       alert("All data for this outlet and date is already submitted. No changes to save.");
@@ -546,6 +596,7 @@ export default function DataEntry() {
     if (!digitalLocked   && digital === "")   missingFields.push("Digital Payment");
     if (!incentiveLocked && incentive === "") missingFields.push("Daily Incentive");
     if (!advanceLocked   && advance === "")   missingFields.push("Advance");
+    if (!foodAllowanceLocked && foodAllowance === "") missingFields.push("Food Allowance");
 
     if (missingFields.length > 0) {
       alert(`Please fill in all fields before submitting:\n• ${missingFields.join("\n• ")}`);
@@ -607,6 +658,12 @@ export default function DataEntry() {
           body: JSON.stringify({ date, outlets: { [outlet]: Number(digital) }, addedBy: addedByInfo }),
         }));
       }
+      if (!foodAllowanceLocked && foodAllowance !== "") {
+        tasks.push(fetch(`${API}/food-allowance/add`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ date, outlet, value: Number(foodAllowance), addedBy: addedByInfo }),
+        }));
+      }
 
       const results = await Promise.all(tasks);
       for (const r of results) {
@@ -625,6 +682,7 @@ export default function DataEntry() {
       if (!digitalLocked   && digital !== "")   setDigitalLocked(true);
       if (!incentiveLocked && incentive !== "") setIncentiveLocked(true);
       if (!advanceLocked   && advance !== "")   setAdvanceLocked(true);
+      if (!foodAllowanceLocked && foodAllowance !== "") setFoodAllowanceLocked(true);
 
       await loadAllData();
     } catch (err) {
@@ -652,11 +710,12 @@ export default function DataEntry() {
     (!neccrateLocked && neccrate !== "") || (!salesLocked && sales !== "") ||
     (!damagesLocked  && damages !== "")  || (!cashLocked  && cash !== "")  ||
     (!digitalLocked  && digital !== "")  || (!incentiveLocked && incentive !== "") ||
-    (!advanceLocked  && advance !== "");
+    (!advanceLocked  && advance !== "")  || (!foodAllowanceLocked && foodAllowance !== "");
 
   const allAlreadyLocked =
     neccrateLocked && salesLocked && damagesLocked &&
-    cashLocked && digitalLocked && incentiveLocked && advanceLocked;
+    cashLocked && digitalLocked && incentiveLocked && advanceLocked &&
+    foodAllowanceLocked;
 
   const allUnlockedFilled =
     (neccrateLocked  || neccrate !== "")  &&
@@ -665,7 +724,8 @@ export default function DataEntry() {
     (cashLocked      || cash !== "")      &&
     (digitalLocked   || digital !== "")   &&
     (incentiveLocked || incentive !== "") &&
-    (advanceLocked   || advance !== "");
+    (advanceLocked   || advance !== "")   &&
+    (foodAllowanceLocked || foodAllowance !== "");
 
   const canSubmit = !allAlreadyLocked && allUnlockedFilled;
 
@@ -892,6 +952,30 @@ export default function DataEntry() {
       onChange={e => setAdvance(e.target.value)}
     />
     {advanceLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
+  </div>
+
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Food Allowance</label>
+    <input
+      type="number" placeholder="Food Allowance"
+      className={inputCls(foodAllowanceLocked)}
+      value={foodAllowance} disabled={foodAllowanceLocked || outletInactive}
+      onChange={e => setFoodAllowance(e.target.value)}
+    />
+    {foodAllowanceLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
+  </div>
+</div>
+
+<div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Remarks (optional)</label>
+    <input
+      type="text" placeholder="Add remarks if any"
+      className={inputCls(remarksLocked)}
+      value={remarks} disabled={remarksLocked || outletInactive}
+      onChange={e => setRemarks(e.target.value)}
+    />
+    {remarksLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
   </div>
 
   <div />

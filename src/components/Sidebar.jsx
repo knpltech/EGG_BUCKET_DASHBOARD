@@ -6,6 +6,8 @@ import { faUserPlus } from "@fortawesome/free-solid-svg-icons";
 import { faMoneyBillWave } from "@fortawesome/free-solid-svg-icons";
 import { faGift } from "@fortawesome/free-solid-svg-icons";
 import { faSliders } from "@fortawesome/free-solid-svg-icons";
+import { faUtensils } from "@fortawesome/free-solid-svg-icons";
+import { faClipboard } from "@fortawesome/free-solid-svg-icons";
 import {
   faTableCells,
   faEgg,
@@ -111,6 +113,14 @@ export default function Sidebar({ supervisor }) {
               <FontAwesomeIcon icon={faSliders} />
               {open && "Advance"}
             </Link>
+            <Link to="/supervisor/food-allowance" className={linkClass("/supervisor/food-allowance")}> 
+              <FontAwesomeIcon icon={faUtensils} />
+              {open && "Food Allowance"}
+            </Link>
+            <Link to="/supervisor/remarks" className={linkClass("/supervisor/remarks")}> 
+              <FontAwesomeIcon icon={faClipboard} />
+              {open && "Remarks"}
+            </Link>
             <Link to="/supervisor/dailysales" className={linkClass("/supervisor/dailysales")}> 
               <FontAwesomeIcon icon={faEgg} />
               {open && "Daily Sales Quantity"}
@@ -159,6 +169,14 @@ export default function Sidebar({ supervisor }) {
             <Link to="/admin/advance" className={linkClass("/admin/advance")}> 
               <FontAwesomeIcon icon={faSliders} />
               {open && "Advance"}
+            </Link>
+            <Link to="/admin/food-allowance" className={linkClass("/admin/food-allowance")}> 
+              <FontAwesomeIcon icon={faUtensils} />
+              {open && "Food Allowance"}
+            </Link>
+            <Link to="/admin/remarks" className={linkClass("/admin/remarks")}> 
+              <FontAwesomeIcon icon={faClipboard} />
+              {open && "Remarks"}
             </Link>
             <Link to="/admin/dailysales" className={linkClass("/admin/dailysales")}> 
               <FontAwesomeIcon icon={faEgg} />
