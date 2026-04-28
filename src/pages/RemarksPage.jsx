@@ -9,6 +9,9 @@ import Topbar from "../components/Topbar";
 import Dailyheader from "../components/Dailyheader";
 import DailyTable from "../components/DailyTable";
 
+const OUTLETS_KEY = "egg_outlets_v1";
+const REMARKS_KEY = "egg_remarks_v1";
+
 const RemarksPage = () => {
   const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
   const defaultWeekRange = useMemo(() => getThisWeekRange(), []);
@@ -41,13 +44,24 @@ const RemarksPage = () => {
       }
       const data = await res.json();
       if (Array.isArray(data)) {
-        setRows(data.map((d) => ({ id: d.id, ...d })));
+        const mapped = data.map((d) => ({ id: d.id, ...d }));
+        setRows(mapped);
+        localStorage.setItem(REMARKS_KEY, JSON.stringify(mapped));
       } else {
         setRows([]);
       }
     } catch (err) {
       console.error("Error fetching remarks:", err);
-      setRows([]);
+      const saved = localStorage.getItem(REMARKS_KEY);
+      if (saved) {
+        try {
+          setRows(JSON.parse(saved));
+        } catch {
+          setRows([]);
+        }
+      } else {
+        setRows([]);
+      }
     }
   }, []);
 
@@ -61,11 +75,30 @@ const RemarksPage = () => {
     setOutletLoading(true);
     try {
       const res = await fetch(`${API_URL}/outlets/all`);
-      const data = await res.json();
-      if (Array.isArray(data)) setOutlets(data);
-      else setOutlets([]);
-    } catch (err) {
-      setOutlets([]);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setOutlets(data);
+          localStorage.setItem(OUTLETS_KEY, JSON.stringify(data));
+        } else {
+          throw new Error("Empty outlets response");
+        }
+      } else {
+        throw new Error("Failed to fetch outlets");
+      }
+    } catch {
+      const saved = localStorage.getItem(OUTLETS_KEY);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) setOutlets(parsed);
+          else setOutlets([]);
+        } catch {
+          setOutlets([]);
+        }
+      } else {
+        setOutlets([]);
+      }
     } finally {
       setOutletLoading(false);
     }

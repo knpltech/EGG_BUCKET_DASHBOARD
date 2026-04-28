@@ -210,6 +210,7 @@ export default function SupervisorDashboard() {
   const [totalCashPayments, setTotalCashPayments] = useState(0);
   const [totalIncentive, setTotalIncentive] = useState(0);
   const [totalAdvance, setTotalAdvance] = useState(0);
+  const [totalFoodAllowance, setTotalFoodAllowance] = useState(0);
   const [damagesToday, setDamagesToday] = useState(0);
   const [neccRate, setNeccRate] = useState("₹0.00");
   const [zoneClosingStock, setZoneClosingStock] = useState({});
@@ -248,7 +249,7 @@ export default function SupervisorDashboard() {
     const today = getLocalIsoDate();
 
     try {
-      const [outletsRes, salesRes, damagesRes, cashRes, digitalRes, incentiveRes, advanceRes, zoneStockRes] = await Promise.all([
+      const [outletsRes, salesRes, damagesRes, cashRes, digitalRes, incentiveRes, advanceRes, zoneStockRes, foodAllowanceRes] = await Promise.all([
         fetch(`${API_URL}/outlets/all`),
         fetch(`${API_URL}/dailysales/all`),
         fetch(`${API_URL}/daily-damage/all`),
@@ -257,6 +258,7 @@ export default function SupervisorDashboard() {
         fetch(`${API_URL}/incentive/all`),
         fetch(`${API_URL}/advance/all`),
         fetch(`${API_URL}/zone-stock/all`),
+        fetch(`${API_URL}/food-allowance/all`),
       ]);
 
       const outletsRaw = await outletsRes.json();
@@ -267,6 +269,7 @@ export default function SupervisorDashboard() {
       const incentiveRaw = await incentiveRes.json();
       const advanceRaw = await advanceRes.json();
       const zoneStockRaw = await zoneStockRes.json();
+      const foodAllowanceRaw = await foodAllowanceRes.json();
 
       const zoneOutlets = Array.isArray(outletsRaw)
         ? outletsRaw.filter((outlet) => isOutletInSupervisorZones(outlet, normalizedUserZones))
@@ -282,6 +285,7 @@ export default function SupervisorDashboard() {
       setTotalCashPayments(cashTotal);
       setTotalIncentive(getTodayMappedOutletsTotal(incentiveRaw, activeOutlets, today));
       setTotalAdvance(getTodayMappedOutletsTotal(advanceRaw, activeOutlets, today));
+      setTotalFoodAllowance(getTodayMappedOutletsTotal(foodAllowanceRaw, activeOutlets, today));
       setDamagesToday(getTodayDamageTotal(damagesRaw, activeOutlets, today));
       const computedRate = salesTotal > 0 ? totalRevenue / salesTotal : 0;
       setNeccRate(`₹${computedRate.toFixed(2)}`);
@@ -310,6 +314,7 @@ export default function SupervisorDashboard() {
       setTotalCashPayments(0);
       setTotalIncentive(0);
       setTotalAdvance(0);
+      setTotalFoodAllowance(0);
       setDamagesToday(0);
       setNeccRate("₹0.00");
       setZoneClosingStock({});
@@ -369,6 +374,10 @@ export default function SupervisorDashboard() {
             <StatCard title="Today&apos;s Closing Stock" value={totalClosingStock.toLocaleString("en-IN")} icon="📦" />
             <StatCard title="Total Incentives" value={formatCurrency(totalIncentive)} icon="🎯" />
             <StatCard title="Total Advances" value={formatCurrency(totalAdvance)} icon="💰" />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-6 mb-8">
+            <StatCard title="Total Food Allowances" value={formatCurrency(totalFoodAllowance)} icon="🍽️" />
           </div>
 
           {showZoneBreakdown ? (
