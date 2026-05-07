@@ -16,6 +16,7 @@ const getOutletKey = (payload = {}) => payload.outletId || payload.outlet || nul
 const normalizeNeccDoc = (id, data = {}) => {
   const outletKey = data.outlet || data.outletId || null;
   const rateValue = parseNumericRate(data.rateValue) ?? parseNumericRate(data.rate) ?? 0;
+  const formRemark = String(data.form_remark ?? data.remarks ?? "").trim();
 
   return {
     id,
@@ -24,15 +25,16 @@ const normalizeNeccDoc = (id, data = {}) => {
     outletId: data.outletId || outletKey,
     rateValue,
     rate: `₹${rateValue.toFixed(2)} per egg`,
-    remarks: data.remarks || "—",
+    form_remark: formRemark,
   };
 };
 
 export const addNeccRate = async (req, res) => {
   try {
-    const { date, remarks, addedBy } = req.body;
+    const { date, form_remark, remarks, addedBy } = req.body;
     const outletKey = getOutletKey(req.body);
     const numericRate = parseNumericRate(req.body.rate);
+    const normalizedFormRemark = String(form_remark ?? remarks ?? "").trim();
 
     if (!date || !outletKey || numericRate === null) {
       return res.status(400).json({ message: "Missing required field: date, outletId/outlet, or rate" });
@@ -53,7 +55,7 @@ export const addNeccRate = async (req, res) => {
       outlet: outletKey,
       rateValue: numericRate,
       rate: `₹${numericRate.toFixed(2)} per egg`,
-      remarks: remarks || "—",
+      form_remark: normalizedFormRemark,
       createdAt: new Date(),
     };
 
@@ -86,9 +88,10 @@ export const getAllNeccRates = async (req, res) => {
 export const updateNeccRate = async (req, res) => {
   try {
     const { id } = req.params;
-    const { date, remarks } = req.body;
+    const { date, form_remark, remarks } = req.body;
     const outletKey = getOutletKey(req.body);
     const numericRate = parseNumericRate(req.body.rate);
+    const normalizedFormRemark = String(form_remark ?? remarks ?? "").trim();
 
     if (!date || !outletKey || numericRate === null) {
       return res.status(400).json({ message: "Missing required field: date, outletId/outlet, or rate" });
@@ -100,7 +103,7 @@ export const updateNeccRate = async (req, res) => {
       outlet: outletKey,
       rateValue: numericRate,
       rate: `₹${numericRate.toFixed(2)} per egg`,
-      remarks: remarks || "—",
+      form_remark: normalizedFormRemark,
       updatedAt: new Date(),
     };
 

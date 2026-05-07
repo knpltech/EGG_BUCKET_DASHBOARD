@@ -286,7 +286,8 @@ const recalculateZoneStockFromDate = async (zone, startDate) => {
         salesQty,
         damagesQty,
         closingStock,
-        remarks: String(row.remarks || "").trim().slice(0, 500),
+        inv_remark: String(row.inv_remark ?? row.remarks ?? "").trim().slice(0, 500),
+        remarks: String(row.inv_remark ?? row.remarks ?? "").trim().slice(0, 500),
         updatedAt: new Date(),
       },
     });
@@ -415,7 +416,7 @@ const ensureZoneStockDefaults = async () => {
 
 const mapDoc = (doc) => ({ id: doc.id, ...doc.data() });
 
-const hasNonEmptyRemarks = (row) => String(row?.remarks || "").trim().length > 0;
+const hasNonEmptyRemarks = (row) => String(row?.inv_remark ?? row?.remarks ?? "").trim().length > 0;
 
 const selectPreferredRow = (current, candidate) => {
   if (!current) return candidate;
@@ -488,7 +489,7 @@ const recalculateAllZonesFromEarliestDate = async () => {
 
 export const upsertZoneStockEntry = async (req, res) => {
   try {
-    const { zone, date, stockIn, remarks, addedBy } = req.body || {};
+    const { zone, date, stockIn, inv_remark, remarks, addedBy } = req.body || {};
 
     const normalizedZone = normalizeZoneLabel(zone);
     const normalizedDate = normalizeDate(date);
@@ -500,7 +501,7 @@ export const upsertZoneStockEntry = async (req, res) => {
     const computedTotals = await computeZoneDayTotals(normalizedZone, normalizedDate);
     const normalizedOpeningStock = await getPreviousClosingStock(normalizedZone, normalizedDate);
     const normalizedStockIn = toNumber(stockIn);
-    const normalizedRemarks = String(remarks || "").trim().slice(0, 500);
+    const normalizedRemark = String(inv_remark ?? remarks ?? "").trim().slice(0, 500);
     const computedClosingStock = normalizedOpeningStock + normalizedStockIn - computedTotals.salesQty - computedTotals.damagesQty;
 
     const payload = {
@@ -508,7 +509,8 @@ export const upsertZoneStockEntry = async (req, res) => {
       date: normalizedDate,
       openingStock: normalizedOpeningStock,
       stockIn: normalizedStockIn,
-      remarks: normalizedRemarks,
+      inv_remark: normalizedRemark,
+      remarks: normalizedRemark,
       salesQty: computedTotals.salesQty,
       damagesQty: computedTotals.damagesQty,
       closingStock: computedClosingStock,
@@ -546,10 +548,11 @@ export const upsertZoneStockEntry = async (req, res) => {
     if (matchingDocs.length) {
       const primaryDoc = matchingDocs[0];
       const duplicateDocs = matchingDocs.slice(1);
-      const finalRemarks = normalizedRemarks;
+      const finalRemarks = normalizedRemark;
 
       const updatePayload = {
         ...payload,
+        inv_remark: finalRemarks,
         remarks: finalRemarks,
         date: normalizedDate,
       };

@@ -4,9 +4,10 @@ import { validateSupervisorSameDayEntry } from "../utils/entryCutoff.js";
 /* ADD REMARKS */
 export const addRemarks = async (req, res) => {
   try {
-    const { date, outlet, value, addedBy } = req.body;
+    const { date, outlet, value, form_remark, addedBy } = req.body;
+    const normalizedRemark = String(form_remark ?? value ?? "").trim();
 
-    if (!date || !outlet || value === undefined) {
+    if (!date || !outlet || normalizedRemark === "") {
       return res.status(400).json({ error: "Missing fields" });
     }
 
@@ -33,7 +34,8 @@ export const addRemarks = async (req, res) => {
       }
 
       const updatedData = {
-        [`outlets.${outlet}`]: value,
+        [`outlets.${outlet}`]: normalizedRemark,
+        form_remark: normalizedRemark,
       };
 
       if (addedBy) {
@@ -51,7 +53,8 @@ export const addRemarks = async (req, res) => {
     } else {
       const docData = {
         date,
-        outlets: { [outlet]: value },
+        outlets: { [outlet]: normalizedRemark },
+        form_remark: normalizedRemark,
       };
 
       if (addedBy) {
@@ -89,9 +92,12 @@ export const getAllRemarks = async (req, res) => {
 /* UPDATE REMARKS BY ID */
 export const updateRemarks = async (req, res) => {
   const { id } = req.params;
-  const { outlets } = req.body;
+  const { outlets, form_remark } = req.body;
   try {
-    await db.collection("remarks").doc(id).update({ outlets });
+    await db.collection("remarks").doc(id).update({
+      outlets,
+      ...(form_remark !== undefined ? { form_remark: String(form_remark).trim() } : {}),
+    });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });

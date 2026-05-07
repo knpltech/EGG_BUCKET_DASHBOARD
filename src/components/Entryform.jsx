@@ -262,7 +262,7 @@ const Entryform = ({ addRow, blockedDates, rows, outlets }) => {
       date,
       outletId,
       rate: `₹${rate}`,
-      remarks: remarks || "—",
+      form_remark: String(remarks || "").trim(),
     });
     setDate("");
     setRate("");

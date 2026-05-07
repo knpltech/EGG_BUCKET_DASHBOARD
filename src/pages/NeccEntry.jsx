@@ -182,7 +182,7 @@ export default function NeccEntry() {
             ? (found.outlets[outlet] ?? found.rateValue ?? found.rate ?? "")
             : (found.rateValue ?? found.rate ?? "")
         );
-        setRemarks(found.remarks || "");
+        setRemarks(String(found.form_remark ?? found.remarks ?? ""));
       }
     } else {
       setRate(""); setRemarks("");
@@ -201,7 +201,7 @@ export default function NeccEntry() {
       const response = await fetch(`${API_URL}/neccrate/add`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date, outletId: outlet, rate: Number(rate), remarks }),
+        body: JSON.stringify({ date, outletId: outlet, rate: Number(rate), form_remark: String(remarks || "").trim() }),
       });
 
       if (!response.ok) { alert("Failed to save NECC rate"); return; }

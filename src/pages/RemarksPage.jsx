@@ -7,7 +7,6 @@ import * as XLSX from "xlsx";
 
 import Topbar from "../components/Topbar";
 import Dailyheader from "../components/Dailyheader";
-import DailyTable from "../components/DailyTable";
 
 const OUTLETS_KEY = "egg_outlets_v1";
 const REMARKS_KEY = "egg_remarks_v1";
@@ -121,6 +120,14 @@ const RemarksPage = () => {
     return sorted;
   }, [rows, fromDate, toDate]);
 
+  const getOutletRemark = (row, outletId) => {
+    const outletsObj = row?.outlets || {};
+    const outletMeta = displayedOutlets.find((o) => (typeof o === "string" ? o : o.id) === outletId);
+    const area = outletMeta?.area || outletMeta?.name || outletId;
+    const value = outletsObj[outletId] ?? (area && outletsObj[area]);
+    return String(value ?? "").trim();
+  };
+
   const handleDownload = () => {
     if (!filteredRows.length) {
       alert("No data available");
@@ -180,12 +187,47 @@ const RemarksPage = () => {
               </div>
             )}
 
-            <DailyTable
-              rows={filteredRows}
-              outlets={displayedOutlets.map((o) => (typeof o === "string" ? o : o.id))}
-              allOutlets={outlets}
-              showRupee={false}
-            />
+            <div className="overflow-x-auto rounded-2xl bg-eggWhite shadow-sm">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr className="text-left text-xs font-semibold text-gray-500">
+                    <th className="min-w-[130px] px-4 py-3">DATE</th>
+                    {displayedOutlets.map((outlet) => {
+                      const outletId = typeof outlet === "string" ? outlet : outlet.id;
+                      const outletName = typeof outlet === "string" ? outlet : (outlet.area || outlet.name || outlet.id);
+                      return (
+                        <th key={outletId} className="px-4 py-3 whitespace-nowrap">
+                          {String(outletName || outletId).toUpperCase()}
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRows.length > 0 ? (
+                    filteredRows.map((row, index) => (
+                      <tr key={`${row.date || index}`} className={`text-xs text-gray-700 md:text-sm ${index % 2 === 0 ? "bg-white" : "bg-gray-50/60"}`}>
+                        <td className="whitespace-nowrap px-4 py-3">{row.date}</td>
+                        {displayedOutlets.map((outlet) => {
+                          const outletId = typeof outlet === "string" ? outlet : outlet.id;
+                          return (
+                            <td key={outletId} className="whitespace-nowrap px-4 py-3">
+                              {getOutletRemark(row, outletId) || "-"}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={Math.max(displayedOutlets.length + 1, 2)} className="py-8 text-center text-gray-500 text-sm bg-white">
+                        No remarks found for the selected period
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </>
         )}
       </div>

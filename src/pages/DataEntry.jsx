@@ -482,7 +482,7 @@ export default function DataEntry() {
 
     const foundRemarks = allRemarksData.find(doc =>
       normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
-    if (foundRemarks) { setRemarks(foundRemarks.outlets[outlet]); setRemarksLocked(true); }
+    if (foundRemarks) { setRemarks(String(foundRemarks.form_remark ?? foundRemarks.outlets[outlet] ?? "")); setRemarksLocked(true); }
     else { setRemarks(""); setRemarksLocked(false); }
 
   }, [outlet, date, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allAdvanceData, allFoodAllowanceData, allRemarksData]);
@@ -662,6 +662,18 @@ export default function DataEntry() {
         tasks.push(fetch(`${API}/food-allowance/add`, {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ date, outlet, value: Number(foodAllowance), addedBy: addedByInfo }),
+        }));
+      }
+      if (!remarksLocked && String(remarks || "").trim() !== "") {
+        tasks.push(fetch(`${API}/remarks/add`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            date,
+            outlet,
+            value: String(remarks || "").trim(),
+            form_remark: String(remarks || "").trim(),
+            addedBy: addedByInfo,
+          }),
         }));
       }
 

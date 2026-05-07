@@ -303,7 +303,7 @@ export default function ZoneStockEntry() {
   useEffect(() => {
     if (existingForDate) {
       setStockIn(String(toNumber(existingForDate.stockIn)));
-      setRemarks(String(existingForDate.remarks || ""));
+      setRemarks(String(existingForDate.inv_remark ?? existingForDate.remarks ?? ""));
       return;
     }
     setStockIn("0");
@@ -353,7 +353,8 @@ export default function ZoneStockEntry() {
           date: selectedDate,
           openingStock,
           stockIn: stockInNumber,
-          remarks: remarks.trim(),
+          inv_remark: String(remarks || "").trim(),
+          remarks: String(remarks || "").trim(),
           salesQty: selectedDateSales,
           damagesQty: selectedDateDamages,
           closingStock,
@@ -386,7 +387,7 @@ export default function ZoneStockEntry() {
     if (!isAdmin || !row) return;
     setEditRow(row);
     setEditStockIn(String(toNumber(row.stockIn)));
-    setEditRemarks(String(row.remarks || ""));
+    setEditRemarks(String(row.inv_remark ?? row.remarks ?? ""));
     setEditModalOpen(true);
   }, [isAdmin]);
 
@@ -421,7 +422,8 @@ export default function ZoneStockEntry() {
           date: rowDate,
           openingStock: rowOpeningStock,
           stockIn: updatedStockIn,
-          remarks: editRemarks.trim(),
+          inv_remark: String(editRemarks || "").trim(),
+          remarks: String(editRemarks || "").trim(),
           salesQty: rowSales,
           damagesQty: rowDamages,
           closingStock: updatedClosingStock,
@@ -684,7 +686,7 @@ export default function ZoneStockEntry() {
                         <td className="px-3 py-3 font-semibold text-blue-700">{toNumber(row.salesQty).toLocaleString("en-IN")}</td>
                         <td className="px-3 py-3 font-semibold text-red-600">{toNumber(row.damagesQty).toLocaleString("en-IN")}</td>
                         <td className="px-3 py-3 text-lg font-bold text-gray-900">{toNumber(row.closingStock).toLocaleString("en-IN")}</td>
-                        <td className="px-3 py-3 max-w-xs text-gray-700">{String(row.remarks || "-")}</td>
+                        <td className="px-3 py-3 max-w-xs text-gray-700">{String(row.inv_remark ?? row.remarks ?? "-")}</td>
                         {isAdmin ? (
                           <td className="px-3 py-3 text-right">
                             <button
