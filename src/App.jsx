@@ -9,6 +9,7 @@ import Neccrate from "./pages/Neccrate";
 import Dailysales from "./pages/Dailysales";
 import Distributor from "./pages/Distributor";
 import CashPayments from "./pages/CashPayments";
+import CashClosure from "./pages/CashClosure";
 import DigitalPayments from "./pages/DigitalPayments";
 import Outlets from "./pages/Outlets";
 import Users from "./pages/Users";
@@ -111,6 +112,10 @@ function App() {
               element={<ProtectedRoute element={<AdminLayoutWithPanel><CashPayments /></AdminLayoutWithPanel>} requiredRole="cash_payments" />}
             />
             <Route
+              path="/admin/cash-closure"
+              element={<ProtectedRoute element={<AdminLayoutWithPanel><CashClosure /></AdminLayoutWithPanel>} requiredRole={null} />}
+            />
+            <Route
               path="/admin/digital-payments"
               element={<ProtectedRoute element={<AdminLayoutWithPanel><DigitalPayments /></AdminLayoutWithPanel>} requiredRole="digital_payments" />}
             />
@@ -142,6 +147,7 @@ function App() {
             <Route path="/supervisor/dailysales" element={<ProtectedRoute element={<SupervisorLayout><Dailysales supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
             <Route path="/supervisor/digital-payments" element={<ProtectedRoute element={<SupervisorLayout><DigitalPayments supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
             <Route path="/supervisor/cash-payments" element={<ProtectedRoute element={<SupervisorLayout><CashPayments supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
+            <Route path="/supervisor/cash-closure" element={<ProtectedRoute element={<SupervisorLayout><CashClosure /></SupervisorLayout>} requiredRole="supervisor" />} />
             <Route path="/supervisor/reports" element={<ProtectedRoute element={<SupervisorLayout><Reports supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
             <Route path="/supervisor/data-entry" element={<ProtectedRoute element={<SupervisorLayout><DataEntry supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
             <Route path="/supervisor/inventory" element={<ProtectedRoute element={<SupervisorLayout><ZoneStockEntry /></SupervisorLayout>} requiredRole="supervisor" />} />

@@ -424,6 +424,11 @@ export default function SupervisorDashboard() {
               <span className="font-semibold text-lg">Cash Payments</span>
               <span className="text-xs text-gray-500 mt-1">Manage cash payments</span>
             </Link>
+            <Link to="/supervisor/cash-closure" className="rounded-xl bg-orange-100 p-6 shadow hover:bg-orange-200 transition flex flex-col items-center">
+              <span className="text-2xl mb-2">🧾</span>
+              <span className="font-semibold text-lg">Cash Closure</span>
+              <span className="text-xs text-gray-500 mt-1">Record zone-wise cash closure</span>
+            </Link>
             <Link to="/supervisor/reports" className="rounded-xl bg-orange-100 p-6 shadow hover:bg-orange-200 transition flex flex-col items-center">
               <span className="text-2xl mb-2">📈</span>
               <span className="font-semibold text-lg">Reports</span>

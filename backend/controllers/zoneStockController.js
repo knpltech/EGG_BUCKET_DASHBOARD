@@ -206,13 +206,14 @@ const computeZoneDayTotals = async (zone, dateIso) => {
 const getPreviousClosingStock = async (zone, dateIso) => {
   const snap = await db.collection(COLLECTION).where("zone", "==", zone).get();
   if (snap.empty) return 0;
-
   const previous = snap.docs
     .map(mapDoc)
     .map((row) => ({
       ...row,
       normalizedDate: normalizeDate(row?.date || row?.createdAt),
     }))
+    // ignore auto-default rows when computing previous closing
+    .filter((row) => !row.isAutoDefault)
     .filter((row) => row.normalizedDate && String(row.normalizedDate).localeCompare(String(dateIso)) < 0)
     .sort((a, b) => String(b.normalizedDate).localeCompare(String(a.normalizedDate)))[0];
 
@@ -239,7 +240,8 @@ const recalculateZoneStockFromDate = async (zone, startDate) => {
       ...row,
       normalizedDate: normalizeDate(row?.date || row?.createdAt),
     }))
-    .filter((row) => row.normalizedDate);
+    // Exclude auto-default rows from recalculation seed data
+    .filter((row) => row.normalizedDate && !row.isAutoDefault);
 
   const latestByDate = new Map();
   for (const row of zoneRowsRaw) {
@@ -319,99 +321,11 @@ const commitBatches = async (refsAndData, options = {}) => {
 };
 
 const ensureZoneStockDefaults = async () => {
-  const yesterday = addDays(getIsoToday(), -1);
-  if (!yesterday) return;
-
-  const [zoneStockSnap, outletsSnap, salesSnap, damagesSnap] = await Promise.all([
-    db.collection(COLLECTION).get(),
-    db.collection(OUTLETS_COLLECTION).get(),
-    db.collection(DAILY_SALES_COLLECTION).get(),
-    db.collection(DAILY_DAMAGES_COLLECTION).get(),
-  ]);
-
-  const zoneRows = zoneStockSnap.docs.map(mapDoc);
-  const salesRows = salesSnap.docs.map(mapDoc);
-  const damageRows = damagesSnap.docs.map(mapDoc);
-  const outletRows = outletsSnap.docs.map(mapDoc);
-
-  const knownDates = new Set();
-  for (const row of zoneRows) {
-    const d = normalizeDate(row?.date || row?.createdAt);
-    if (d) knownDates.add(d);
-  }
-  for (const row of salesRows) {
-    const d = normalizeDate(row?.date || row?.createdAt);
-    if (d) knownDates.add(d);
-  }
-  for (const row of damageRows) {
-    const d = normalizeDate(row?.date || row?.createdAt);
-    if (d) knownDates.add(d);
-  }
-
-  const dateList = Array.from(knownDates).sort((a, b) => String(a).localeCompare(String(b)));
-  if (!dateList.length) return;
-
-  const startDate = dateList[0];
-  const fullDateRange = iterateDatesInclusive(startDate, yesterday);
-  if (!fullDateRange.length) return;
-
-  const zoneOutletsMap = getZoneOutletMap(outletRows);
-  const existingByZoneDate = new Map();
-  for (const row of zoneRows) {
-    const rowZone = normalizeZoneLabel(row?.zone);
-    const rowDate = normalizeDate(row?.date || row?.createdAt);
-    if (!rowZone || !rowDate) continue;
-    existingByZoneDate.set(`${rowZone}__${rowDate}`, row);
-  }
-
-  const writes = [];
-
-  for (const zone of ALL_ZONES) {
-    let previousClosing = 0;
-    for (const date of fullDateRange) {
-      const key = `${zone}__${date}`;
-      const existing = existingByZoneDate.get(key);
-
-      if (existing) {
-        previousClosing = toNumber(existing.closingStock);
-        continue;
-      }
-
-      const salesDoc = getLatestDocByDate(salesRows, date);
-      const damagesDoc = getLatestDocByDate(damageRows, date);
-      const outletKeys = zoneOutletsMap.get(zone) || [];
-      const salesQty = sumValuesByOutletRefs(salesDoc?.outlets, outletKeys);
-      const damagesQty = sumValuesByOutletRefs(damagesDoc?.damages, outletKeys);
-      const openingStock = previousClosing;
-      const stockIn = 0;
-      const closingStock = openingStock + stockIn - salesQty - damagesQty;
-
-      const payload = {
-        zone,
-        date,
-        openingStock,
-        stockIn,
-        salesQty,
-        damagesQty,
-        closingStock,
-        isAutoDefault: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        addedBy: {
-          username: "system",
-          role: "system",
-          zone,
-          timestamp: new Date().toISOString(),
-        },
-      };
-
-      const ref = db.collection(COLLECTION).doc();
-      writes.push({ ref, data: payload });
-      previousClosing = closingStock;
-    }
-  }
-
-  await commitBatches(writes);
+  // Historically this function auto-created default rows for missing dates.
+  // To ensure only explicit user-entered inventory rows are stored and
+  // returned by the API, skip creating any auto-default documents here.
+  // This makes the endpoints return only manually created entries.
+  return 0;
 };
 
 const mapDoc = (doc) => ({ id: doc.id, ...doc.data() });
@@ -458,6 +372,8 @@ const getEarliestDateByZone = (rows) => {
   const earliestByZone = new Map();
 
   for (const row of rows || []) {
+    // Ignore auto-default rows when finding earliest manual date
+    if (row?.isAutoDefault) continue;
     const zone = normalizeZoneLabel(row?.zone);
     const date = normalizeDate(row?.date || row?.createdAt);
     if (!zone || !date) continue;
@@ -598,10 +514,13 @@ export const upsertZoneStockEntry = async (req, res) => {
 
 export const getAllZoneStockEntries = async (_req, res) => {
   try {
-    await ensureZoneStockDefaults();
+    // Do not auto-create defaults. Recalculate if needed but return only
+    // explicit (non-auto-default) rows to the client.
     await recalculateAllZonesFromEarliestDate();
     const snapshot = await db.collection(COLLECTION).get();
-    const data = dedupeZoneStockRows(snapshot.docs.map(mapDoc))
+    const allRows = dedupeZoneStockRows(snapshot.docs.map(mapDoc));
+    const data = allRows
+      .filter((r) => !r.isAutoDefault)
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
     return res.status(200).json(data);
   } catch (error) {
@@ -611,14 +530,14 @@ export const getAllZoneStockEntries = async (_req, res) => {
 
 export const getZoneStockEntriesByDate = async (req, res) => {
   try {
-    await ensureZoneStockDefaults();
     const date = normalizeDate(req.params.date);
     if (!date) return res.status(400).json({ message: "date is required" });
 
     const snapshot = await db.collection(COLLECTION).where("date", "==", date).get();
-    const data = dedupeZoneStockRows(snapshot.docs.map(mapDoc))
+    const rows = dedupeZoneStockRows(snapshot.docs.map(mapDoc))
+      .filter((r) => !r.isAutoDefault)
       .sort((a, b) => String(a.zone || "").localeCompare(String(b.zone || "")));
-    return res.status(200).json(data);
+    return res.status(200).json(rows);
   } catch (error) {
     return res.status(500).json({ message: "Error fetching zone stock entries by date", error: error.message });
   }
@@ -626,7 +545,7 @@ export const getZoneStockEntriesByDate = async (req, res) => {
 
 export const getZoneStockEntriesByZone = async (req, res) => {
   try {
-    await ensureZoneStockDefaults();
+    // Do not create defaults; return only user-entered rows below.
     const zone = normalizeZoneLabel(req.params.zone);
     if (!zone) return res.status(400).json({ message: "zone is required" });
 
@@ -645,6 +564,7 @@ export const getZoneStockEntriesByZone = async (req, res) => {
 
     const snapshot = await db.collection(COLLECTION).where("zone", "==", zone).get();
     const data = dedupeZoneStockRows(snapshot.docs.map(mapDoc))
+      .filter((r) => !r.isAutoDefault)
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
     return res.status(200).json(data);
   } catch (error) {
@@ -654,11 +574,9 @@ export const getZoneStockEntriesByZone = async (req, res) => {
 
 export const getZoneStockEntriesByZoneAndDate = async (req, res) => {
   try {
-    await ensureZoneStockDefaults();
     const zone = normalizeZoneLabel(req.params.zone);
     const date = normalizeDate(req.params.date);
     if (!zone || !date) return res.status(400).json({ message: "zone and date are required" });
-
     const snapshot = await db.collection(COLLECTION)
       .where("zone", "==", zone)
       .where("date", "==", date)
@@ -667,7 +585,10 @@ export const getZoneStockEntriesByZoneAndDate = async (req, res) => {
 
     if (snapshot.empty) return res.status(200).json({});
 
-    return res.status(200).json(mapDoc(snapshot.docs[0]));
+    const row = mapDoc(snapshot.docs[0]);
+    if (row.isAutoDefault) return res.status(200).json({});
+
+    return res.status(200).json(row);
   } catch (error) {
     return res.status(500).json({ message: "Error fetching zone stock entry by zone and date", error: error.message });
   }

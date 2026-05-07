@@ -19,6 +19,7 @@ import {
   faRightFromBracket,
   faExclamationTriangle,
   faPenToSquare,
+  faReceipt,
 } from "@fortawesome/free-solid-svg-icons";
 
 export default function Sidebar({ supervisor }) {
@@ -97,41 +98,9 @@ export default function Sidebar({ supervisor }) {
               <FontAwesomeIcon icon={faStore} />
               {open && "Inventory"}
             </Link>
-            <Link to="/supervisor/damages" className={linkClass("/supervisor/damages")}> 
-              <FontAwesomeIcon icon={faExclamationTriangle} />
-              {open && "Daily Damages"}
-            </Link>
-            <Link to="/supervisor/neccrate" className={linkClass("/supervisor/neccrate")}> 
-              <FontAwesomeIcon icon={faEgg} />
-              {open && "NECC Rate"}
-            </Link>
-            <Link to="/supervisor/incentive" className={linkClass("/supervisor/incentive")}> 
-              <FontAwesomeIcon icon={faGift} />
-              {open && "Incentive"}
-            </Link>
-            <Link to="/supervisor/advance" className={linkClass("/supervisor/advance")}> 
-              <FontAwesomeIcon icon={faSliders} />
-              {open && "Advance"}
-            </Link>
-            <Link to="/supervisor/food-allowance" className={linkClass("/supervisor/food-allowance")}> 
-              <FontAwesomeIcon icon={faUtensils} />
-              {open && "Food Allowance"}
-            </Link>
-            <Link to="/supervisor/remarks" className={linkClass("/supervisor/remarks")}> 
-              <FontAwesomeIcon icon={faClipboard} />
-              {open && "Remarks"}
-            </Link>
-            <Link to="/supervisor/dailysales" className={linkClass("/supervisor/dailysales")}> 
-              <FontAwesomeIcon icon={faEgg} />
-              {open && "Daily Sales Quantity"}
-            </Link>
-            <Link to="/supervisor/digital-payments" className={linkClass("/supervisor/digital-payments")}> 
-              <FontAwesomeIcon icon={faWallet} />
-              {open && "Digital Payments"}
-            </Link>
-            <Link to="/supervisor/cash-payments" className={linkClass("/supervisor/cash-payments")}> 
-              <FontAwesomeIcon icon={faMoneyBillWave} />
-              {open && "Cash Payments"}
+            <Link to="/supervisor/cash-closure" className={linkClass("/supervisor/cash-closure")}> 
+              <FontAwesomeIcon icon={faReceipt} />
+              {open && "Cash Closure"}
             </Link>
             <Link to="/supervisor/reports" className={linkClass("/supervisor/reports")}> 
               <FontAwesomeIcon icon={faChartLine} />
@@ -153,6 +122,10 @@ export default function Sidebar({ supervisor }) {
             <Link to="/admin/inventory" className={linkClass("/admin/inventory")}> 
               <FontAwesomeIcon icon={faStore} />
               {open && "Inventory"}
+            </Link>
+            <Link to="/admin/cash-closure" className={linkClass("/admin/cash-closure")}> 
+              <FontAwesomeIcon icon={faReceipt} />
+              {open && "Cash Closure"}
             </Link>
             <Link to="/admin/damages" className={linkClass("/admin/damages")}> 
               <FontAwesomeIcon icon={faExclamationTriangle} />
@@ -217,6 +190,10 @@ export default function Sidebar({ supervisor }) {
             <Link to="/admin/inventory" className={linkClass("/admin/inventory")}> 
               <FontAwesomeIcon icon={faStore} />
               {open && "Inventory"}
+            </Link>
+            <Link to="/admin/cash-closure" className={linkClass("/admin/cash-closure")}> 
+              <FontAwesomeIcon icon={faReceipt} />
+              {open && "Cash Closure"}
             </Link>
             <Link to="/admin/damages" className={linkClass("/admin/damages")}> 
               <FontAwesomeIcon icon={faExclamationTriangle} />
