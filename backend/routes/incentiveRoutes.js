@@ -2,6 +2,7 @@ import express from "express";
 import {
   addIncentive,
   getAllIncentives,
+  getIncentiveByDate,
   updateIncentive,
   deleteIncentiveByOutletAndDate,
   deleteIncentivesByDate
@@ -11,6 +12,7 @@ const router = express.Router();
 
 router.delete("/date/:date/outlet/:outletId", deleteIncentiveByOutletAndDate);
 router.delete("/date/:date", deleteIncentivesByDate);
+router.get("/date/:date", getIncentiveByDate);
 router.post("/add", addIncentive);
 router.get("/all", getAllIncentives);
 router.patch("/:id", updateIncentive);

@@ -89,6 +89,20 @@ export const getAllFoodAllowances = async (req, res) => {
   }
 };
 
+export const getFoodAllowanceByDate = async (req, res) => {
+  try {
+    const { date } = req.params;
+    if (!date) return res.status(400).json({ message: "Date is required" });
+
+    const doc = await db.collection("foodAllowance").doc(date).get();
+    if (!doc.exists) return res.json({});
+
+    res.json({ id: doc.id, ...doc.data() });
+  } catch (err) {
+    res.status(500).json(err.message);
+  }
+};
+
 /* UPDATE FOOD ALLOWANCE BY ID */
 export const updateFoodAllowance = async (req, res) => {
   const { id } = req.params;

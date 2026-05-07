@@ -609,6 +609,21 @@ export const getAllZoneStockEntries = async (_req, res) => {
   }
 };
 
+export const getZoneStockEntriesByDate = async (req, res) => {
+  try {
+    await ensureZoneStockDefaults();
+    const date = normalizeDate(req.params.date);
+    if (!date) return res.status(400).json({ message: "date is required" });
+
+    const snapshot = await db.collection(COLLECTION).where("date", "==", date).get();
+    const data = dedupeZoneStockRows(snapshot.docs.map(mapDoc))
+      .sort((a, b) => String(a.zone || "").localeCompare(String(b.zone || "")));
+    return res.status(200).json(data);
+  } catch (error) {
+    return res.status(500).json({ message: "Error fetching zone stock entries by date", error: error.message });
+  }
+};
+
 export const getZoneStockEntriesByZone = async (req, res) => {
   try {
     await ensureZoneStockDefaults();
@@ -634,6 +649,27 @@ export const getZoneStockEntriesByZone = async (req, res) => {
     return res.status(200).json(data);
   } catch (error) {
     return res.status(500).json({ message: "Error fetching zone stock entries", error: error.message });
+  }
+};
+
+export const getZoneStockEntriesByZoneAndDate = async (req, res) => {
+  try {
+    await ensureZoneStockDefaults();
+    const zone = normalizeZoneLabel(req.params.zone);
+    const date = normalizeDate(req.params.date);
+    if (!zone || !date) return res.status(400).json({ message: "zone and date are required" });
+
+    const snapshot = await db.collection(COLLECTION)
+      .where("zone", "==", zone)
+      .where("date", "==", date)
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) return res.status(200).json({});
+
+    return res.status(200).json(mapDoc(snapshot.docs[0]));
+  } catch (error) {
+    return res.status(500).json({ message: "Error fetching zone stock entry by zone and date", error: error.message });
   }
 };
 

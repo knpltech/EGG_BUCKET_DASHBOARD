@@ -89,6 +89,20 @@ export const getAllRemarks = async (req, res) => {
   }
 };
 
+export const getRemarksByDate = async (req, res) => {
+  try {
+    const { date } = req.params;
+    if (!date) return res.status(400).json({ message: "Date is required" });
+
+    const doc = await db.collection("remarks").doc(date).get();
+    if (!doc.exists) return res.json({});
+
+    res.json({ id: doc.id, ...doc.data() });
+  } catch (err) {
+    res.status(500).json(err.message);
+  }
+};
+
 /* UPDATE REMARKS BY ID */
 export const updateRemarks = async (req, res) => {
   const { id } = req.params;

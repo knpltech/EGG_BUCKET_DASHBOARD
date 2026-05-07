@@ -54,7 +54,7 @@ function CalendarIcon({ className = "" }) {
   );
 }
 
-function BaseCalendar({ rows = [], selectedDate, onSelectDate, showDots = false }) {
+function BaseCalendar({ rows = [], selectedDate, onSelectDate, showDots = false, isDateDisabled }) {
   const today = new Date();
   const initialDate = selectedDate ? new Date(selectedDate) : today;
   const [viewMonth, setViewMonth] = useState(initialDate.getMonth());
@@ -129,10 +129,17 @@ function BaseCalendar({ rows = [], selectedDate, onSelectDate, showDots = false 
             const isSelected = selectedDate === iso;
             const isToday = today.getFullYear() === viewYear && today.getMonth() === viewMonth && today.getDate() === weekDay;
             const hasEntry = showDots && hasEntryForDate(iso);
+            const isDisabled = typeof isDateDisabled === "function" ? isDateDisabled(iso) : false;
 
             return (
-              <button key={`${weekIndex}-${dayIndex}`} type="button" onClick={() => onSelectDate(iso)} className={showDots ? "flex flex-col items-center gap-1" : "flex h-8 items-center justify-center"}>
-                <div className={`flex h-7 w-7 items-center justify-center rounded-full ${isSelected ? "bg-green-500 text-white" : isToday ? "border border-green-500 text-green-600" : "text-gray-700 hover:bg-gray-100"}`}>
+              <button
+                key={`${weekIndex}-${dayIndex}`}
+                type="button"
+                onClick={() => !isDisabled && onSelectDate(iso)}
+                disabled={isDisabled}
+                className={showDots ? "flex flex-col items-center gap-1" : "flex h-8 items-center justify-center"}
+              >
+                <div className={`flex h-7 w-7 items-center justify-center rounded-full ${isDisabled ? "cursor-not-allowed text-gray-300" : isSelected ? "bg-green-500 text-white" : isToday ? "border border-green-500 text-green-600" : "text-gray-700 hover:bg-gray-100"}`}>
                   {weekDay}
                 </div>
                 {showDots && <div className={`h-1.5 w-1.5 rounded-full ${hasEntry ? "bg-green-500" : "bg-red-400"}`} />}
@@ -383,10 +390,21 @@ const getZoneWiseClosingStock = (rows = [], selectedDate, zoneSales = {}, zoneDa
   );
 };
 
+const addDays = (isoDate, offset) => {
+  const date = new Date(`${isoDate}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return "";
+  date.setDate(date.getDate() + offset);
+  return getLocalIsoDate(date);
+};
+
+const normalizeRows = (value) => (Array.isArray(value) ? value : value ? [value] : []);
+
 export default function AdminDashboard() {
   const { isAdmin, isViewer, zone } = getRoleFlags();
   const hasGlobalDashboardScope = isAdmin || isViewer;
   const calendarRef = useRef(null);
+  const historyBaseDate = useRef(getLocalIsoDate()).current;
+  const initialEarliestDate = addDays(historyBaseDate, -9);
   const [selectedDate, setSelectedDate] = useState(getLocalIsoDate());
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [totalOutlets, setTotalOutlets] = useState(0);
@@ -402,6 +420,8 @@ export default function AdminDashboard() {
   const [zoneAdvance, setZoneAdvance] = useState(createEmptyZoneAmounts);
   const [zoneFoodAllowance, setZoneFoodAllowance] = useState(createEmptyZoneAmounts);
   const [amountLoading, setAmountLoading] = useState(true);
+  const [earliestAllowedDate, setEarliestAllowedDate] = useState(initialEarliestDate || historyBaseDate);
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
   const totalClosingStockAllZones = ZONES.reduce(
     (sum, zoneName) => sum + toNumber(zoneClosingStock?.[zoneName]),
     0
@@ -480,71 +500,89 @@ export default function AdminDashboard() {
       }
     };
 
-      setRevenueLoading(true);
-      setZoneStatsLoading(true);
-      setZoneClosingLoading(true);
-      setAmountLoading(true);
+    setRevenueLoading(true);
+    setZoneStatsLoading(true);
+    setZoneClosingLoading(true);
+    setAmountLoading(true);
 
-      try {
-        const outlets = await updateOutlets();
-        const [salesRes, damageRes, neccRes, zoneStockRes, incentiveRes, advanceRes, foodAllowanceRes] = await Promise.all([
-          fetch(`${API_URL}/dailysales/all`),
-          fetch(`${API_URL}/daily-damage/all`),
-          fetch(`${API_URL}/neccrate/all`),
-          fetch(`${API_URL}/zone-stock/all`),
-          fetch(`${API_URL}/incentive/all`),
-          fetch(`${API_URL}/advance/all`),
-          fetch(`${API_URL}/food-allowance/all`),
-        ]);
+    try {
+      const outlets = await updateOutlets();
+      const [salesRes, damageRes, neccRes, zoneStockRes, incentiveRes, advanceRes, foodAllowanceRes] = await Promise.all([
+        fetch(`${API_URL}/dailysales/date/${selectedDate}`),
+        fetch(`${API_URL}/daily-damage/date/${selectedDate}`),
+        fetch(`${API_URL}/neccrate/date/${selectedDate}`),
+        fetch(`${API_URL}/zone-stock/date/${selectedDate}`),
+        fetch(`${API_URL}/incentive/date/${selectedDate}`),
+        fetch(`${API_URL}/advance/date/${selectedDate}`),
+        fetch(`${API_URL}/food-allowance/date/${selectedDate}`),
+      ]);
 
-        const [salesRows, damageRows, neccRates, zoneStockRows, incentiveRows, advanceRows, foodAllowanceRows] = await Promise.all([
-          salesRes.json(),
-          damageRes.json(),
-          neccRes.json(),
-          zoneStockRes.json(),
-          incentiveRes.json(),
-          advanceRes.json(),
-          foodAllowanceRes.json(),
-        ]);
+      const [salesRows, damageRows, neccRates, zoneStockRows, incentiveRows, advanceRows, foodAllowanceRows] = await Promise.all([
+        salesRes.json(),
+        damageRes.json(),
+        neccRes.json(),
+        zoneStockRes.json(),
+        incentiveRes.json(),
+        advanceRes.json(),
+        foodAllowanceRes.json(),
+      ].map(async (promiseValue) => normalizeRows(await promiseValue)));
 
-        setEggsToday(getSalesTotal(Array.isArray(salesRows) ? salesRows : [], outlets, selectedDate));
-        setDamagesToday(getDamageTotal(Array.isArray(damageRows) ? damageRows : [], outlets, selectedDate));
+      setEggsToday(getSalesTotal(salesRows, outlets, selectedDate));
+      setDamagesToday(getDamageTotal(damageRows, outlets, selectedDate));
 
-        const computedZoneStats = computeZoneStats(outlets, salesRows, damageRows, neccRates);
-        setZoneStats(computedZoneStats);
+      const computedZoneStats = computeZoneStats(outlets, salesRows, damageRows, neccRates);
+      setZoneStats(computedZoneStats);
 
-        const zoneSales = Object.fromEntries(
-          ZONES.map((zoneName) => [zoneName, toNumber(computedZoneStats?.[zoneName]?.eggs)])
-        );
-        const zoneDamages = Object.fromEntries(
-          ZONES.map((zoneName) => [zoneName, toNumber(computedZoneStats?.[zoneName]?.damage)])
-        );
+      const zoneSales = Object.fromEntries(
+        ZONES.map((zoneName) => [zoneName, toNumber(computedZoneStats?.[zoneName]?.eggs)])
+      );
+      const zoneDamages = Object.fromEntries(
+        ZONES.map((zoneName) => [zoneName, toNumber(computedZoneStats?.[zoneName]?.damage)])
+      );
 
-        const revenueData = await fetchZoneWiseRevenue(selectedDate);
-        setZoneRevenue(revenueData.success ? revenueData.zoneRevenue : createEmptyZoneRevenue());
-        setZoneClosingStock(
-          getZoneWiseClosingStock(Array.isArray(zoneStockRows) ? zoneStockRows : [], selectedDate, zoneSales, zoneDamages)
-        );
-        setZoneIncentive(getZoneWiseAmountTotals(Array.isArray(incentiveRows) ? incentiveRows : [], outlets, selectedDate));
-        setZoneAdvance(getZoneWiseAmountTotals(Array.isArray(advanceRows) ? advanceRows : [], outlets, selectedDate));
-        setZoneFoodAllowance(getZoneWiseAmountTotals(Array.isArray(foodAllowanceRows) ? foodAllowanceRows : [], outlets, selectedDate));
-      } catch (err) {
-        console.error("Dashboard load error:", err);
-        setEggsToday(0);
-        setDamagesToday(0);
-        setZoneRevenue(createEmptyZoneRevenue());
-        setZoneStats(createEmptyZoneStats());
-        setZoneClosingStock(createEmptyZoneClosing());
-        setZoneIncentive(createEmptyZoneAmounts());
-        setZoneAdvance(createEmptyZoneAmounts());
-        setZoneFoodAllowance(createEmptyZoneAmounts());
-      } finally {
-        setRevenueLoading(false);
-        setZoneStatsLoading(false);
-        setZoneClosingLoading(false);
-        setAmountLoading(false);
-      }
-    }, [hasGlobalDashboardScope, selectedDate, zone]);
+      const revenueData = await fetchZoneWiseRevenue(selectedDate);
+      setZoneRevenue(revenueData.success ? revenueData.zoneRevenue : createEmptyZoneRevenue());
+      setZoneClosingStock(getZoneWiseClosingStock(zoneStockRows, selectedDate, zoneSales, zoneDamages));
+      setZoneIncentive(getZoneWiseAmountTotals(incentiveRows, outlets, selectedDate));
+      setZoneAdvance(getZoneWiseAmountTotals(advanceRows, outlets, selectedDate));
+      setZoneFoodAllowance(getZoneWiseAmountTotals(foodAllowanceRows, outlets, selectedDate));
+    } catch (err) {
+      console.error("Dashboard load error:", err);
+      setEggsToday(0);
+      setDamagesToday(0);
+      setZoneRevenue(createEmptyZoneRevenue());
+      setZoneStats(createEmptyZoneStats());
+      setZoneClosingStock(createEmptyZoneClosing());
+      setZoneIncentive(createEmptyZoneAmounts());
+      setZoneAdvance(createEmptyZoneAmounts());
+      setZoneFoodAllowance(createEmptyZoneAmounts());
+    } finally {
+      setRevenueLoading(false);
+      setZoneStatsLoading(false);
+      setZoneClosingLoading(false);
+      setAmountLoading(false);
+    }
+  }, [hasGlobalDashboardScope, selectedDate, zone]);
+
+  const handleFetchHistory = useCallback(async () => {
+    if (historyLoadingMore) return;
+
+    setHistoryLoadingMore(true);
+    try {
+      setEarliestAllowedDate((current) => addDays(current || historyBaseDate, -7));
+    } catch (error) {
+      console.error("History fetch error:", error);
+    } finally {
+      setHistoryLoadingMore(false);
+    }
+  }, [historyBaseDate, historyLoadingMore]);
+
+  const isDateDisabled = useCallback((iso) => {
+    if (!iso) return true;
+    if (String(iso).localeCompare(String(historyBaseDate)) > 0) return true;
+    if (earliestAllowedDate && String(iso).localeCompare(String(earliestAllowedDate)) < 0) return true;
+    return false;
+  }, [earliestAllowedDate, historyBaseDate]);
 
   useEffect(() => {
     let mounted = true;
@@ -590,33 +628,51 @@ export default function AdminDashboard() {
       </div>
 
       <div className="mb-8 flex justify-end">
-        <div className="relative flex w-full flex-col gap-2 sm:max-w-xs" ref={calendarRef}>
-          <label htmlFor="admin-dashboard-date" className="text-sm font-semibold text-gray-700 sm:text-right">
-            Select date
-          </label>
-          <div className="relative z-30">
-            <button
-              id="admin-dashboard-date"
-              type="button"
-              onClick={() => setIsCalendarOpen((open) => !open)}
-              className="flex min-w-[150px] w-full items-center justify-between rounded-xl border border-gray-200 bg-eggWhite px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm"
-            >
-              <span>{selectedDate ? formatDateDMY(selectedDate) : "dd-mm-yyyy"}</span>
-              <CalendarIcon className="h-4 w-4 text-gray-500" />
-            </button>
-            {isCalendarOpen && (
-              <div className="absolute right-0 top-full mt-2 z-50">
-                <BaseCalendar
-                  selectedDate={selectedDate}
-                  onSelectDate={(iso) => {
-                    setSelectedDate(iso);
-                    setIsCalendarOpen(false);
-                  }}
-                  showDots={false}
-                />
+        <div className="flex w-full flex-col gap-2 sm:max-w-md">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-end">
+            <div className="relative flex-1" ref={calendarRef}>
+              <label htmlFor="admin-dashboard-date" className="mb-2 block text-sm font-semibold text-gray-700">
+                Select date
+              </label>
+              <div className="relative z-30">
+                <button
+                  id="admin-dashboard-date"
+                  type="button"
+                  onClick={() => setIsCalendarOpen((open) => !open)}
+                  className="flex min-w-[180px] w-full items-center justify-between rounded-xl border border-gray-200 bg-eggWhite px-3 py-2 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-orange-400 md:text-sm"
+                >
+                  <span>{selectedDate ? formatDateDMY(selectedDate) : "dd-mm-yyyy"}</span>
+                  <CalendarIcon className="h-4 w-4 text-gray-500" />
+                </button>
+                {isCalendarOpen && (
+                  <div className="absolute right-0 top-full mt-2 z-50">
+                    <BaseCalendar
+                      selectedDate={selectedDate}
+                      onSelectDate={(iso) => {
+                        setSelectedDate(iso);
+                        setIsCalendarOpen(false);
+                      }}
+                      showDots={false}
+                      isDateDisabled={isDateDisabled}
+                    />
+                  </div>
+                )}
               </div>
-            )}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleFetchHistory}
+              disabled={historyLoadingMore}
+              className="inline-flex h-10 items-center justify-center rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {historyLoadingMore ? "Fetching..." : "Fetch History"}
+            </button>
           </div>
+
+          <p className="text-xs text-gray-600 sm:text-right">
+            Calendar allows dates from {formatDateDMY(earliestAllowedDate)} to {formatDateDMY(historyBaseDate)}.
+          </p>
         </div>
       </div>
 

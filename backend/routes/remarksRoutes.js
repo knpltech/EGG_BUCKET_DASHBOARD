@@ -2,6 +2,7 @@ import express from "express";
 import {
   addRemarks,
   getAllRemarks,
+  getRemarksByDate,
   updateRemarks,
   deleteRemarksByOutletAndDate,
   deleteRemarksByDate,
@@ -11,6 +12,7 @@ const router = express.Router();
 
 router.delete("/date/:date/outlet/:outletId", deleteRemarksByOutletAndDate);
 router.delete("/date/:date", deleteRemarksByDate);
+router.get("/date/:date", getRemarksByDate);
 router.post("/add", addRemarks);
 router.get("/all", getAllRemarks);
 router.patch("/:id", updateRemarks);

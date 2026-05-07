@@ -99,6 +99,22 @@ export const getAllDigitalPayments = async (req, res) => {
   }
 };
 
+export const getDigitalPaymentsByDate = async (req, res) => {
+  try {
+    const { date } = req.params;
+    if (!date) return res.status(400).json({ message: "Date is required" });
+
+    const snapshot = await db.collection("digitalPayments")
+      .where("date", "==", date)
+      .get();
+
+    const payments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.status(200).json(payments);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching digital payments by date", error: error.message });
+  }
+};
+
 // Update a digital payment entry by ID
 export const updateDigitalPayment = async (req, res) => {
   try {

@@ -89,6 +89,20 @@ export const getAllAdvances = async (req, res) => {
   }
 };
 
+export const getAdvanceByDate = async (req, res) => {
+  try {
+    const { date } = req.params;
+    if (!date) return res.status(400).json({ message: "Date is required" });
+
+    const doc = await db.collection("advance").doc(date).get();
+    if (!doc.exists) return res.json({});
+
+    res.json({ id: doc.id, ...doc.data() });
+  } catch (err) {
+    res.status(500).json(err.message);
+  }
+};
+
 /* UPDATE ADVANCE BY ID */
 export const updateAdvance = async (req, res) => {
   const { id } = req.params;

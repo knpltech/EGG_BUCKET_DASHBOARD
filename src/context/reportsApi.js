@@ -240,13 +240,12 @@ export const fetchTodayRevenue = async () => {
   try {
     const dateStr = getLocalIsoDate();
 
-    // Fetch both cash and digital payments
     const [cashResponse, digitalResponse] = await Promise.all([
-      fetch(`${API_BASE_URL}/cash-payments/all`, {
+      fetch(`${API_BASE_URL}/cash-payments/date/${dateStr}`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
       }),
-      fetch(`${API_BASE_URL}/digital-payments/all`, {
+      fetch(`${API_BASE_URL}/digital-payments/date/${dateStr}`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
       })
@@ -299,13 +298,12 @@ export const fetchZoneWiseRevenue = async (selectedDate = getLocalIsoDate()) => 
   try {
     const dateStr = selectedDate || getLocalIsoDate();
 
-    // Fetch cash, digital payments, and outlets for real zone mapping
     const [cashResponse, digitalResponse, outletsResponse] = await Promise.all([
-      fetch(`${API_BASE_URL}/cash-payments/all`, {
+      fetch(`${API_BASE_URL}/cash-payments/date/${dateStr}`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
       }),
-      fetch(`${API_BASE_URL}/digital-payments/all`, {
+      fetch(`${API_BASE_URL}/digital-payments/date/${dateStr}`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
       }),

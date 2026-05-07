@@ -96,6 +96,22 @@ export const getAllDailySales = async (req, res) => {
   }
 };
 
+export const getDailySalesByDate = async (req, res) => {
+  try {
+    const { date } = req.params;
+    if (!date) return res.status(400).json({ message: "Date is required" });
+
+    const snapshot = await db.collection("dailySales")
+      .where("date", "==", date)
+      .get();
+
+    const sales = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    res.status(200).json(sales);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching daily sales by date", error: error.message });
+  }
+};
+
 // PATCH controller to update a daily sales entry by ID
 export const updateDailySales = async (req, res) => {
   try {

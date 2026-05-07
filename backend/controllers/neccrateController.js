@@ -85,6 +85,22 @@ export const getAllNeccRates = async (req, res) => {
   }
 };
 
+export const getNeccRatesByDate = async (req, res) => {
+  try {
+    const { date } = req.params;
+    if (!date) return res.status(400).json({ message: "Date is required" });
+
+    const snapshot = await db.collection("neccRates")
+      .where("date", "==", date)
+      .get();
+
+    const rates = snapshot.docs.map((doc) => normalizeNeccDoc(doc.id, doc.data()));
+    res.status(200).json(rates);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching NECC rates by date", error: error.message });
+  }
+};
+
 export const updateNeccRate = async (req, res) => {
   try {
     const { id } = req.params;

@@ -89,6 +89,20 @@ export const getAllIncentives = async (req, res) => {
   }
 };
 
+export const getIncentiveByDate = async (req, res) => {
+  try {
+    const { date } = req.params;
+    if (!date) return res.status(400).json({ message: "Date is required" });
+
+    const doc = await db.collection("incentive").doc(date).get();
+    if (!doc.exists) return res.json({});
+
+    res.json({ id: doc.id, ...doc.data() });
+  } catch (err) {
+    res.status(500).json(err.message);
+  }
+};
+
 /* UPDATE INCENTIVE BY ID */
 export const updateIncentive = async (req, res) => {
   const { id } = req.params;
