@@ -143,8 +143,8 @@ export default function CashClosure() {
       console.log("Fetching auto-fill data for Zone:", zoneName, "Date:", isoDate);
 
       // Fetch all data by date - the API should return aggregated totals
-      const [dailySalesRes, incentivesRes, foodAllowanceRes, advanceRes] = await Promise.all([
-        fetch(`${API_URL}/dailysales/date/${isoDate}`),
+      const [cashPaymentsRes, incentivesRes, foodAllowanceRes, advanceRes] = await Promise.all([
+        fetch(`${API_URL}/cash-payments/date/${isoDate}`),
         fetch(`${API_URL}/incentive/date/${isoDate}`),
         fetch(`${API_URL}/food-allowance/date/${isoDate}`),
         fetch(`${API_URL}/advance/date/${isoDate}`),
@@ -155,10 +155,10 @@ export default function CashClosure() {
       let foodAllowanceAmount = 0;
       let advanceAmount = 0;
 
-      // Process daily sales - sum all outlets or use total
-      if (dailySalesRes.ok) {
-        const salesData = await dailySalesRes.json();
-        console.log("Daily Sales Data:", salesData);
+      // Process cash payments - sum all outlets or use total
+      if (cashPaymentsRes.ok) {
+        const salesData = await cashPaymentsRes.json();
+        console.log("Cash Payments Data:", salesData);
         
         if (Array.isArray(salesData) && salesData.length > 0) {
           // If it's an array, take the first entry
