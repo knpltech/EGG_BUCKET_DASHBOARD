@@ -89,6 +89,7 @@ export default function CashClosure() {
   const [cashRemarks, setCashRemarks] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [fetchingAutoData, setFetchingAutoData] = useState(false);
 
   const user = useMemo(() => {
     try {
@@ -130,6 +131,114 @@ export default function CashClosure() {
     }
   }, []);
 
+  const fetchAutofillData = useCallback(async (zoneName, dateValue) => {
+    if (!zoneName || !dateValue) return;
+    
+    // Ensure date is in ISO format (YYYY-MM-DD)
+    const isoDate = normalizeDate(dateValue);
+    if (!isoDate) return;
+    
+    setFetchingAutoData(true);
+    try {
+      console.log("Fetching auto-fill data for Zone:", zoneName, "Date:", isoDate);
+
+      // Fetch all data by date - the API should return aggregated totals
+      const [dailySalesRes, incentivesRes, foodAllowanceRes, advanceRes] = await Promise.all([
+        fetch(`${API_URL}/dailysales/date/${isoDate}`),
+        fetch(`${API_URL}/incentive/date/${isoDate}`),
+        fetch(`${API_URL}/food-allowance/date/${isoDate}`),
+        fetch(`${API_URL}/advance/date/${isoDate}`),
+      ]);
+
+      let totalCash = 0;
+      let incentivesAmount = 0;
+      let foodAllowanceAmount = 0;
+      let advanceAmount = 0;
+
+      // Process daily sales - sum all outlets or use total
+      if (dailySalesRes.ok) {
+        const salesData = await dailySalesRes.json();
+        console.log("Daily Sales Data:", salesData);
+        
+        if (Array.isArray(salesData) && salesData.length > 0) {
+          // If it's an array, take the first entry
+          const entry = salesData[0];
+          if (entry?.total) {
+            totalCash = toNumber(entry.total);
+          } else if (entry?.outlets && typeof entry.outlets === "object") {
+            Object.values(entry.outlets).forEach((amount) => {
+              totalCash += toNumber(amount);
+            });
+          }
+        } else if (salesData?.total) {
+          totalCash = toNumber(salesData.total);
+        } else if (salesData?.outlets && typeof salesData.outlets === "object") {
+          Object.values(salesData.outlets).forEach((amount) => {
+            totalCash += toNumber(amount);
+          });
+        }
+      }
+
+      // Process incentives
+      if (incentivesRes.ok) {
+        const data = await incentivesRes.json();
+        console.log("Incentives Data:", data);
+        
+        if (data?.total) {
+          incentivesAmount = toNumber(data.total);
+        } else if (data?.outlets && typeof data.outlets === "object") {
+          Object.values(data.outlets).forEach((amount) => {
+            incentivesAmount += toNumber(amount);
+          });
+        }
+      }
+
+      // Process food allowance
+      if (foodAllowanceRes.ok) {
+        const data = await foodAllowanceRes.json();
+        console.log("Food Allowance Data:", data);
+        
+        if (data?.total) {
+          foodAllowanceAmount = toNumber(data.total);
+        } else if (data?.outlets && typeof data.outlets === "object") {
+          Object.values(data.outlets).forEach((amount) => {
+            foodAllowanceAmount += toNumber(amount);
+          });
+        }
+      }
+
+      // Process advance
+      if (advanceRes.ok) {
+        const data = await advanceRes.json();
+        console.log("Advance Data:", data);
+        
+        if (data?.total) {
+          advanceAmount = toNumber(data.total);
+        } else if (data?.outlets && typeof data.outlets === "object") {
+          Object.values(data.outlets).forEach((amount) => {
+            advanceAmount += toNumber(amount);
+          });
+        }
+      }
+
+      console.log("Auto-fill Results:", {
+        totalCash,
+        incentivesAmount,
+        foodAllowanceAmount,
+        advanceAmount,
+      });
+
+      setTotalCashAmount(String(totalCash));
+      setIncentives(String(incentivesAmount));
+      setFoodAllowance(String(foodAllowanceAmount));
+      setAdvance(String(advanceAmount));
+    } catch (error) {
+      console.error("Error fetching autofill data:", error);
+    } finally {
+      setFetchingAutoData(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadRows(selectedZone);
     const interval = window.setInterval(() => loadRows(selectedZone), 30000);
@@ -158,13 +267,10 @@ export default function CashClosure() {
       return;
     }
 
-    setTotalCashAmount("0");
-    setIncentives("0");
-    setFoodAllowance("0");
-    setAdvance("0");
+    fetchAutofillData(selectedZoneLabel, selectedDate);
     setCashHandover("0");
     setCashRemarks("");
-  }, [existingEntry?.id, selectedZoneLabel, selectedDate]);
+  }, [existingEntry?.id, selectedZoneLabel, selectedDate, fetchAutofillData]);
 
   const sortedRows = useMemo(() => {
     return [...rows]
@@ -175,6 +281,15 @@ export default function CashClosure() {
         return String(left?.zone || "").localeCompare(String(right?.zone || ""));
       });
   }, [rows, selectedZoneLabel]);
+
+  const balance = useMemo(() => {
+    const total = toNumber(totalCashAmount);
+    const incentivesAmount = toNumber(incentives);
+    const foodAllowanceAmount = toNumber(foodAllowance);
+    const advanceAmount = toNumber(advance);
+    const handoverAmount = toNumber(cashHandover);
+    return total - incentivesAmount - foodAllowanceAmount - advanceAmount - handoverAmount;
+  }, [totalCashAmount, incentives, foodAllowance, advance, cashHandover]);
 
   const handleSave = async () => {
     if (!selectedZoneLabel || !selectedDate) {
@@ -281,7 +396,7 @@ export default function CashClosure() {
             </div>
           </div>
 
-          <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
             <div>
               <label className="mb-1 block text-sm font-semibold text-gray-700">Date</label>
               <input
@@ -292,45 +407,50 @@ export default function CashClosure() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-semibold text-gray-700">Total Cash Amount</label>
-              <input
-                type="number"
-                min="0"
-                value={totalCashAmount}
-                onChange={(e) => setTotalCashAmount(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-              />
+              <div className="mb-1 flex items-center justify-between">
+                <label className="block text-sm font-semibold text-gray-700">Total Cash Amount</label>
+                {fetchingAutoData && <span className="text-xs text-orange-600">Auto-filling...</span>}
+              </div>
+              <div className="w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-700 font-semibold">
+                {formatCurrency(totalCashAmount)}
+              </div>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-semibold text-gray-700">Incentives</label>
-              <input
-                type="number"
-                min="0"
-                value={incentives}
-                onChange={(e) => setIncentives(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-              />
+              <div className="mb-1 flex items-center justify-between">
+                <label className="block text-sm font-semibold text-gray-700">Incentives</label>
+                {fetchingAutoData && <span className="text-xs text-orange-600">Auto-filling...</span>}
+              </div>
+              <div className="w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-700 font-semibold">
+                {formatCurrency(incentives)}
+              </div>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-semibold text-gray-700">Food Allowance</label>
-              <input
-                type="number"
-                min="0"
-                value={foodAllowance}
-                onChange={(e) => setFoodAllowance(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-              />
+              <div className="mb-1 flex items-center justify-between">
+                <label className="block text-sm font-semibold text-gray-700">Food Allowance</label>
+                {fetchingAutoData && <span className="text-xs text-orange-600">Auto-filling...</span>}
+              </div>
+              <div className="w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-700 font-semibold">
+                {formatCurrency(foodAllowance)}
+              </div>
             </div>
             <div>
-              <label className="mb-1 block text-sm font-semibold text-gray-700">Advance</label>
-              <input
-                type="number"
-                min="0"
-                value={advance}
-                onChange={(e) => setAdvance(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-              />
+              <div className="mb-1 flex items-center justify-between">
+                <label className="block text-sm font-semibold text-gray-700">Advance</label>
+                {fetchingAutoData && <span className="text-xs text-orange-600">Auto-filling...</span>}
+              </div>
+              <div className="w-full rounded-xl border border-gray-300 bg-gray-50 px-3 py-2.5 text-sm text-gray-700 font-semibold">
+                {formatCurrency(advance)}
+              </div>
             </div>
+            <div>
+              <label className="mb-1 block text-sm font-semibold text-gray-700">Balance</label>
+              <div className="w-full rounded-xl border-2 border-blue-400 bg-blue-50 px-3 py-2.5 text-sm font-bold text-blue-800">
+                {formatCurrency(balance)}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 border-t border-gray-200 pt-6">
             <div>
               <label className="mb-1 block text-sm font-semibold text-gray-700">Cash Handover</label>
               <input
@@ -338,16 +458,18 @@ export default function CashClosure() {
                 min="0"
                 value={cashHandover}
                 onChange={(e) => setCashHandover(e.target.value)}
+                placeholder="Enter cash handover amount"
                 className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
               />
             </div>
-            <div className="md:col-span-2 xl:col-span-3">
+
+            <div className="mt-4">
               <label className="mb-1 block text-sm font-semibold text-gray-700">Cash Remarks</label>
               <textarea
                 rows={3}
                 value={cashRemarks}
                 onChange={(e) => setCashRemarks(e.target.value)}
-                placeholder="Optional remarks for this cash closure entry"
+                placeholder="Enter cash remarks (optional)"
                 className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
               />
             </div>
@@ -399,23 +521,28 @@ export default function CashClosure() {
                     <th className="px-4 py-3 text-right font-semibold text-orange-800">Food Allowance</th>
                     <th className="px-4 py-3 text-right font-semibold text-orange-800">Advance</th>
                     <th className="px-4 py-3 text-right font-semibold text-orange-800">Cash Handover</th>
+                    <th className="px-4 py-3 text-right font-semibold text-orange-800">Balance</th>
                     <th className="px-4 py-3 text-left font-semibold text-orange-800">Cash Remarks</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 bg-white">
-                  {sortedRows.map((row) => (
-                    <tr key={row.id || `${row.zone}-${row.date}`} className="hover:bg-gray-50/70">
-                      <td className="px-4 py-3 text-gray-700">{formatDisplayDate(normalizeDate(row.date || row.createdAt))}</td>
-                      <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(row.totalCashAmount)}</td>
-                      <td className="px-4 py-3 text-right text-gray-700">{formatCurrency(row.incentives)}</td>
-                      <td className="px-4 py-3 text-right text-gray-700">{formatCurrency(row.foodAllowance)}</td>
-                      <td className="px-4 py-3 text-right text-gray-700">{formatCurrency(row.advance)}</td>
-                      <td className="px-4 py-3 text-right text-gray-700">{formatCurrency(row.cashHandover)}</td>
-                      <td className="px-4 py-3 text-gray-600">
-                        <span className="block max-w-xs break-words">{row.cashRemarks || "-"}</span>
-                      </td>
-                    </tr>
-                  ))}
+                  {sortedRows.map((row) => {
+                    const rowBalance = toNumber(row.totalCashAmount) - toNumber(row.incentives) - toNumber(row.foodAllowance) - toNumber(row.advance) - toNumber(row.cashHandover);
+                    return (
+                      <tr key={row.id || `${row.zone}-${row.date}`} className="hover:bg-gray-50/70">
+                        <td className="px-4 py-3 text-gray-700">{formatDisplayDate(normalizeDate(row.date || row.createdAt))}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(row.totalCashAmount)}</td>
+                        <td className="px-4 py-3 text-right text-gray-700">{formatCurrency(row.incentives)}</td>
+                        <td className="px-4 py-3 text-right text-gray-700">{formatCurrency(row.foodAllowance)}</td>
+                        <td className="px-4 py-3 text-right text-gray-700">{formatCurrency(row.advance)}</td>
+                        <td className="px-4 py-3 text-right text-gray-700">{formatCurrency(row.cashHandover)}</td>
+                        <td className="px-4 py-3 text-right font-semibold text-blue-700">{formatCurrency(rowBalance)}</td>
+                        <td className="px-4 py-3 text-gray-600">
+                          <span className="block max-w-xs break-words">{row.cashRemarks || "-"}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
