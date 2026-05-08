@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import Topbar from "../components/Topbar";
 import { normalizeZone } from "../utils/role";
@@ -175,17 +174,30 @@ const getClosingStockBySupervisorZone = (rows, normalizedZones, today, zoneSales
   const zoneSet = new Set((normalizedZones || []).map((zoneKey) => String(zoneKey)));
   const latestByZone = new Map();
 
+  console.log("🔍 [SupervisorDashboard] getClosingStockBySupervisorZone called");
+  console.log("   Total rows:", Array.isArray(rows) ? rows.length : 0);
+  console.log("   Today:", today);
+  console.log("   Supervisor zones:", Array.from(zoneSet));
+  
+  if (Array.isArray(rows) && rows.length > 0) {
+    console.log("   Sample row:", rows[0]);
+  }
+
   for (const row of Array.isArray(rows) ? rows : []) {
     const rowDate = normalizeDate(row?.date || row?.createdAt);
+    const zoneNumber = normalizeZone(row?.zone);
+    
+    console.log("   Row:", { date: rowDate, zone: row?.zone, normalizedZone: zoneNumber, closingStock: row?.closingStock, matches: rowDate === today && zoneNumber && zoneSet.has(String(zoneNumber)) });
+    
     if (rowDate !== today) continue;
 
-    const zoneNumber = normalizeZone(row?.zone);
     if (!zoneNumber || !zoneSet.has(String(zoneNumber))) continue;
 
     const zoneLabel = formatZoneLabel(zoneNumber);
     const existing = latestByZone.get(zoneLabel);
     if (!existing || getDocTimestamp(row) >= getDocTimestamp(existing)) {
       latestByZone.set(zoneLabel, row);
+      console.log(`   ✓ Set latest for ${zoneLabel}`);
     }
   }
 
@@ -193,13 +205,25 @@ const getClosingStockBySupervisorZone = (rows, normalizedZones, today, zoneSales
     (normalizedZones || []).map((zoneNumber) => {
       const zoneLabel = formatZoneLabel(zoneNumber);
       const row = latestByZone.get(zoneLabel);
-      if (!row) return [zoneLabel, 0];
+      if (!row) {
+        console.log(`   ⚠️ No data found for ${zoneLabel}`);
+        return [zoneLabel, 0];
+      }
 
+      // Use closingStock directly if available
+      if (row?.closingStock !== undefined && row.closingStock !== null) {
+        const value = toNumber(row.closingStock);
+        console.log(`   ${zoneLabel}: Using direct closingStock = ${value}`);
+        return [zoneLabel, value];
+      }
+
+      // Otherwise calculate it
       const openingStock = toNumber(row?.openingStock);
       const stockIn = toNumber(row?.stockIn);
       const salesQty = zoneSales[zoneLabel] !== undefined ? toNumber(zoneSales[zoneLabel]) : toNumber(row?.salesQty);
       const damagesQty = zoneDamages[zoneLabel] !== undefined ? toNumber(zoneDamages[zoneLabel]) : toNumber(row?.damagesQty);
       const closingValue = openingStock + stockIn - salesQty - damagesQty;
+      console.log(`   ${zoneLabel}: Calculated = ${openingStock} + ${stockIn} - ${salesQty} - ${damagesQty} = ${closingValue}`);
       return [zoneLabel, Number.isFinite(closingValue) ? closingValue : 0];
     })
   );
@@ -257,7 +281,7 @@ export default function SupervisorDashboard() {
         fetch(`${API_URL}/digital-payments/all`),
         fetch(`${API_URL}/incentive/all`),
         fetch(`${API_URL}/advance/all`),
-        fetch(`${API_URL}/zone-stock/all`),
+        fetch(`${API_URL}/zone-stock/date/${today}`),
         fetch(`${API_URL}/food-allowance/all`),
       ]);
 
@@ -268,7 +292,8 @@ export default function SupervisorDashboard() {
       const digitalRaw = await digitalRes.json();
       const incentiveRaw = await incentiveRes.json();
       const advanceRaw = await advanceRes.json();
-      const zoneStockRaw = await zoneStockRes.json();
+      let zoneStockRaw = await zoneStockRes.json();
+      if (!Array.isArray(zoneStockRaw) && zoneStockRaw) zoneStockRaw = [zoneStockRaw];
       const foodAllowanceRaw = await foodAllowanceRes.json();
 
       const zoneOutlets = Array.isArray(outletsRaw)
@@ -397,44 +422,6 @@ export default function SupervisorDashboard() {
               </div>
             </div>
           ) : null}
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-            <Link to="/supervisor/damages" className="rounded-xl bg-orange-100 p-6 shadow hover:bg-orange-200 transition flex flex-col items-center">
-              <span className="text-2xl mb-2">🥚</span>
-              <span className="font-semibold text-lg">Daily Damages</span>
-              <span className="text-xs text-gray-500 mt-1">Enter and view daily damages</span>
-            </Link>
-            <Link to="/supervisor/neccrate" className="rounded-xl bg-orange-100 p-6 shadow hover:bg-orange-200 transition flex flex-col items-center">
-              <span className="text-2xl mb-2">💹</span>
-              <span className="font-semibold text-lg">NECC Rate</span>
-              <span className="text-xs text-gray-500 mt-1">View NECC rates</span>
-            </Link>
-            <Link to="/supervisor/dailysales" className="rounded-xl bg-orange-100 p-6 shadow hover:bg-orange-200 transition flex flex-col items-center">
-              <span className="text-2xl mb-2">📊</span>
-              <span className="font-semibold text-lg">Daily Sales Quantity</span>
-              <span className="text-xs text-gray-500 mt-1">Enter and view daily sales quantity</span>
-            </Link>
-            <Link to="/supervisor/digital-payments" className="rounded-xl bg-orange-100 p-6 shadow hover:bg-orange-200 transition flex flex-col items-center">
-              <span className="text-2xl mb-2">💳</span>
-              <span className="font-semibold text-lg">Digital Payments</span>
-              <span className="text-xs text-gray-500 mt-1">Manage digital payments</span>
-            </Link>
-            <Link to="/supervisor/cash-payments" className="rounded-xl bg-orange-100 p-6 shadow hover:bg-orange-200 transition flex flex-col items-center">
-              <span className="text-2xl mb-2">💵</span>
-              <span className="font-semibold text-lg">Cash Payments</span>
-              <span className="text-xs text-gray-500 mt-1">Manage cash payments</span>
-            </Link>
-            <Link to="/supervisor/cash-closure" className="rounded-xl bg-orange-100 p-6 shadow hover:bg-orange-200 transition flex flex-col items-center">
-              <span className="text-2xl mb-2">🧾</span>
-              <span className="font-semibold text-lg">Cash Closure</span>
-              <span className="text-xs text-gray-500 mt-1">Record zone-wise cash closure</span>
-            </Link>
-            <Link to="/supervisor/reports" className="rounded-xl bg-orange-100 p-6 shadow hover:bg-orange-200 transition flex flex-col items-center">
-              <span className="text-2xl mb-2">📈</span>
-              <span className="font-semibold text-lg">Reports</span>
-              <span className="text-xs text-gray-500 mt-1">View reports</span>
-            </Link>
-          </div>
         </div>
       </div>
     </div>

@@ -359,32 +359,57 @@ const getZoneWiseAmountTotals = (rows = [], outlets = [], selectedDate) => {
 const getZoneWiseClosingStock = (rows = [], selectedDate, zoneSales = {}, zoneDamages = {}) => {
   const latestByZone = new Map();
 
+  console.log("🔍 [AdminDashboard] getZoneWiseClosingStock called");
+  console.log("   Total rows:", Array.isArray(rows) ? rows.length : 0);
+  console.log("   Selected date:", selectedDate);
+  console.log("   ZONES:", ZONES);
+  
+  if (Array.isArray(rows) && rows.length > 0) {
+    console.log("   Sample row:", rows[0]);
+  }
+
   for (const row of Array.isArray(rows) ? rows : []) {
     const rowDate = normalizeDate(row?.date || row?.createdAt);
+    const normalizedZone = normalizeZone(row?.zone);
+    const zoneLabel = `Zone ${normalizedZone}`;
+    
+    console.log("   Row:", { date: rowDate, zone: row?.zone, normalizedZone: normalizedZone, closingStock: row?.closingStock, matches: rowDate === selectedDate && normalizedZone && ZONES.includes(zoneLabel) });
+    
     if (rowDate !== selectedDate) continue;
 
-    const normalizedZone = normalizeZone(row?.zone);
     if (!normalizedZone) continue;
 
-    const zoneLabel = `Zone ${normalizedZone}`;
     if (!ZONES.includes(zoneLabel)) continue;
 
     const existing = latestByZone.get(zoneLabel);
     if (!existing || getDocTimestamp(row) >= getDocTimestamp(existing)) {
       latestByZone.set(zoneLabel, row);
+      console.log(`   ✓ Set latest for ${zoneLabel}`);
     }
   }
 
   return Object.fromEntries(
     ZONES.map((zoneLabel) => {
       const row = latestByZone.get(zoneLabel);
-      if (!row) return [zoneLabel, 0];
+      if (!row) {
+        console.log(`   ⚠️ No data found for ${zoneLabel}`);
+        return [zoneLabel, 0];
+      }
 
+      // Use closingStock directly if available
+      if (row?.closingStock !== undefined && row.closingStock !== null) {
+        const value = toNumber(row.closingStock);
+        console.log(`   ${zoneLabel}: Using direct closingStock = ${value}`);
+        return [zoneLabel, value];
+      }
+
+      // Otherwise calculate it
       const openingStock = toNumber(row?.openingStock);
       const stockIn = toNumber(row?.stockIn);
       const salesQty = zoneSales[zoneLabel] !== undefined ? toNumber(zoneSales[zoneLabel]) : toNumber(row?.salesQty);
       const damagesQty = zoneDamages[zoneLabel] !== undefined ? toNumber(zoneDamages[zoneLabel]) : toNumber(row?.damagesQty);
       const closingValue = openingStock + stockIn - salesQty - damagesQty;
+      console.log(`   ${zoneLabel}: Calculated = ${openingStock} + ${stockIn} - ${salesQty} - ${damagesQty} = ${closingValue}`);
       return [zoneLabel, Number.isFinite(closingValue) ? closingValue : 0];
     })
   );
