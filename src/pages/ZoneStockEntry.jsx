@@ -317,18 +317,18 @@ export default function ZoneStockEntry() {
   const hasMissingSalesEntries = missingSalesOutlets.length > 0;
   const isSupervisorLockedForDate = Boolean(isSupervisor && existingForDate);
   const canEditInventory = isAdmin || isSupervisor;
-  const canSave = Boolean(canEditInventory && selectedZone && selectedDate && isTodaySelected && !isSupervisorLockedForDate);
+  const canSave = Boolean(canEditInventory && selectedZone && selectedDate && (isAdmin || isTodaySelected) && !isSupervisorLockedForDate);
 
   const saveDisabledReason = useMemo(() => {
     if (!selectedZone || !selectedDate) return "Please select zone and date.";
-    if (!isTodaySelected) return "Inventory entry can only be created for today's date.";
+    if (isSupervisor && !isTodaySelected) return "Supervisors can only create inventory entries for today's date.";
     if (isSupervisorLockedForDate) return "Entry locked. Supervisors can submit inventory only once per day.";
     return "";
-  }, [selectedZone, selectedDate, isTodaySelected, isSupervisorLockedForDate]);
+  }, [selectedZone, selectedDate, isTodaySelected, isSupervisorLockedForDate, isSupervisor]);
 
   const handleSave = async () => {
     if (!canSave) {
-      alert(saveDisabledReason || "Entry is allowed only for today's date.");
+      alert(saveDisabledReason || "Cannot save entry.");
       return;
     }
 
@@ -530,8 +530,8 @@ export default function ZoneStockEntry() {
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
-                min={entryWindow.currentDate}
-                max={entryWindow.currentDate}
+                min={isSupervisor ? entryWindow.currentDate : undefined}
+                max={isSupervisor ? entryWindow.currentDate : undefined}
                 className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
               />
             </div>
@@ -551,12 +551,12 @@ export default function ZoneStockEntry() {
                 min="0"
                 value={stockIn}
                 onChange={(e) => setStockIn(e.target.value)}
-                readOnly={!isTodaySelected}
+                readOnly={isSupervisor && !isTodaySelected}
                 className={[
                   "w-full rounded-xl border px-3 py-2.5 text-sm",
-                  isTodaySelected
-                    ? "border-gray-200 focus:outline-none focus:ring-2 focus:ring-orange-400"
-                    : "border-gray-200 bg-gray-50 text-gray-500",
+                  isSupervisor && !isTodaySelected
+                    ? "border-gray-200 bg-gray-50 text-gray-500"
+                    : "border-gray-200 focus:outline-none focus:ring-2 focus:ring-orange-400",
                 ].join(" ")}
               />
             </div>
@@ -624,7 +624,7 @@ export default function ZoneStockEntry() {
             </p>
           ) : null}
           <p className={`mt-2 text-xs font-medium ${saveDisabledReason ? "text-red-600" : "text-emerald-600"}`}>
-            {saveDisabledReason || "Entries are allowed only for today's date."}
+            {saveDisabledReason || (isSupervisor ? "Ready to save entry for today." : "Ready to save entry.")}
           </p>
         </div>
         ) : (
