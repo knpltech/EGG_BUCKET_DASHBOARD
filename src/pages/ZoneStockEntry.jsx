@@ -162,33 +162,66 @@ export default function ZoneStockEntry() {
     return () => window.clearInterval(timer);
   }, []);
 
+  // Load minimal required data while preserving behaviour.
+  // - `outlets` is fetched once and cached in memory/localStorage
+  // - `dailysales` and `daily-damage` are fetched for the selected date
+  // - `zone-stock` is fetched for the selected zone (falls back to all on no zone)
   const loadAll = useCallback(async (silent = false) => {
     if (silent) {
       setIsRefreshing(true);
     } else {
       setIsLoading(true);
     }
-    try {
-      const [outletsRes, salesRes, damageRes, zoneStockRes] = await Promise.all([
-        fetch(`${API_URL}/outlets/all`),
-        fetch(`${API_URL}/dailysales/all`),
-        fetch(`${API_URL}/daily-damage/all`),
-        fetch(`${API_URL}/zone-stock/all`),
-      ]);
 
-      const [outletsData, salesData, damageData, zoneStockData] = await Promise.all([
-        outletsRes.ok ? outletsRes.json() : [],
+    try {
+      // Fetch outlets only once and cache in localStorage to reduce reads
+      let outletsData = null;
+      try {
+        const cached = localStorage.getItem("outlets_cache_v1");
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          // if cache is recent (<15 minutes) use it
+          if (parsed?.ts && Date.now() - parsed.ts < 15 * 60 * 1000 && Array.isArray(parsed.data)) {
+            outletsData = parsed.data;
+          }
+        }
+      } catch {}
+
+      if (!outletsData) {
+        const outletsRes = await fetch(`${API_URL}/outlets/all`);
+        outletsData = outletsRes.ok ? await outletsRes.json() : [];
+        try {
+          localStorage.setItem(
+            "outlets_cache_v1",
+            JSON.stringify({ ts: Date.now(), data: Array.isArray(outletsData) ? outletsData : [] })
+          );
+        } catch {}
+      }
+
+      // Fetch sales and damages only for the selected date
+      const salesPromise = fetch(`${API_URL}/dailysales/date/${encodeURIComponent(selectedDate)}`);
+      const damagesPromise = fetch(`${API_URL}/daily-damage/date/${encodeURIComponent(selectedDate)}`);
+
+      // Fetch zone-stock for the selected zone if available, else fallback to all
+      const zoneStockPromise = selectedZone
+        ? fetch(`${API_URL}/zone-stock/zone/${encodeURIComponent(selectedZone)}`)
+        : fetch(`${API_URL}/zone-stock/all`);
+
+      const [salesRes, damageRes, zoneStockRes] = await Promise.all([salesPromise, damagesPromise, zoneStockPromise]);
+
+      const [salesData, damageData, zoneStockData] = await Promise.all([
         salesRes.ok ? salesRes.json() : [],
         damageRes.ok ? damageRes.json() : [],
         zoneStockRes.ok ? zoneStockRes.json() : [],
       ]);
 
       setOutlets(Array.isArray(outletsData) ? outletsData : []);
-      setSalesRows(Array.isArray(salesData) ? salesData : []);
-      setDamageRows(Array.isArray(damageData) ? damageData : []);
-      setZoneStockRows(Array.isArray(zoneStockData) ? zoneStockData : []);
+      // keep API compatibility: if date endpoints return arrays or single objects
+      setSalesRows(Array.isArray(salesData) ? salesData : salesData ? [salesData] : []);
+      setDamageRows(Array.isArray(damageData) ? damageData : damageData ? [damageData] : []);
+      setZoneStockRows(Array.isArray(zoneStockData) ? zoneStockData : zoneStockData ? [zoneStockData] : []);
       setLastRefreshedAt(new Date());
-    } catch {
+    } catch (err) {
       setOutlets([]);
       setSalesRows([]);
       setDamageRows([]);
@@ -200,7 +233,7 @@ export default function ZoneStockEntry() {
         setIsLoading(false);
       }
     }
-  }, []);
+  }, [selectedDate, selectedZone]);
 
   useEffect(() => {
     let mounted = true;
