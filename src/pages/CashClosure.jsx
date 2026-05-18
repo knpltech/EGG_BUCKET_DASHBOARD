@@ -256,6 +256,8 @@ export default function CashClosure() {
     return rows.find((row) => normalizeZoneLabel(row?.zone) === selectedZoneLabel && normalizeDate(row?.date || row?.createdAt) === selectedDate) || null;
   }, [rows, selectedZoneLabel, selectedDate]);
 
+  const lockedForSupervisor = Boolean(isSupervisor && existingEntry);
+
   useEffect(() => {
     if (existingEntry) {
       setTotalCashAmount(String(existingEntry.totalCashAmount ?? 0));
@@ -271,6 +273,16 @@ export default function CashClosure() {
     setCashHandover("0");
     setCashRemarks("");
   }, [existingEntry?.id, selectedZoneLabel, selectedDate, fetchAutofillData]);
+
+  const handleAdminEdit = useCallback((row) => {
+    if (!isAdmin || !row) return;
+    const rowZone = normalizeZoneLabel(row.zone) || selectedZone;
+    const rowDate = normalizeDate(row.date || row.createdAt) || selectedDate;
+    setSelectedZone(rowZone);
+    setSelectedDate(rowDate);
+    // scroll to top so the New Entry form is visible
+    try { window.scrollTo?.({ top: 0, behavior: "smooth" }); } catch {}
+  }, [isAdmin, selectedZone, selectedDate]);
 
   const sortedRows = useMemo(() => {
     return [...rows]
@@ -292,6 +304,10 @@ export default function CashClosure() {
   }, [totalCashAmount, incentives, foodAllowance, advance, cashHandover]);
 
   const handleSave = async () => {
+    if (isSupervisor && existingEntry) {
+      alert("You cannot update a saved entry. Contact an admin to make changes for this date.");
+      return;
+    }
     if (!selectedZoneLabel || !selectedDate) {
       alert("Please select a zone and date.");
       return;
@@ -403,6 +419,7 @@ export default function CashClosure() {
                 type="date"
                 value={selectedDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
+                disabled={lockedForSupervisor}
                 className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
               />
             </div>
@@ -458,6 +475,7 @@ export default function CashClosure() {
                 min="0"
                 value={cashHandover}
                 onChange={(e) => setCashHandover(e.target.value)}
+                disabled={lockedForSupervisor}
                 placeholder="Enter cash handover amount"
                 className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
               />
@@ -469,6 +487,7 @@ export default function CashClosure() {
                 rows={3}
                 value={cashRemarks}
                 onChange={(e) => setCashRemarks(e.target.value)}
+                disabled={lockedForSupervisor}
                 placeholder="Enter cash remarks (optional)"
                 className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
               />
@@ -476,14 +495,36 @@ export default function CashClosure() {
           </div>
 
           <div className="mt-5 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving || !selectedZoneLabel || !selectedDate}
-              className="rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-gray-300"
-            >
-              {saving ? "Saving..." : existingEntry ? "Update Entry" : "Save Entry"}
-            </button>
+            {existingEntry ? (
+              isAdmin ? (
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saving || !selectedZoneLabel || !selectedDate}
+                  className="rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-gray-300"
+                >
+                  {saving ? "Saving..." : "Update Entry"}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="rounded-xl bg-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-600 cursor-not-allowed"
+                  title="Supervisors cannot edit saved entries. Contact admin to modify."
+                >
+                  Locked
+                </button>
+              )
+            ) : (
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving || !selectedZoneLabel || !selectedDate}
+                className="rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:bg-gray-300"
+              >
+                {saving ? "Saving..." : "Save Entry"}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => loadRows(selectedZone)}
@@ -523,6 +564,7 @@ export default function CashClosure() {
                     <th className="px-4 py-3 text-right font-semibold text-orange-800">Cash Handover</th>
                     <th className="px-4 py-3 text-right font-semibold text-orange-800">Balance</th>
                     <th className="px-4 py-3 text-left font-semibold text-orange-800">Cash Remarks</th>
+                    {isAdmin ? <th className="px-4 py-3 text-right font-semibold text-orange-800">Action</th> : null}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 bg-white">
@@ -540,6 +582,17 @@ export default function CashClosure() {
                         <td className="px-4 py-3 text-gray-600">
                           <span className="block max-w-xs break-words">{row.cashRemarks || "-"}</span>
                         </td>
+                          {isAdmin ? (
+                            <td className="px-4 py-3 text-right">
+                              <button
+                                type="button"
+                                onClick={() => handleAdminEdit(row)}
+                                className="rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-600"
+                              >
+                                Edit
+                              </button>
+                            </td>
+                          ) : null}
                       </tr>
                     );
                   })}

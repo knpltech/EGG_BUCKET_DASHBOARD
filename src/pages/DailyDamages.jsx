@@ -159,11 +159,16 @@ function DamageAnalytics({ filteredData, outlets }) {
 
   // Build stable outlet metadata (key, display name, color)
   const outletMeta = useMemo(() =>
-    outlets.map((o, i) => ({
-      key:   typeof o === "string" ? o : o.area,
-      name:  typeof o === "string" ? o : (o.area || o.id || o.name || String(o)),
-      color: OUTLET_COLORS[i % OUTLET_COLORS.length],
-    })),
+    // map outlets -> meta then append a Total series
+    (() => {
+      const metas = outlets.map((o, i) => ({
+        key:   typeof o === "string" ? o : o.area,
+        name:  typeof o === "string" ? o : (o.area || o.id || o.name || String(o)),
+        color: OUTLET_COLORS[i % OUTLET_COLORS.length],
+      }));
+      metas.push({ key: "__TOTAL", name: "Total", color: "#111827" });
+      return metas;
+    })(),
     [outlets]
   );
 
@@ -188,7 +193,17 @@ function DamageAnalytics({ filteredData, outlets }) {
   const chartData = useMemo(() =>
     filteredData.map(row => {
       const point = { date: formatDateShort(row.date) };
-      outletMeta.forEach(({ key, name }) => { point[name] = Number(row[key] || 0); });
+      // compute values for each outlet meta; compute total separately
+      let runningTotal = 0;
+      outletMeta.forEach(({ key, name }) => {
+        if (key === "__TOTAL") return;
+        const val = Number(row[key] ?? 0);
+        runningTotal += val;
+        point[name] = val;
+      });
+      // append Total value
+      const totalMeta = outletMeta.find(m => m.key === "__TOTAL");
+      if (totalMeta) point[totalMeta.name] = runningTotal;
       return point;
     }),
     [filteredData, outletMeta]
