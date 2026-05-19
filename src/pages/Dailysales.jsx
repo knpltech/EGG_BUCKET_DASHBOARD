@@ -7,6 +7,8 @@ import {
   CartesianGrid,
   Bar,
   BarChart,
+  Line,
+  LineChart,
   Legend,
   ResponsiveContainer,
   Tooltip,
@@ -22,73 +24,168 @@ import { getThisWeekRange } from "../utils/dateRange";
 
 const OUTLETS_KEY = "egg_outlets_v1";
 
+const OUTLET_COLORS = [
+  "#ff7518", "#3b82f6", "#10b981", "#8b5cf6",
+  "#f59e0b", "#ef4444", "#06b6d4", "#ec4899",
+  "#84cc16", "#a855f7",
+];
+
 const formatDateDMY = (iso) => {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
   return `${String(date.getDate()).padStart(2, "0")}-${String(date.getMonth() + 1).padStart(2, "0")}-${date.getFullYear()}`;
 };
 
+// Short label for chart X-axis: DD/MM
+const formatDateShort = (iso) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+};
+
 function DailySalesAnalytics({ rows, outlets = [] }) {
-  const colors = ["#f97316", "#3b82f6", "#22c55e", "#a855f7", "#ef4444", "#06b6d4", "#f59e0b"];
+  const [chartType, setChartType] = useState("bar"); // "line" | "bar"
 
-  const outletKeys = useMemo(() => {
-    return Array.isArray(outlets)
-      ? outlets
-          .map((outlet) => (typeof outlet === "string" ? outlet : outlet?.id || outlet?.area || outlet?.name))
-          .filter(Boolean)
-      : [];
+  // Build stable outlet metadata (key, display name, color)
+  const outletMeta = useMemo(() => {
+    const metas = outlets.map((o, i) => ({
+      key: typeof o === "string" ? o : o.id || o.area || o.name,
+      name: typeof o === "string" ? o : (o.area || o.name || o.id || String(o)),
+      color: OUTLET_COLORS[i % OUTLET_COLORS.length],
+    }));
+    metas.push({ key: "__TOTAL", name: "Total", color: "#111827" });
+    return metas;
   }, [outlets]);
 
-  const outletNames = useMemo(() => {
-    return new Map(
-      (Array.isArray(outlets) ? outlets : []).map((outlet) => {
-        const key = typeof outlet === "string" ? outlet : outlet?.id || outlet?.area || outlet?.name;
-        const label = typeof outlet === "string" ? outlet : outlet?.area || outlet?.name || key;
-        return [key, label];
-      }).filter(([key]) => Boolean(key))
-    );
-  }, [outlets]);
+  // All outlets start active; toggling hides/shows individual lines
+  const [activeKeys, setActiveKeys] = useState(() => new Set(outletMeta.map(o => o.key)));
 
-  const chartData = useMemo(() => {
-    return rows.map((row) => {
-      const dataPoint = {
-        date: formatDateDMY(row.date),
-      };
+  // Re-sync when outlets list changes
+  useEffect(() => {
+    setActiveKeys(new Set(outletMeta.map(o => o.key)));
+  }, [outletMeta]);
 
-      outletKeys.forEach((outletKey) => {
-        const outletValues = row?.outlets || {};
-        if (outletValues[outletKey] !== undefined) {
-          dataPoint[outletKey] = Number(outletValues[outletKey]) || 0;
-        } else {
-          dataPoint[outletKey] = 0;
-        }
-      });
-
-      return dataPoint;
+  const toggleOutlet = (key) => {
+    setActiveKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) { if (next.size > 1) next.delete(key); } // keep at least one
+      else next.add(key);
+      return next;
     });
-  }, [rows, outletKeys]);
+  };
 
-  if (!chartData.length) return null;
+  // One data point per date
+  const chartData = useMemo(() =>
+    rows.map(row => {
+      const point = { date: formatDateShort(row.date) };
+      // compute values for each outlet meta; compute total separately
+      let runningTotal = 0;
+      outletMeta.forEach(({ key, name }) => {
+        if (key === "__TOTAL") return;
+        const outletValues = row?.outlets || {};
+        const val = Number(outletValues[key] ?? 0);
+        runningTotal += val;
+        point[name] = val;
+      });
+      // append Total value
+      const totalMeta = outletMeta.find(m => m.key === "__TOTAL");
+      if (totalMeta) point[totalMeta.name] = runningTotal;
+      return point;
+    }),
+    [rows, outletMeta]
+  );
+
+  // Nothing to render if no data or outlets
+  if (chartData.length === 0 || outlets.length === 0) return null;
+
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-white border border-gray-100 rounded-xl shadow-lg px-4 py-3 text-xs min-w-[150px]">
+        <p className="font-semibold text-gray-700 mb-2">{label}</p>
+        {payload.map((p) => (
+          <div key={p.name} className="flex items-center justify-between gap-4 mt-0.5">
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ background: p.color }} />
+              <span style={{ color: p.color }} className="font-medium">{p.name}</span>
+            </span>
+            <span className="font-semibold text-gray-800">{Number(p.value).toLocaleString("en-IN")}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
-    <div className="mt-6 rounded-2xl bg-white p-6 shadow-md">
-      <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-700">
-        Daily Sales Trend by Date
-      </h2>
-      <div style={{ width: "100%", height: 360 }}>
+    <div className="bg-white rounded-xl shadow p-6 mb-8">
+
+      {/* Header row */}
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Sales Trend Analysis</h2>
+          <p className="text-xs text-gray-500 mt-0.5">Visualise daily sales trends per outlet for the selected date range</p>
+        </div>
+        {/* Line / Bar toggle */}
+        <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1 self-start">
+          <button
+            onClick={() => setChartType("line")}
+            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${chartType === "line" ? "bg-white text-orange-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+          >Line</button>
+          <button
+            onClick={() => setChartType("bar")}
+            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-colors ${chartType === "bar" ? "bg-white text-orange-600 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+          >Bar</button>
+        </div>
+      </div>
+
+      {/* Outlet toggle pills */}
+      <div className="flex flex-wrap gap-2 mb-5">
+        {outletMeta.map(({ key, name, color }) => {
+          const active = activeKeys.has(key);
+          return (
+            <button
+              key={key}
+              onClick={() => toggleOutlet(key)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                active ? "bg-white border-gray-200 text-gray-700 shadow-sm" : "bg-gray-50 border-gray-100 text-gray-400"
+              }`}
+            >
+              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: color, opacity: active ? 1 : 0.3 }} />
+              {name}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Chart */}
+      <div style={{ width: "100%", height: 320 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" tickMargin={10} />
-            <YAxis width={42} />
-            <Tooltip
-              formatter={(value, name) => [Number(value).toLocaleString("en-IN"), outletNames.get(name) || name]}
-            />
-            <Legend formatter={(value) => outletNames.get(value) || value} />
-            {outletKeys.map((outletKey, index) => (
-              <Bar key={outletKey} dataKey={outletKey} fill={colors[index % colors.length]} radius={[8, 8, 0, 0]} />
-            ))}
-          </BarChart>
+          {chartType === "line" ? (
+            <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+              <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#9ca3af" }} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+              <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} tickLine={false} axisLine={false} tickFormatter={(v) => v.toLocaleString("en-IN")} width={48} />
+              <Tooltip content={<CustomTooltip />} />
+              {outletMeta.map(({ key, name, color }) =>
+                activeKeys.has(key) ? (
+                  <Line key={key} type="monotone" dataKey={name} stroke={color} strokeWidth={2}
+                    dot={{ r: 3, fill: color, strokeWidth: 0 }} activeDot={{ r: 5, strokeWidth: 0 }} isAnimationActive />
+                ) : null
+              )}
+            </LineChart>
+          ) : (
+            <BarChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+              <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#9ca3af" }} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
+              <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} tickLine={false} axisLine={false} tickFormatter={(v) => v.toLocaleString("en-IN")} width={48} />
+              <Tooltip content={<CustomTooltip />} />
+              {outletMeta.map(({ key, name, color }) =>
+                activeKeys.has(key) ? (
+                  <Bar key={key} dataKey={name} fill={color} radius={[3, 3, 0, 0]} maxBarSize={24} isAnimationActive />
+                ) : null
+              )}
+            </BarChart>
+          )}
         </ResponsiveContainer>
       </div>
     </div>
