@@ -524,6 +524,7 @@ export const getAllZoneStockEntries = async (_req, res) => {
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
     return res.status(200).json(data);
   } catch (error) {
+    console.error("[zoneStockController] getZoneStockEntriesByZone error:", error);
     return res.status(500).json({ message: "Error fetching zone stock entries", error: error.message });
   }
 };
@@ -548,24 +549,68 @@ export const getZoneStockEntriesByZone = async (req, res) => {
     // Do not create defaults; return only user-entered rows below.
     const zone = normalizeZoneLabel(req.params.zone);
     if (!zone) return res.status(400).json({ message: "zone is required" });
+    // Recalculate from earliest manual date (fetch earliest only for efficiency)
+    try {
+      const earliestSnap = await db.collection(COLLECTION).where("zone", "==", zone).orderBy("date", "asc").limit(1).get();
+      if (!earliestSnap.empty) {
+        const first = earliestSnap.docs[0];
+        const earliestDate = normalizeDate(mapDoc(first)?.date || first?.data()?.createdAt);
+        if (earliestDate) await recalculateZoneStockFromDate(zone, earliestDate);
+      }
+    } catch (err) {
+      // If ordering by date fails (no index), fall back to conservative full recalculation
+      try {
+        const zoneSnapshot = await db.collection(COLLECTION).where("zone", "==", zone).get();
+        if (!zoneSnapshot.empty) {
+          const earliestDate = zoneSnapshot.docs
+            .map(mapDoc)
+            .map((row) => normalizeDate(row?.date || row?.createdAt))
+            .filter(Boolean)
+            .sort((a, b) => String(a).localeCompare(String(b)))[0];
+          if (earliestDate) await recalculateZoneStockFromDate(zone, earliestDate);
+        }
+      } catch (__) {}
+    }
 
-    const zoneSnapshot = await db.collection(COLLECTION).where("zone", "==", zone).get();
-    if (!zoneSnapshot.empty) {
-      const earliestDate = zoneSnapshot.docs
-        .map(mapDoc)
-        .map((row) => normalizeDate(row?.date || row?.createdAt))
-        .filter(Boolean)
-        .sort((a, b) => String(a).localeCompare(String(b)))[0];
-
-      if (earliestDate) {
-        await recalculateZoneStockFromDate(zone, earliestDate);
+    // Support optional ?days= parameter. If days is provided and not 'all', return only last N days.
+    const daysParam = String(req.query.days || "").trim().toLowerCase();
+    let query = db.collection(COLLECTION).where("zone", "==", zone);
+    if (daysParam && daysParam !== "all") {
+      const daysNum = Number.parseInt(daysParam, 10) || 30;
+      const fromIso = addDays(getIsoToday(), -(daysNum - 1));
+      if (fromIso) {
+        try {
+          query = query.where("date", ">=", fromIso).orderBy("date", "desc");
+        } catch (err) {
+          // If Firestore index not available for range query, fall back to client-side filter below
+        }
       }
     }
 
-    const snapshot = await db.collection(COLLECTION).where("zone", "==", zone).get();
-    const data = dedupeZoneStockRows(snapshot.docs.map(mapDoc))
-      .filter((r) => !r.isAutoDefault)
-      .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+    let snapshot;
+    try {
+      snapshot = await query.get();
+    } catch (err) {
+      console.warn("[zoneStockController] Query with date filter failed, falling back to zone-only fetch:", err.message);
+      // Fall back to fetching by zone only and apply client-side filtering below
+      snapshot = await db.collection(COLLECTION).where("zone", "==", zone).get();
+    }
+
+    let rows = snapshot.docs.map(mapDoc);
+
+    // If we couldn't apply server-side date filter (or index missing) apply client-side filter.
+    if (daysParam && daysParam !== "all") {
+      const daysNum = Number.parseInt(daysParam, 10) || 30;
+      const fromIso = addDays(getIsoToday(), -(daysNum - 1));
+      if (fromIso) {
+        rows = rows.filter((r) => {
+          const d = normalizeDate(r?.date || r?.createdAt);
+          return d && String(d).localeCompare(String(fromIso)) >= 0;
+        });
+      }
+    }
+
+    const data = dedupeZoneStockRows(rows).filter((r) => !r.isAutoDefault).sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
     return res.status(200).json(data);
   } catch (error) {
     return res.status(500).json({ message: "Error fetching zone stock entries", error: error.message });

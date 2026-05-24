@@ -128,6 +128,8 @@ export default function ZoneStockEntry() {
   const [salesRows, setSalesRows] = useState([]);
   const [damageRows, setDamageRows] = useState([]);
   const [zoneStockRows, setZoneStockRows] = useState([]);
+  const [showFullHistory, setShowFullHistory] = useState(false);
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -166,7 +168,7 @@ export default function ZoneStockEntry() {
   // - `outlets` is fetched once and cached in memory/localStorage
   // - `dailysales` and `daily-damage` are fetched for the selected date
   // - `zone-stock` is fetched for the selected zone (falls back to all on no zone)
-  const loadAll = useCallback(async (silent = false) => {
+  const loadAll = useCallback(async (silent = false, daysOverride) => {
     if (silent) {
       setIsRefreshing(true);
     } else {
@@ -198,22 +200,34 @@ export default function ZoneStockEntry() {
         } catch {}
       }
 
+      // Determine days param: override > explicit showFullHistory state
+      const daysParam = daysOverride !== undefined ? daysOverride : (showFullHistory ? "all" : 30);
+
       // Fetch sales and damages only for the selected date
       const salesPromise = fetch(`${API_URL}/dailysales/date/${encodeURIComponent(selectedDate)}`);
       const damagesPromise = fetch(`${API_URL}/daily-damage/date/${encodeURIComponent(selectedDate)}`);
 
-      // Fetch zone-stock for the selected zone if available, else fallback to all
-      const zoneStockPromise = selectedZone
-        ? fetch(`${API_URL}/zone-stock/zone/${encodeURIComponent(selectedZone)}`)
-        : fetch(`${API_URL}/zone-stock/all`);
+      // Fetch zone-stock only when a specific zone is selected. Avoid calling `/zone-stock/all`.
+      let zoneStockData = [];
 
-      const [salesRes, damageRes, zoneStockRes] = await Promise.all([salesPromise, damagesPromise, zoneStockPromise]);
+      const salesRes = await salesPromise;
+      const damageRes = await damagesPromise;
 
-      const [salesData, damageData, zoneStockData] = await Promise.all([
-        salesRes.ok ? salesRes.json() : [],
-        damageRes.ok ? damageRes.json() : [],
-        zoneStockRes.ok ? zoneStockRes.json() : [],
-      ]);
+      if (selectedZone) {
+        const zoneStockUrl = `${API_URL}/zone-stock/zone/${encodeURIComponent(selectedZone)}?days=${encodeURIComponent(String(daysParam))}`;
+        try {
+          const zoneStockRes = await fetch(zoneStockUrl);
+          zoneStockData = zoneStockRes.ok ? await zoneStockRes.json() : [];
+        } catch (err) {
+          zoneStockData = [];
+        }
+      } else {
+        // no zone selected: keep zoneStockData empty
+        zoneStockData = [];
+      }
+
+      const salesData = salesRes.ok ? await salesRes.json() : [];
+      const damageData = damageRes.ok ? await damageRes.json() : [];
 
       setOutlets(Array.isArray(outletsData) ? outletsData : []);
       // keep API compatibility: if date endpoints return arrays or single objects
@@ -233,34 +247,26 @@ export default function ZoneStockEntry() {
         setIsLoading(false);
       }
     }
-  }, [selectedDate, selectedZone]);
+  }, [selectedDate, selectedZone, showFullHistory]);
 
   useEffect(() => {
     let mounted = true;
 
-    const refresh = async (silent = false) => {
+    const loadInitial = async () => {
       if (!mounted) return;
-      await loadAll(silent);
+      // Avoid calling the generic `/zone-stock/all` on initial load which returns full history.
+      // Wait until a zone is selected (or there are no availableZones) so frontend requests
+      // a zone-specific endpoint with `?days=30` by default.
+      if (!selectedZone && Array.isArray(availableZones) && availableZones.length > 0) return;
+      await loadAll(false);
     };
 
-    refresh(false);
-
-    const intervalId = window.setInterval(() => refresh(true), 30000);
-    const handleFocus = () => refresh(true);
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") refresh(true);
-    };
-
-    window.addEventListener("focus", handleFocus);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    loadInitial();
 
     return () => {
       mounted = false;
-      window.clearInterval(intervalId);
-      window.removeEventListener("focus", handleFocus);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [loadAll]);
+  }, [loadAll, selectedZone, availableZones]);
 
   const handleManualRefresh = useCallback(async () => {
     if (isRefreshing) return;
@@ -548,6 +554,25 @@ export default function ZoneStockEntry() {
               className="w-38 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2.5 text-xs font-semibold text-orange-700 hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isRefreshing ? "Refreshing..." : "Refresh"}
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                if (historyLoadingMore) return;
+                const newVal = !showFullHistory;
+                setShowFullHistory(newVal);
+                setHistoryLoadingMore(true);
+                try {
+                  await loadAll(true, newVal ? "all" : 30);
+                } catch (e) {
+                } finally {
+                  setHistoryLoadingMore(false);
+                }
+              }}
+              disabled={isLoading || isRefreshing || historyLoadingMore}
+              className="w-40 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {historyLoadingMore ? "Loading..." : showFullHistory ? "Show Last 30 Days" : "Load Full History"}
             </button>
           </div>
         </div>
