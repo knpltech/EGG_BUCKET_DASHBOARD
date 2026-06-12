@@ -30,6 +30,7 @@ import ViewerData from "./pages/ViewerData";
 import SupervisorLayout from "./layouts/SupervisorLayout";
 import DataEntry from "./pages/DataEntry";
 import ZoneStockEntry from "./pages/ZoneStockEntry";
+import StockOptionsPage from "./pages/StockOptionsPage";
 
 function ProtectedRoute({ element, requiredRole }) {
   let user = null;
@@ -138,6 +139,10 @@ function App() {
             <Route
               path="/admin/inventory"
               element={<ProtectedRoute element={<AdminLayoutWithPanel><ZoneStockEntry /></AdminLayoutWithPanel>} requiredRole={null} />}
+            />
+            <Route
+              path="/admin/stock-options"
+              element={<ProtectedRoute element={<AdminLayoutWithPanel><StockOptionsPage /></AdminLayoutWithPanel>} requiredRole="admin" />}
             />
 
             {/* SUPERVISOR ROUTES */}

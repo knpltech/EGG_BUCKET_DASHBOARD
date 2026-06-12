@@ -170,61 +170,21 @@ const formatZoneLabel = (zoneKey) => {
   return `Zone ${String(zoneKey).trim()}`;
 };
 
-const getClosingStockBySupervisorZone = (rows, normalizedZones, today, zoneSales = {}, zoneDamages = {}) => {
+const getStockQuantityBySupervisorZone = (rows, normalizedZones, today) => {
   const zoneSet = new Set((normalizedZones || []).map((zoneKey) => String(zoneKey)));
-  const latestByZone = new Map();
-
-  console.log("🔍 [SupervisorDashboard] getClosingStockBySupervisorZone called");
-  console.log("   Total rows:", Array.isArray(rows) ? rows.length : 0);
-  console.log("   Today:", today);
-  console.log("   Supervisor zones:", Array.from(zoneSet));
-  
-  if (Array.isArray(rows) && rows.length > 0) {
-    console.log("   Sample row:", rows[0]);
-  }
-
-  for (const row of Array.isArray(rows) ? rows : []) {
-    const rowDate = normalizeDate(row?.date || row?.createdAt);
-    const zoneNumber = normalizeZone(row?.zone);
-    
-    console.log("   Row:", { date: rowDate, zone: row?.zone, normalizedZone: zoneNumber, closingStock: row?.closingStock, matches: rowDate === today && zoneNumber && zoneSet.has(String(zoneNumber)) });
-    
-    if (rowDate !== today) continue;
-
-    if (!zoneNumber || !zoneSet.has(String(zoneNumber))) continue;
-
-    const zoneLabel = formatZoneLabel(zoneNumber);
-    const existing = latestByZone.get(zoneLabel);
-    if (!existing || getDocTimestamp(row) >= getDocTimestamp(existing)) {
-      latestByZone.set(zoneLabel, row);
-      console.log(`   ✓ Set latest for ${zoneLabel}`);
-    }
-  }
 
   return Object.fromEntries(
     (normalizedZones || []).map((zoneNumber) => {
       const zoneLabel = formatZoneLabel(zoneNumber);
-      const row = latestByZone.get(zoneLabel);
-      if (!row) {
-        console.log(`   ⚠️ No data found for ${zoneLabel}`);
-        return [zoneLabel, 0];
-      }
+      const total = (Array.isArray(rows) ? rows : []).reduce((sum, row) => {
+        const rowDate = normalizeDate(row?.date || row?.createdAt);
+        const zoneValue = normalizeZone(row?.zone);
+        if (rowDate !== today || !zoneValue || !zoneSet.has(String(zoneValue))) return sum;
+        if (zoneValue !== String(zoneNumber)) return sum;
+        return sum + toNumber(row?.stockQuantity);
+      }, 0);
 
-      // Use closingStock directly if available
-      if (row?.closingStock !== undefined && row.closingStock !== null) {
-        const value = toNumber(row.closingStock);
-        console.log(`   ${zoneLabel}: Using direct closingStock = ${value}`);
-        return [zoneLabel, value];
-      }
-
-      // Otherwise calculate it
-      const openingStock = toNumber(row?.openingStock);
-      const stockIn = toNumber(row?.stockIn);
-      const salesQty = zoneSales[zoneLabel] !== undefined ? toNumber(zoneSales[zoneLabel]) : toNumber(row?.salesQty);
-      const damagesQty = zoneDamages[zoneLabel] !== undefined ? toNumber(zoneDamages[zoneLabel]) : toNumber(row?.damagesQty);
-      const closingValue = openingStock + stockIn - salesQty - damagesQty;
-      console.log(`   ${zoneLabel}: Calculated = ${openingStock} + ${stockIn} - ${salesQty} - ${damagesQty} = ${closingValue}`);
-      return [zoneLabel, Number.isFinite(closingValue) ? closingValue : 0];
+      return [zoneLabel, total];
     })
   );
 };
@@ -237,7 +197,7 @@ export default function SupervisorDashboard() {
   const [totalFoodAllowance, setTotalFoodAllowance] = useState(0);
   const [damagesToday, setDamagesToday] = useState(0);
   const [neccRate, setNeccRate] = useState("₹0.00");
-  const [zoneClosingStock, setZoneClosingStock] = useState({});
+  const [zoneStockQuantity, setZoneStockQuantity] = useState({});
 
   const normalizedUserZones = useMemo(() => {
     try {
@@ -262,10 +222,10 @@ export default function SupervisorDashboard() {
     }
   }, []);
 
-  const totalClosingStock = useMemo(() => {
-    const total = Object.values(zoneClosingStock || {}).reduce((sum, value) => sum + toNumber(value), 0);
+  const totalStockQuantity = useMemo(() => {
+    const total = Object.values(zoneStockQuantity || {}).reduce((sum, value) => sum + toNumber(value), 0);
     return Number.isFinite(total) ? total : 0;
-  }, [zoneClosingStock]);
+  }, [zoneStockQuantity]);
 
   const showZoneBreakdown = normalizedUserZones.length > 1;
 
@@ -273,7 +233,7 @@ export default function SupervisorDashboard() {
     const today = getLocalIsoDate();
 
     try {
-      const [outletsRes, salesRes, damagesRes, cashRes, digitalRes, incentiveRes, advanceRes, zoneStockRes, foodAllowanceRes] = await Promise.all([
+      const [outletsRes, salesRes, damagesRes, cashRes, digitalRes, incentiveRes, advanceRes, stockOptionsRes, foodAllowanceRes] = await Promise.all([
         fetch(`${API_URL}/outlets/all`),
         fetch(`${API_URL}/dailysales/all`),
         fetch(`${API_URL}/daily-damage/all`),
@@ -281,7 +241,7 @@ export default function SupervisorDashboard() {
         fetch(`${API_URL}/digital-payments/all`),
         fetch(`${API_URL}/incentive/all`),
         fetch(`${API_URL}/advance/all`),
-        fetch(`${API_URL}/zone-stock/date/${today}`),
+        fetch(`${API_URL}/stock-options/date/${today}`),
         fetch(`${API_URL}/food-allowance/all`),
       ]);
 
@@ -292,8 +252,8 @@ export default function SupervisorDashboard() {
       const digitalRaw = await digitalRes.json();
       const incentiveRaw = await incentiveRes.json();
       const advanceRaw = await advanceRes.json();
-      let zoneStockRaw = await zoneStockRes.json();
-      if (!Array.isArray(zoneStockRaw) && zoneStockRaw) zoneStockRaw = [zoneStockRaw];
+      let stockOptionsRaw = await stockOptionsRes.json();
+      if (!Array.isArray(stockOptionsRaw) && stockOptionsRaw) stockOptionsRaw = [stockOptionsRaw];
       const foodAllowanceRaw = await foodAllowanceRes.json();
 
       const zoneOutlets = Array.isArray(outletsRaw)
@@ -315,25 +275,7 @@ export default function SupervisorDashboard() {
       const computedRate = salesTotal > 0 ? totalRevenue / salesTotal : 0;
       setNeccRate(`₹${computedRate.toFixed(2)}`);
 
-      const zoneSales = Object.fromEntries(
-        (normalizedUserZones || []).map((zoneNumber) => {
-          const zoneOutlets = activeOutlets.filter(
-            (outlet) => normalizeZone(outlet?.zoneId || outlet?.zone || outlet?.zoneNumber) === String(zoneNumber)
-          );
-          return [formatZoneLabel(zoneNumber), getTodaySalesTotal(salesRaw, zoneOutlets, today)];
-        })
-      );
-
-      const zoneDamages = Object.fromEntries(
-        (normalizedUserZones || []).map((zoneNumber) => {
-          const zoneOutlets = activeOutlets.filter(
-            (outlet) => normalizeZone(outlet?.zoneId || outlet?.zone || outlet?.zoneNumber) === String(zoneNumber)
-          );
-          return [formatZoneLabel(zoneNumber), getTodayDamageTotal(damagesRaw, zoneOutlets, today)];
-        })
-      );
-
-      setZoneClosingStock(getClosingStockBySupervisorZone(zoneStockRaw, normalizedUserZones, today, zoneSales, zoneDamages));
+      setZoneStockQuantity(getStockQuantityBySupervisorZone(stockOptionsRaw, normalizedUserZones, today));
     } catch {
       setEggsToday(0);
       setTotalCashPayments(0);
@@ -342,7 +284,7 @@ export default function SupervisorDashboard() {
       setTotalFoodAllowance(0);
       setDamagesToday(0);
       setNeccRate("₹0.00");
-      setZoneClosingStock({});
+      setZoneStockQuantity({});
     }
   }, [normalizedUserZones]);
 
@@ -396,7 +338,7 @@ export default function SupervisorDashboard() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-            <StatCard title="Today&apos;s Closing Stock" value={totalClosingStock.toLocaleString("en-IN")} icon="📦" />
+            <StatCard title="Today&apos;s Stock Quantity" value={totalStockQuantity.toLocaleString("en-IN")} icon="📦" />
             <StatCard title="Total Incentives" value={formatCurrency(totalIncentive)} icon="🎯" />
             <StatCard title="Total Advances" value={formatCurrency(totalAdvance)} icon="💰" />
           </div>
@@ -407,11 +349,11 @@ export default function SupervisorDashboard() {
 
           {showZoneBreakdown ? (
             <div className="mb-8 rounded-xl bg-white p-6 shadow">
-              <h2 className="mb-4 text-xl font-semibold text-gray-800">Closing Stock by Assigned Zone</h2>
+              <h2 className="mb-4 text-xl font-semibold text-gray-800">Stock Quantity by Assigned Zone</h2>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {(normalizedUserZones || []).map((zoneNumber) => {
                   const zoneLabel = formatZoneLabel(zoneNumber);
-                  const closingValue = toNumber(zoneClosingStock?.[zoneLabel]);
+                  const closingValue = toNumber(zoneStockQuantity?.[zoneLabel]);
                   return (
                     <div key={zoneLabel} className="rounded-lg border border-gray-200 p-4 text-center">
                       <p className="mb-2 font-semibold text-orange-600">{zoneLabel}</p>

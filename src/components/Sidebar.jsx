@@ -123,6 +123,10 @@ export default function Sidebar({ supervisor }) {
               <FontAwesomeIcon icon={faStore} />
               {open && "Inventory"}
             </Link>
+            <Link to="/admin/stock-options" className={linkClass("/admin/stock-options")}> 
+              <FontAwesomeIcon icon={faClipboard} />
+              {open && "Stock Options"}
+            </Link>
             <Link to="/admin/cash-closure" className={linkClass("/admin/cash-closure")}> 
               <FontAwesomeIcon icon={faReceipt} />
               {open && "Cash Closure"}

@@ -21,6 +21,7 @@ import reportsRoutes from "./routes/reportsRoutes.js"; // ← ADD THIS LINE
 import supervisorRoutes from "./routes/supervisorRoutes.js";
 import dataEntryRoutes from "./routes/dataEntryRoutes.js";
 import zoneStockRoutes from "./routes/zoneStockRoutes.js";
+import stockOptionsRoutes from "./routes/stockOptionsRoutes.js";
 import cashClosureRoutes from "./routes/cashClosureRoutes.js";
 import remarksRoutes from "./routes/remarksRoutes.js";
 
@@ -63,6 +64,7 @@ app.use("/api/reports", reportsRoutes); // ← ADD THIS LINE
 app.use("/api/supervisor", supervisorRoutes);
 app.use("/api/data-entry", dataEntryRoutes);
 app.use("/api/zone-stock", zoneStockRoutes);
+app.use("/api/stock-options", stockOptionsRoutes);
 app.use("/api/cash-closure", cashClosureRoutes);
 app.use("/api/remarks", remarksRoutes);
 
