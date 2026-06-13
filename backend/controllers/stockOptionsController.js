@@ -95,6 +95,7 @@ const buildEntryPayload = (body = {}) => {
     date,
     stockQuantity: toNumber(body.stockQuantity),
     price: toNumber(body.price),
+    invoiceAmount: toNumber(body.invoiceAmount ?? toNumber(body.stockQuantity) * toNumber(body.price)),
     farmName: String(body.farmName || "").trim().slice(0, 200),
     remarks: String(body.remarks || "").trim().slice(0, 500),
     updatedAt: new Date(),

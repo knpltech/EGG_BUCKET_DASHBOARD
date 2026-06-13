@@ -46,6 +46,8 @@ const normalizeZoneLabel = (zone) => {
   return match ? `Zone ${match[1]}` : normalized;
 };
 
+const normalizeTextKey = (value) => String(value ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+
 const toNumber = (value) => {
   const numeric = Number(String(value ?? "").replace(/,/g, "").trim());
   return Number.isFinite(numeric) ? numeric : 0;
@@ -74,6 +76,45 @@ const extractUserZones = (user, fallbackZone) => {
     .map((zone) => `Zone ${zone}`)
     .filter((zone) => ALL_ZONES.includes(zone))
     .sort((a, b) => Number(normalizeZone(a)) - Number(normalizeZone(b)));
+};
+
+const buildZoneOutletKeySet = (outlets, zoneLabel) => {
+  const normalizedZone = normalizeZone(zoneLabel);
+  const keys = new Set();
+
+  (Array.isArray(outlets) ? outlets : []).forEach((outlet) => {
+    if (!outlet || typeof outlet !== "object") return;
+    const outletZone = normalizeZone(outlet.zoneId || outlet.zone || outlet.zoneNumber);
+    if (!outletZone || outletZone !== normalizedZone) return;
+
+    [outlet.id, outlet.name, outlet.area].forEach((key) => {
+      const normalized = normalizeTextKey(key);
+      if (normalized) keys.add(normalized);
+    });
+  });
+
+  return keys;
+};
+
+const toZoneScopedTotal = (entry, zoneLabel, zoneOutletKeys) => {
+  if (!entry || typeof entry !== "object") return 0;
+
+  const outlets = entry.outlets && typeof entry.outlets === "object" && !Array.isArray(entry.outlets)
+    ? entry.outlets
+    : {};
+
+  const addedByPerOutlet = entry.addedByPerOutlet && typeof entry.addedByPerOutlet === "object"
+    ? entry.addedByPerOutlet
+    : {};
+
+  const normalizedZone = normalizeZone(zoneLabel);
+
+  return Object.entries(outlets).reduce((sum, [outletKey, amount]) => {
+    const byUserZone = normalizeZone(addedByPerOutlet?.[outletKey]?.zone) === normalizedZone;
+    const byOutletZone = zoneOutletKeys.has(normalizeTextKey(outletKey));
+    if (!byUserZone && !byOutletZone) return sum;
+    return sum + toNumber(amount);
+  }, 0);
 };
 
 export default function CashClosure() {
@@ -140,14 +181,12 @@ export default function CashClosure() {
     
     setFetchingAutoData(true);
     try {
-      console.log("Fetching auto-fill data for Zone:", zoneName, "Date:", isoDate);
-
-      // Fetch all data by date - the API should return aggregated totals
-      const [cashPaymentsRes, incentivesRes, foodAllowanceRes, advanceRes] = await Promise.all([
+      const [cashPaymentsRes, incentivesRes, foodAllowanceRes, advanceRes, outletsRes] = await Promise.all([
         fetch(`${API_URL}/cash-payments/date/${isoDate}`),
         fetch(`${API_URL}/incentive/date/${isoDate}`),
         fetch(`${API_URL}/food-allowance/date/${isoDate}`),
         fetch(`${API_URL}/advance/date/${isoDate}`),
+        fetch(`${API_URL}/outlets/all`),
       ]);
 
       let totalCash = 0;
@@ -155,78 +194,29 @@ export default function CashClosure() {
       let foodAllowanceAmount = 0;
       let advanceAmount = 0;
 
-      // Process cash payments - sum all outlets or use total
+      const outletsData = outletsRes.ok ? await outletsRes.json() : [];
+      const zoneOutletKeys = buildZoneOutletKeySet(outletsData, zoneName);
+
       if (cashPaymentsRes.ok) {
-        const salesData = await cashPaymentsRes.json();
-        console.log("Cash Payments Data:", salesData);
-        
-        if (Array.isArray(salesData) && salesData.length > 0) {
-          // If it's an array, take the first entry
-          const entry = salesData[0];
-          if (entry?.total) {
-            totalCash = toNumber(entry.total);
-          } else if (entry?.outlets && typeof entry.outlets === "object") {
-            Object.values(entry.outlets).forEach((amount) => {
-              totalCash += toNumber(amount);
-            });
-          }
-        } else if (salesData?.total) {
-          totalCash = toNumber(salesData.total);
-        } else if (salesData?.outlets && typeof salesData.outlets === "object") {
-          Object.values(salesData.outlets).forEach((amount) => {
-            totalCash += toNumber(amount);
-          });
-        }
+        const cashPaymentsData = await cashPaymentsRes.json();
+        const cashEntry = Array.isArray(cashPaymentsData) ? cashPaymentsData[0] : cashPaymentsData;
+        totalCash = toZoneScopedTotal(cashEntry, zoneName, zoneOutletKeys);
       }
 
-      // Process incentives
       if (incentivesRes.ok) {
         const data = await incentivesRes.json();
-        console.log("Incentives Data:", data);
-        
-        if (data?.total) {
-          incentivesAmount = toNumber(data.total);
-        } else if (data?.outlets && typeof data.outlets === "object") {
-          Object.values(data.outlets).forEach((amount) => {
-            incentivesAmount += toNumber(amount);
-          });
-        }
+        incentivesAmount = toZoneScopedTotal(data, zoneName, zoneOutletKeys);
       }
 
-      // Process food allowance
       if (foodAllowanceRes.ok) {
         const data = await foodAllowanceRes.json();
-        console.log("Food Allowance Data:", data);
-        
-        if (data?.total) {
-          foodAllowanceAmount = toNumber(data.total);
-        } else if (data?.outlets && typeof data.outlets === "object") {
-          Object.values(data.outlets).forEach((amount) => {
-            foodAllowanceAmount += toNumber(amount);
-          });
-        }
+        foodAllowanceAmount = toZoneScopedTotal(data, zoneName, zoneOutletKeys);
       }
 
-      // Process advance
       if (advanceRes.ok) {
         const data = await advanceRes.json();
-        console.log("Advance Data:", data);
-        
-        if (data?.total) {
-          advanceAmount = toNumber(data.total);
-        } else if (data?.outlets && typeof data.outlets === "object") {
-          Object.values(data.outlets).forEach((amount) => {
-            advanceAmount += toNumber(amount);
-          });
-        }
+        advanceAmount = toZoneScopedTotal(data, zoneName, zoneOutletKeys);
       }
-
-      console.log("Auto-fill Results:", {
-        totalCash,
-        incentivesAmount,
-        foodAllowanceAmount,
-        advanceAmount,
-      });
 
       setTotalCashAmount(String(totalCash));
       setIncentives(String(incentivesAmount));

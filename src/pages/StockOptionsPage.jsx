@@ -113,6 +113,10 @@ export default function StockOptionsPage() {
     return selectedDateRows.reduce((sum, row) => sum + toNumber(row.stockQuantity), 0);
   }, [selectedDateRows]);
 
+  const invoiceAmount = useMemo(() => {
+    return toNumber(stockQuantity) * toNumber(price);
+  }, [stockQuantity, price]);
+
   const handleSave = async (event) => {
     event.preventDefault();
     if (!isAdmin) {
@@ -138,6 +142,7 @@ export default function StockOptionsPage() {
           date: selectedDate,
           stockQuantity: toNumber(stockQuantity),
           price: toNumber(price),
+          invoiceAmount,
           farmName: String(farmName || "").trim(),
           remarks: String(remarks || "").trim(),
           addedBy: {
@@ -265,6 +270,16 @@ export default function StockOptionsPage() {
               </div>
 
               <div>
+                <label className="mb-1 block text-sm font-semibold text-gray-700">Invoice Amount</label>
+                <input
+                  type="text"
+                  value={`₹${invoiceAmount.toLocaleString("en-IN")}`}
+                  readOnly
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-700 focus:outline-none"
+                />
+              </div>
+
+              <div>
                 <label className="mb-1 block text-sm font-semibold text-gray-700">Farm Name</label>
                 <input
                   type="text"
@@ -275,8 +290,19 @@ export default function StockOptionsPage() {
                 />
               </div>
 
-              <div className="flex flex-col">
-                <label className="mb-1 block text-sm font-semibold text-gray-700">Actions</label>
+              <div className="md:col-span-5">
+                <label className="mb-1 block text-sm font-semibold text-gray-700">Remarks</label>
+                <textarea
+                  rows="2"
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                  placeholder="Enter remarks"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
+              </div>
+
+              <div className="md:col-span-5 flex flex-col">
+                <label className="mb-1 block text-sm font-semibold text-gray-700"></label>
                 <div className="flex gap-2">
                   <button
                     type="submit"
@@ -293,17 +319,6 @@ export default function StockOptionsPage() {
                     Reset
                   </button>
                 </div>
-              </div>
-
-              <div className="md:col-span-5">
-                <label className="mb-1 block text-sm font-semibold text-gray-700">Remarks</label>
-                <textarea
-                  rows="2"
-                  value={remarks}
-                  onChange={(e) => setRemarks(e.target.value)}
-                  placeholder="Enter remarks"
-                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                />
               </div>
             </div>
           </form>
@@ -331,6 +346,7 @@ export default function StockOptionsPage() {
                     <th className="px-4 py-3">Zone</th>
                     <th className="px-4 py-3">Stock Quantity</th>
                     <th className="px-4 py-3">Price</th>
+                    <th className="px-4 py-3">Invoice Amount</th>
                     <th className="px-4 py-3">Farm Name</th>
                     <th className="px-4 py-3">Remarks</th>
                   </tr>
@@ -343,13 +359,14 @@ export default function StockOptionsPage() {
                         <td className="px-4 py-3 font-medium text-gray-900">{row.zone}</td>
                         <td className="px-4 py-3 text-gray-700">{toNumber(row.stockQuantity).toLocaleString("en-IN")}</td>
                         <td className="px-4 py-3 text-gray-700">₹{toNumber(row.price).toLocaleString("en-IN")}</td>
+                        <td className="px-4 py-3 text-gray-700">₹{toNumber(row.invoiceAmount ?? toNumber(row.stockQuantity) * toNumber(row.price)).toLocaleString("en-IN")}</td>
                         <td className="px-4 py-3 text-gray-700">{row.farmName || "-"}</td>
                         <td className="px-4 py-3 text-gray-700">{row.remarks || "-"}</td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td className="px-4 py-6 text-center text-gray-500" colSpan="6">
+                      <td className="px-4 py-6 text-center text-gray-500" colSpan="7">
                         No stock entries found for {selectedZone}.
                       </td>
                     </tr>
