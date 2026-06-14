@@ -54,6 +54,33 @@ const getDocTimestamp = (doc) => {
   return Number.isNaN(parsed) ? 0 : parsed;
 };
 
+const dedupeRowsByZoneDate = (rows) => {
+  const byKey = new Map();
+
+  for (const row of rows || []) {
+    const zone = row?.zone;
+    const date = normalizeDate(row?.date || row?.createdAt);
+    if (!zone || !date) continue;
+
+    const key = `${zone}__${date}`;
+    const current = byKey.get(key);
+    const candidateTimestamp = getDocTimestamp(row);
+    const currentTimestamp = current ? getDocTimestamp(current) : -1;
+    const candidateQuantity = toNumber(row?.stockQuantity);
+
+    if (!current || candidateTimestamp >= currentTimestamp) {
+      byKey.set(key, {
+        ...row,
+        zone,
+        date,
+        stockQuantity: candidateQuantity,
+      });
+    }
+  }
+
+  return Array.from(byKey.values()).sort((a, b) => getDocTimestamp(b) - getDocTimestamp(a));
+};
+
 export default function StockOptionsPage() {
   const { isAdmin } = getRoleFlags();
   const [selectedDate, setSelectedDate] = useState(getLocalIsoDate());
@@ -100,7 +127,7 @@ export default function StockOptionsPage() {
   }, [loadRows]);
 
   const filteredRows = useMemo(() => {
-    return (Array.isArray(rows) ? rows : [])
+    return dedupeRowsByZoneDate(Array.isArray(rows) ? rows : [])
       .filter((row) => row?.zone === selectedZone)
       .sort((a, b) => getDocTimestamp(b) - getDocTimestamp(a));
   }, [rows, selectedZone]);
@@ -171,7 +198,7 @@ export default function StockOptionsPage() {
       setFarmName("");
       setRemarks("");
       await loadRows();
-      alert("Stock entry saved successfully.");
+      alert("Stock entry updated successfully.");
     } catch (error) {
       alert(error?.message || "Failed to save stock entry");
     } finally {
@@ -198,6 +225,27 @@ export default function StockOptionsPage() {
           <p className="mt-1 text-sm text-gray-500">
             Zone stock entry for Zones 1 to 5 with stock quantity, price, farm name, and remarks.
           </p>
+          <p className="mt-1 text-sm text-orange-700">
+            Every save updates the day&apos;s running total and pushes it to Inventory Stock In automatically.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Selected Zone</p>
+            <p className="mt-1 text-lg font-semibold text-gray-900">{selectedZone}</p>
+          </div>
+          <div className="rounded-2xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Day Total Stock Quantity</p>
+            <p className="mt-1 text-lg font-semibold text-gray-900">{totalSelectedQuantity.toLocaleString("en-IN")}</p>
+          </div>
+          <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-orange-700">Inventory Stock In</p>
+            <p className="mt-1 text-lg font-semibold text-orange-900">
+              {totalSelectedQuantity.toLocaleString("en-IN")}
+            </p>
+            <p className="mt-1 text-xs text-orange-700">Auto-synced from the day&apos;s stock entries</p>
+          </div>
         </div>
 
         <div className="rounded-2xl border border-gray-200 bg-white p-3 md:p-4 shadow-sm">
@@ -309,7 +357,7 @@ export default function StockOptionsPage() {
                     disabled={isSaving}
                     className="rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-70"
                   >
-                    {isSaving ? "Saving..." : "Save Stock"}
+                    {isSaving ? "Updating..." : "Update Stock"}
                   </button>
                   <button
                     type="button"

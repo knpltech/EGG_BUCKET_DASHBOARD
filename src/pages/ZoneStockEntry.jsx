@@ -127,6 +127,7 @@ export default function ZoneStockEntry() {
   const [outlets, setOutlets] = useState([]);
   const [salesRows, setSalesRows] = useState([]);
   const [damageRows, setDamageRows] = useState([]);
+  const [stockOptionRows, setStockOptionRows] = useState([]);
   const [zoneStockRows, setZoneStockRows] = useState([]);
   const [showFullHistory, setShowFullHistory] = useState(false);
   const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
@@ -206,12 +207,16 @@ export default function ZoneStockEntry() {
       // Fetch sales and damages only for the selected date
       const salesPromise = fetch(`${API_URL}/dailysales/date/${encodeURIComponent(selectedDate)}`);
       const damagesPromise = fetch(`${API_URL}/daily-damage/date/${encodeURIComponent(selectedDate)}`);
+      const stockOptionsPromise = selectedZone
+        ? fetch(`${API_URL}/stock-options/zone/${encodeURIComponent(selectedZone)}/date/${encodeURIComponent(selectedDate)}`)
+        : null;
 
       // Fetch zone-stock only when a specific zone is selected. Avoid calling `/zone-stock/all`.
       let zoneStockData = [];
 
       const salesRes = await salesPromise;
       const damageRes = await damagesPromise;
+      const stockOptionsRes = stockOptionsPromise ? await stockOptionsPromise : null;
 
       if (selectedZone) {
         const zoneStockUrl = `${API_URL}/zone-stock/zone/${encodeURIComponent(selectedZone)}?days=${encodeURIComponent(String(daysParam))}`;
@@ -228,17 +233,20 @@ export default function ZoneStockEntry() {
 
       const salesData = salesRes.ok ? await salesRes.json() : [];
       const damageData = damageRes.ok ? await damageRes.json() : [];
+      const stockOptionsData = stockOptionsRes && stockOptionsRes.ok ? await stockOptionsRes.json() : [];
 
       setOutlets(Array.isArray(outletsData) ? outletsData : []);
       // keep API compatibility: if date endpoints return arrays or single objects
       setSalesRows(Array.isArray(salesData) ? salesData : salesData ? [salesData] : []);
       setDamageRows(Array.isArray(damageData) ? damageData : damageData ? [damageData] : []);
+      setStockOptionRows(Array.isArray(stockOptionsData) ? stockOptionsData : stockOptionsData ? [stockOptionsData] : []);
       setZoneStockRows(Array.isArray(zoneStockData) ? zoneStockData : zoneStockData ? [zoneStockData] : []);
       setLastRefreshedAt(new Date());
     } catch (err) {
       setOutlets([]);
       setSalesRows([]);
       setDamageRows([]);
+      setStockOptionRows([]);
       setZoneStockRows([]);
     } finally {
       if (silent) {
@@ -248,6 +256,23 @@ export default function ZoneStockEntry() {
       }
     }
   }, [selectedDate, selectedZone, showFullHistory]);
+
+  useEffect(() => {
+    const refreshTimer = window.setInterval(() => {
+      loadAll(true);
+    }, 30000);
+
+    const handleFocus = () => {
+      loadAll(true);
+    };
+
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      window.clearInterval(refreshTimer);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [loadAll]);
 
   useEffect(() => {
     let mounted = true;
@@ -300,6 +325,10 @@ export default function ZoneStockEntry() {
     return zoneOutlets.reduce((sum, outlet) => sum + getValueForOutlet(doc.damages, outlet), 0);
   }, [damageRows, selectedDate, zoneOutlets]);
 
+  const selectedDateStockOptionTotal = useMemo(() => {
+    return stockOptionRows.reduce((sum, row) => sum + toNumber(row?.stockQuantity), 0);
+  }, [stockOptionRows]);
+
   const zoneHistory = useMemo(() => {
     if (!selectedZone) return [];
     const latestByDate = new Map();
@@ -341,13 +370,13 @@ export default function ZoneStockEntry() {
 
   useEffect(() => {
     if (existingForDate) {
-      setStockIn(String(toNumber(existingForDate.stockIn)));
+      setStockIn(String(toNumber(existingForDate.stockIn || selectedDateStockOptionTotal)));
       setRemarks(String(existingForDate.inv_remark ?? existingForDate.remarks ?? ""));
       return;
     }
-    setStockIn("0");
+    setStockIn(String(selectedDateStockOptionTotal));
     setRemarks("");
-  }, [existingForDate?.id, selectedDate, selectedZone]);
+  }, [existingForDate?.id, selectedDate, selectedZone, selectedDateStockOptionTotal]);
 
   const stockInNumber = toNumber(stockIn);
   const closingStock = openingStock + stockInNumber - selectedDateSales - selectedDateDamages;
@@ -580,6 +609,9 @@ export default function ZoneStockEntry() {
         {canEditInventory ? (
         <div className="rounded-2xl border border-gray-200 bg-white p-4 md:p-6 shadow-sm">
           <h2 className="text-xl font-semibold text-gray-900">New Entry</h2>
+          <div className="mt-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900">
+            Zone-wise Stock In total for {selectedZone || "selected zone"} on {selectedDate}: <span className="font-semibold">{selectedDateStockOptionTotal.toLocaleString("en-IN")}</span>
+          </div>
 
           <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-7">
             <div>
@@ -608,15 +640,10 @@ export default function ZoneStockEntry() {
                 type="number"
                 min="0"
                 value={stockIn}
-                onChange={(e) => setStockIn(e.target.value)}
-                readOnly={isSupervisor && !isTodaySelected}
-                className={[
-                  "w-full rounded-xl border px-3 py-2.5 text-sm",
-                  isSupervisor && !isTodaySelected
-                    ? "border-gray-200 bg-gray-50 text-gray-500"
-                    : "border-gray-200 focus:outline-none focus:ring-2 focus:ring-orange-400",
-                ].join(" ")}
+                readOnly
+                className="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-700"
               />
+              <p className="mt-1 text-xs text-gray-500">Auto-filled from the selected zone&apos;s stock page total.</p>
             </div>
             <div>
               <label className="mb-1 block text-sm font-semibold text-gray-700">Sales</label>
@@ -668,7 +695,7 @@ export default function ZoneStockEntry() {
                     : "bg-emerald-500 hover:bg-emerald-600",
                 ].join(" ")}
               >
-                {isSaving ? "Saving..." : "Save Entry"}
+                {isSaving ? "Updating..." : "Update Entry"}
               </button>
             </div>
           </div>

@@ -220,7 +220,7 @@ const getPreviousClosingStock = async (zone, dateIso) => {
   return previous ? toNumber(previous.closingStock) : 0;
 };
 
-const recalculateZoneStockFromDate = async (zone, startDate) => {
+export const recalculateZoneStockFromDate = async (zone, startDate) => {
   const normalizedZone = normalizeZoneLabel(zone);
   const normalizedStartDate = normalizeDate(startDate);
   if (!normalizedZone || !normalizedStartDate) return 0;
