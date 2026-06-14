@@ -369,13 +369,8 @@ export default function ZoneStockEntry() {
   }, [zoneOutlets, selectedDateSalesDoc]);
 
   useEffect(() => {
-    if (existingForDate) {
-      setStockIn(String(toNumber(existingForDate.stockIn || selectedDateStockOptionTotal)));
-      setRemarks(String(existingForDate.inv_remark ?? existingForDate.remarks ?? ""));
-      return;
-    }
     setStockIn(String(selectedDateStockOptionTotal));
-    setRemarks("");
+    setRemarks(existingForDate ? String(existingForDate.inv_remark ?? existingForDate.remarks ?? "") : "");
   }, [existingForDate?.id, selectedDate, selectedZone, selectedDateStockOptionTotal]);
 
   const stockInNumber = toNumber(stockIn);
