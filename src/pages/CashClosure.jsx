@@ -96,6 +96,23 @@ const buildZoneOutletKeySet = (outlets, zoneLabel) => {
   return keys;
 };
 
+const getResponseErrorMessage = async (response, fallbackMessage) => {
+  try {
+    const responseClone = response.clone();
+    const responseText = await responseClone.text();
+    if (!responseText) return fallbackMessage;
+
+    try {
+      const parsed = JSON.parse(responseText);
+      return parsed?.message || parsed?.error || responseText || fallbackMessage;
+    } catch {
+      return responseText || fallbackMessage;
+    }
+  } catch {
+    return fallbackMessage;
+  }
+};
+
 const toZoneScopedTotal = (entry, zoneLabel, zoneOutletKeys) => {
   if (!entry || typeof entry !== "object") return 0;
 
@@ -333,14 +350,7 @@ export default function CashClosure() {
       });
 
       if (!response.ok) {
-        let message = "Failed to save cash closure entry";
-        try {
-          const errorJson = await response.json();
-          if (errorJson?.message) message = errorJson.message;
-        } catch {
-          const errorText = await response.text();
-          if (errorText) message = errorText;
-        }
+        const message = await getResponseErrorMessage(response, "Failed to save cash closure entry");
         throw new Error(message);
       }
 

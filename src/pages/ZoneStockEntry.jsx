@@ -111,6 +111,23 @@ const getLatestDayDoc = (rows, selectedDate) => {
   return dayRows[0] || null;
 };
 
+const getResponseErrorMessage = async (response, fallbackMessage) => {
+  try {
+    const responseClone = response.clone();
+    const responseText = await responseClone.text();
+    if (!responseText) return fallbackMessage;
+
+    try {
+      const parsed = JSON.parse(responseText);
+      return parsed?.message || parsed?.error || responseText || fallbackMessage;
+    } catch {
+      return responseText || fallbackMessage;
+    }
+  } catch {
+    return fallbackMessage;
+  }
+};
+
 export default function ZoneStockEntry() {
   const { isAdmin, isSupervisor, isViewer, zone } = getRoleFlags();
   const [now, setNow] = useState(() => new Date());
@@ -426,14 +443,7 @@ export default function ZoneStockEntry() {
       });
 
       if (!response.ok) {
-        let message = "Failed to save entry";
-        try {
-          const errorJson = await response.json();
-          if (errorJson?.message) message = errorJson.message;
-        } catch {
-          const errorText = await response.text();
-          if (errorText) message = errorText;
-        }
+        const message = await getResponseErrorMessage(response, "Failed to save entry");
         throw new Error(message);
       }
 

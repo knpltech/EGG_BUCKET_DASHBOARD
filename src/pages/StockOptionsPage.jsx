@@ -81,6 +81,23 @@ const dedupeRowsByZoneDate = (rows) => {
   return Array.from(byKey.values()).sort((a, b) => getDocTimestamp(b) - getDocTimestamp(a));
 };
 
+const getResponseErrorMessage = async (response, fallbackMessage) => {
+  try {
+    const responseClone = response.clone();
+    const responseText = await responseClone.text();
+    if (!responseText) return fallbackMessage;
+
+    try {
+      const parsed = JSON.parse(responseText);
+      return parsed?.message || parsed?.error || responseText || fallbackMessage;
+    } catch {
+      return responseText || fallbackMessage;
+    }
+  } catch {
+    return fallbackMessage;
+  }
+};
+
 export default function StockOptionsPage() {
   const { isAdmin } = getRoleFlags();
   const [selectedDate, setSelectedDate] = useState(getLocalIsoDate());
@@ -192,14 +209,7 @@ export default function StockOptionsPage() {
       });
 
       if (!response.ok) {
-        let message = "Failed to save stock entry";
-        try {
-          const errorJson = await response.json();
-          if (errorJson?.message) message = errorJson.message;
-        } catch {
-          const errorText = await response.text();
-          if (errorText) message = errorText;
-        }
+        const message = await getResponseErrorMessage(response, "Failed to save stock entry");
         throw new Error(message);
       }
 
@@ -270,14 +280,7 @@ export default function StockOptionsPage() {
       });
 
       if (!response.ok) {
-        let message = "Failed to update stock entry";
-        try {
-          const errorJson = await response.json();
-          if (errorJson?.message) message = errorJson.message;
-        } catch {
-          const errorText = await response.text();
-          if (errorText) message = errorText;
-        }
+        const message = await getResponseErrorMessage(response, "Failed to update stock entry");
         throw new Error(message);
       }
 
