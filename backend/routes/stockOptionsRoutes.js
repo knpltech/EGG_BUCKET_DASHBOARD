@@ -5,7 +5,9 @@ import {
   getStockOptionEntriesByDate,
   getStockOptionEntriesByZone,
   getStockOptionEntriesByZoneAndDate,
+  updateStockOptionEntryByZoneAndDate,
 } from "../controllers/stockOptionsController.js";
+import { verifyAdmin } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
@@ -13,6 +15,7 @@ router.get("/all", getAllStockOptionEntries);
 router.get("/date/:date", getStockOptionEntriesByDate);
 router.get("/zone/:zone", getStockOptionEntriesByZone);
 router.get("/zone/:zone/date/:date", getStockOptionEntriesByZoneAndDate);
-router.post("/create", createStockOptionEntry);
+router.post("/create", verifyAdmin, createStockOptionEntry);
+router.patch("/zone/:zone/date/:date", verifyAdmin, updateStockOptionEntryByZoneAndDate);
 
 export default router;

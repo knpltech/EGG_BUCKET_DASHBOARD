@@ -89,6 +89,12 @@ export default function StockOptionsPage() {
   const [price, setPrice] = useState("0");
   const [farmName, setFarmName] = useState("");
   const [remarks, setRemarks] = useState("");
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editRow, setEditRow] = useState(null);
+  const [editStockQuantity, setEditStockQuantity] = useState("0");
+  const [editPrice, setEditPrice] = useState("0");
+  const [editFarmName, setEditFarmName] = useState("");
+  const [editRemarks, setEditRemarks] = useState("");
   const [rows, setRows] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -143,6 +149,10 @@ export default function StockOptionsPage() {
   const invoiceAmount = useMemo(() => {
     return toNumber(stockQuantity) * toNumber(price);
   }, [stockQuantity, price]);
+
+  const editInvoiceAmount = useMemo(() => {
+    return toNumber(editStockQuantity) * toNumber(editPrice);
+  }, [editStockQuantity, editPrice]);
 
   const handleSave = async (event) => {
     event.preventDefault();
@@ -205,6 +215,81 @@ export default function StockOptionsPage() {
       setIsSaving(false);
     }
   };
+
+  const handleEditClick = useCallback((row) => {
+    if (!isAdmin || !row) return;
+    setEditRow(row);
+    setEditStockQuantity(String(toNumber(row.stockQuantity)));
+    setEditPrice(String(toNumber(row.price)));
+    setEditFarmName(String(row.farmName || ""));
+    setEditRemarks(String(row.remarks || ""));
+    setEditModalOpen(true);
+  }, [isAdmin]);
+
+  const handleEditCancel = useCallback(() => {
+    setEditModalOpen(false);
+    setEditRow(null);
+    setEditStockQuantity("0");
+    setEditPrice("0");
+    setEditFarmName("");
+    setEditRemarks("");
+  }, []);
+
+  const handleEditSave = useCallback(async () => {
+    if (!isAdmin || !editRow) return;
+
+    const rowZone = editRow.zone || selectedZone;
+    const rowDate = editRow.date || selectedDate;
+    if (!rowZone || !rowDate) {
+      alert("Missing row date or zone.");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`${API_URL}/stock-options/zone/${encodeURIComponent(rowZone)}/date/${encodeURIComponent(rowDate)}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          stockQuantity: toNumber(editStockQuantity),
+          price: toNumber(editPrice),
+          invoiceAmount: editInvoiceAmount,
+          farmName: String(editFarmName || "").trim(),
+          remarks: String(editRemarks || "").trim(),
+          addedBy: {
+            username: user?.username || user?.uid || "unknown",
+            role: user?.role || "unknown",
+            zone: rowZone,
+            timestamp: new Date().toISOString(),
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        let message = "Failed to update stock entry";
+        try {
+          const errorJson = await response.json();
+          if (errorJson?.message) message = errorJson.message;
+        } catch {
+          const errorText = await response.text();
+          if (errorText) message = errorText;
+        }
+        throw new Error(message);
+      }
+
+      await loadRows();
+      handleEditCancel();
+      alert("Stock entry updated successfully.");
+    } catch (error) {
+      alert(error?.message || "Failed to update stock entry");
+    } finally {
+      setIsSaving(false);
+    }
+  }, [isAdmin, editRow, editStockQuantity, editPrice, editInvoiceAmount, editFarmName, editRemarks, selectedDate, selectedZone, user, loadRows, handleEditCancel]);
 
   if (!isAdmin) {
     return (
@@ -397,6 +482,7 @@ export default function StockOptionsPage() {
                     <th className="px-4 py-3">Invoice Amount</th>
                     <th className="px-4 py-3">Farm Name</th>
                     <th className="px-4 py-3">Remarks</th>
+                    {isAdmin ? <th className="px-4 py-3 text-right">Action</th> : null}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 bg-white">
@@ -410,6 +496,17 @@ export default function StockOptionsPage() {
                         <td className="px-4 py-3 text-gray-700">₹{toNumber(row.invoiceAmount ?? toNumber(row.stockQuantity) * toNumber(row.price)).toLocaleString("en-IN")}</td>
                         <td className="px-4 py-3 text-gray-700">{row.farmName || "-"}</td>
                         <td className="px-4 py-3 text-gray-700">{row.remarks || "-"}</td>
+                        {isAdmin ? (
+                          <td className="px-4 py-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => handleEditClick(row)}
+                              className="rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-600"
+                            >
+                              Edit
+                            </button>
+                          </td>
+                        ) : null}
                       </tr>
                     ))
                   ) : (
@@ -424,6 +521,100 @@ export default function StockOptionsPage() {
             </div>
           </div>
         </div>
+
+        {isAdmin && editModalOpen && editRow ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30 p-4">
+            <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-lg">
+              <h2 className="mb-4 text-lg font-semibold text-gray-900">
+                Edit Stock Entry ({editRow.zone} · {editRow.date || normalizeDate(editRow.createdAt)})
+              </h2>
+
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div className="rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Zone</p>
+                    <p className="mt-1 font-semibold text-gray-900">{editRow.zone}</p>
+                  </div>
+                  <div className="rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Date</p>
+                    <p className="mt-1 font-semibold text-gray-900">{editRow.date || normalizeDate(editRow.createdAt)}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div>
+                    <label className="mb-1 block text-sm font-semibold text-gray-700">Stock Quantity</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={editStockQuantity}
+                      onChange={(e) => setEditStockQuantity(e.target.value)}
+                      className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-sm font-semibold text-gray-700">Price</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={editPrice}
+                      onChange={(e) => setEditPrice(e.target.value)}
+                      className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-lg bg-gray-50 px-3 py-2 text-sm">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Invoice Amount</p>
+                  <p className="mt-1 text-base font-bold text-gray-900">₹{editInvoiceAmount.toLocaleString("en-IN")}</p>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-gray-700">Farm Name</label>
+                  <input
+                    type="text"
+                    value={editFarmName}
+                    onChange={(e) => setEditFarmName(e.target.value)}
+                    placeholder="Enter farm name"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-gray-700">Remarks</label>
+                  <textarea
+                    rows="2"
+                    value={editRemarks}
+                    onChange={(e) => setEditRemarks(e.target.value)}
+                    placeholder="Enter remarks"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={handleEditCancel}
+                  disabled={isSaving}
+                  className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleEditSave}
+                  disabled={isSaving}
+                  className="rounded-xl bg-orange-500 px-4 py-2 text-xs font-semibold text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {isSaving ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   );

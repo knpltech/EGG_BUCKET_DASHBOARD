@@ -136,6 +136,11 @@ const getStockOptionDocsForZoneDate = async (zone, date) => {
   return snapshot.docs.map((doc) => ({ ref: doc.ref, id: doc.id, ...doc.data() }));
 };
 
+const getCanonicalStockOptionDocForZoneDate = async (zone, date) => {
+  const docs = await getStockOptionDocsForZoneDate(zone, date);
+  return docs.sort((a, b) => toMillis(b.updatedAt || b.createdAt || b.date) - toMillis(a.updatedAt || a.createdAt || a.date))[0] || null;
+};
+
 const syncInventoryStockIn = async (zone, date, stockIn, addedBy) => {
   const latestInventoryDoc = await getLatestInventoryDocForZoneDate(zone, date);
   const payload = {
@@ -276,6 +281,62 @@ export const createStockOptionEntry = async (req, res) => {
     return res.status(existingDocs.length ? 200 : 201).json({ id: createdDoc.id, ...createdDoc.data() });
   } catch (error) {
     return res.status(500).json({ message: "Error saving stock entry", error: error.message });
+  }
+};
+
+export const updateStockOptionEntryByZoneAndDate = async (req, res) => {
+  try {
+    const zone = normalizeZoneLabel(req.params.zone);
+    const date = normalizeDate(req.params.date);
+    if (!zone || !date) {
+      return res.status(400).json({ message: "zone and date are required" });
+    }
+
+    const requesterRole = String(req.user?.role || req.body?.addedBy?.role || "").trim().toLowerCase();
+    if (requesterRole !== "admin") {
+      return res.status(403).json({ message: "Access denied. Admins only." });
+    }
+
+    const existingDocs = await getStockOptionDocsForZoneDate(zone, date);
+    if (!existingDocs.length) {
+      return res.status(404).json({ message: "Stock entry not found" });
+    }
+
+    const payload = buildEntryPayload({ ...req.body, zone, date });
+    if (!payload) {
+      return res.status(400).json({ message: "zone and date are required" });
+    }
+
+    const canonicalDoc = await getCanonicalStockOptionDocForZoneDate(zone, date);
+    if (!canonicalDoc) {
+      return res.status(404).json({ message: "Stock entry not found" });
+    }
+
+    const { ref, id, ...canonicalData } = canonicalDoc;
+    const storedPayload = {
+      ...canonicalData,
+      ...payload,
+      zone,
+      date,
+      stockQuantity: toNumber(payload.stockQuantity),
+      invoiceAmount: toNumber(payload.stockQuantity) * toNumber(payload.price),
+      updatedAt: new Date(),
+    };
+
+    await canonicalDoc.ref.set(storedPayload, { merge: true });
+
+    for (const duplicate of existingDocs) {
+      if (duplicate.id !== canonicalDoc.id) {
+        await duplicate.ref.delete();
+      }
+    }
+
+    await syncInventoryStockIn(zone, date, storedPayload.stockQuantity, payload.addedBy || canonicalDoc.addedBy);
+
+    const updatedDoc = await canonicalDoc.ref.get();
+    return res.status(200).json({ id: updatedDoc.id, ...updatedDoc.data() });
+  } catch (error) {
+    return res.status(500).json({ message: "Error updating stock entry", error: error.message });
   }
 };
 
