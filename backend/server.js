@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "./loadEnv.js";
 import express from "express";
 import cors from "cors";
 import path from "path";
@@ -24,6 +24,9 @@ import zoneStockRoutes from "./routes/zoneStockRoutes.js";
 import stockOptionsRoutes from "./routes/stockOptionsRoutes.js";
 import cashClosureRoutes from "./routes/cashClosureRoutes.js";
 import remarksRoutes from "./routes/remarksRoutes.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -74,8 +77,6 @@ app.listen(PORT, () =>
 );
 
 // Serve frontend static files
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 const frontendPath = path.join(__dirname, "../dist");
 app.use(express.static(frontendPath));
 

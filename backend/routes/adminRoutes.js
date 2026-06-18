@@ -1,5 +1,5 @@
 import express from "express";
-import { addUser, getAllUsers, deleteUser, getAllDistributors, getAllDataAgents, getAllViewers, getAllSupervisors } from "../controllers/adminController.js";
+import { addUser, getAllUsers, deleteUser, getAllDistributors, getAllDataAgents, getAllViewers, getAllSupervisors, getRetailCollectionSummary } from "../controllers/adminController.js";
 
 const router = express.Router();
 
@@ -11,6 +11,7 @@ router.get("/all-distributors", getAllDistributors);
 router.get("/all-dataagents", getAllDataAgents);
 router.get("/all-viewers", getAllViewers);
 router.get("/all-supervisors", getAllSupervisors);
+router.get("/retail-collection-summary", getRetailCollectionSummary);
 router.post("/delete-user", deleteUser);
 
 export default router;

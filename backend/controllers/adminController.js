@@ -72,6 +72,204 @@ export const getAllUsers = async (req, res) => {
 import { db } from "../config/firebase.js";
 import bcrypt from "bcryptjs";
 
+const RETAIL_ADMIN_API_URL = process.env.RETAIL_ADMIN_API_URL || "https://eggbucketretailadmin.onrender.com/api/admin";
+const RETAIL_ADMIN_REQUEST_TIMEOUT_MS = 15000;
+
+const toNumber = (value) => {
+  if (typeof value === "string") {
+    const numeric = Number(value.replace(/,/g, "").trim());
+    return Number.isFinite(numeric) ? numeric : 0;
+  }
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+};
+
+const getRetailAdminToken = async () => {
+  const configuredToken = String(process.env.RETAIL_ADMIN_TOKEN || "").trim();
+  if (configuredToken) return configuredToken;
+
+  const username = String(process.env.RETAIL_ADMIN_USERNAME || "").trim();
+  const password = String(process.env.RETAIL_ADMIN_PASSWORD || "");
+  if (!username || !password) {
+    throw new Error("Retail Admin credentials are not configured on this server.");
+  }
+
+  const response = await fetch(`${RETAIL_ADMIN_API_URL}/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password, role: "admin" }),
+    signal: AbortSignal.timeout(RETAIL_ADMIN_REQUEST_TIMEOUT_MS),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Retail Admin login failed with status ${response.status}`);
+  }
+
+  const data = await response.json();
+  if (!data?.token) {
+    throw new Error("Retail Admin login did not return a token.");
+  }
+
+  return data.token;
+};
+
+const getDamageValue = (entry = {}) => {
+  const candidates = [
+    entry.damage,
+    entry.damages,
+    entry.damageQty,
+    entry.damageQuantity,
+    entry.damagedQty,
+    entry.damagedQuantity,
+    entry.damagedEggs,
+    entry.brokenEggs,
+    entry.breakage,
+    entry.waste,
+    entry.loss,
+  ];
+
+  for (const value of candidates) {
+    if (value === null || value === undefined || value === "") continue;
+    if (typeof value === "object") {
+      const nestedValue = value.total ?? value.quantity ?? value.qty ?? value.count ?? value.value;
+      if (nestedValue !== null && nestedValue !== undefined && nestedValue !== "") return toNumber(nestedValue);
+      continue;
+    }
+    return toNumber(value);
+  }
+
+  return 0;
+};
+
+const getReturnValue = (entry = {}) => {
+  const candidates = [
+    entry.return,
+    entry.returns,
+    entry.returnQty,
+    entry.returnQuantity,
+    entry.returnedQty,
+    entry.returnedQuantity,
+    entry.returnedEggs,
+    entry.returnEggs,
+    entry.returned,
+  ];
+
+  for (const value of candidates) {
+    if (value === null || value === undefined || value === "") continue;
+    if (typeof value === "object") {
+      const nestedValue = value.total ?? value.quantity ?? value.qty ?? value.count ?? value.value;
+      if (nestedValue !== null && nestedValue !== undefined && nestedValue !== "") return toNumber(nestedValue);
+      continue;
+    }
+    return toNumber(value);
+  }
+
+  return 0;
+};
+
+const getCollectionRowsFromCustomers = (customers, date) => {
+  if (!Array.isArray(customers) || !date) return [];
+
+  const getPaymentMethod = (entry, cash, upi) => {
+    const method = String(entry?.paymentMethod || entry?.paymentMode || entry?.mode || "").trim();
+    if (method) return method;
+    if (cash > 0 && upi > 0) return "Cash + UPI";
+    if (cash > 0) return "Cash";
+    if (upi > 0) return "UPI";
+    return "-";
+  };
+
+  const formatDeliveryTime = (value) => {
+    if (!value) return null;
+    if (typeof value === "string" || typeof value === "number") return value;
+    if (value && typeof value.toDate === "function") return value.toDate().toISOString();
+    if (value && typeof value === "object" && value._seconds !== undefined) {
+      return new Date(value._seconds * 1000).toISOString();
+    }
+    if (value instanceof Date) return value.toISOString();
+    return String(value);
+  };
+
+  return customers
+    .map((customer) => {
+      const entry = customer?.last8Days?.[date];
+      if (!entry || entry.status !== "delivered") return null;
+
+      const cash = Number(entry.cashAmount) || 0;
+      const upi = Number(entry.upiAmount) || 0;
+      const damage = getDamageValue(entry);
+      const returnQuantity = getReturnValue(entry);
+
+      return {
+        customerId: customer.custid || customer.id || customer._id || "",
+        customerName: customer.name || customer.customerName || "N/A",
+        salesPoint: entry.salesPoint || entry.salespoint || entry.salesPointName || entry.outletName || customer.salesPoint || customer.salespoint || customer.salesPointName || customer.outletName || "-",
+        quantity: entry.quantity ?? entry.trays ?? 0,
+        damage,
+        returnQuantity,
+        cash,
+        upi,
+        amount: cash + upi,
+        paymentMethod: getPaymentMethod(entry, cash, upi),
+        deliveryAgent: entry.agentName || "-",
+        deliveryTime: formatDeliveryTime(entry.time || entry.timestamp),
+      };
+    })
+    .filter(Boolean);
+};
+
+const getTotalDamageFromCustomers = (customers, date) => {
+  if (!Array.isArray(customers) || !date) return 0;
+
+  return customers.reduce((total, customer) => {
+    const entry = customer?.last8Days?.[date];
+    if (!entry || entry.status !== "delivered") return total;
+    return total + getDamageValue(entry);
+  }, 0);
+};
+
+const getTotalReturnFromCustomers = (customers, date) => {
+  if (!Array.isArray(customers) || !date) return 0;
+
+  return customers.reduce((total, customer) => {
+    const entry = customer?.last8Days?.[date];
+    if (!entry || entry.status !== "delivered") return total;
+    return total + getReturnValue(entry);
+  }, 0);
+};
+
+export const getRetailCollectionSummary = async (req, res) => {
+  try {
+    const date = String(req.query.date || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ message: "Valid date query is required in YYYY-MM-DD format." });
+    }
+
+    const token = await getRetailAdminToken();
+    const response = await fetch(`${RETAIL_ADMIN_API_URL}/user-info`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(RETAIL_ADMIN_REQUEST_TIMEOUT_MS),
+    });
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        message: `Retail Admin user-info failed with status ${response.status}`,
+      });
+    }
+
+    const customers = await response.json();
+    return res.json({
+      rows: getCollectionRowsFromCustomers(customers, date),
+      totalDamage: getTotalDamageFromCustomers(customers, date),
+      totalReturn: getTotalReturnFromCustomers(customers, date),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: error?.message || "Failed to fetch Retail Admin collection summary.",
+    });
+  }
+};
+
 // Add supervisor to Firestore
 export const addSupervisor = async (req, res) => {
   try {

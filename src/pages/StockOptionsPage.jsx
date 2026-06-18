@@ -116,6 +116,11 @@ export default function StockOptionsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState(null);
+  const [collectionRows, setCollectionRows] = useState([]);
+  const [collectionDamageTotal, setCollectionDamageTotal] = useState(0);
+  const [collectionReturnTotal, setCollectionReturnTotal] = useState(0);
+  const [collectionError, setCollectionError] = useState("");
+  const [isCollectionLoading, setIsCollectionLoading] = useState(false);
 
   const user = useMemo(() => {
     try {
@@ -145,9 +150,39 @@ export default function StockOptionsPage() {
     }
   }, []);
 
+  const loadCollectionRows = useCallback(async () => {
+    setIsCollectionLoading(true);
+    setCollectionError("");
+    try {
+      const response = await fetch(`${API_URL}/admin/retail-collection-summary?date=${encodeURIComponent(selectedDate)}`);
+
+      if (!response.ok) {
+        const message = await getResponseErrorMessage(response, "Failed to fetch Retail Admin collections");
+        throw new Error(message);
+      }
+
+      const data = await response.json();
+      const rows = Array.isArray(data) ? data : data?.rows;
+      setCollectionRows(Array.isArray(rows) ? rows : []);
+      setCollectionDamageTotal(toNumber(data?.totalDamage));
+      setCollectionReturnTotal(toNumber(data?.totalReturn));
+    } catch (error) {
+      setCollectionRows([]);
+      setCollectionDamageTotal(0);
+      setCollectionReturnTotal(0);
+      setCollectionError(error?.message || "Failed to fetch Retail Admin collections.");
+    } finally {
+      setIsCollectionLoading(false);
+    }
+  }, [selectedDate]);
+
   useEffect(() => {
     loadRows();
   }, [loadRows]);
+
+  useEffect(() => {
+    loadCollectionRows();
+  }, [loadCollectionRows]);
 
   const filteredRows = useMemo(() => {
     return dedupeRowsByZoneDate(Array.isArray(rows) ? rows : [])
@@ -170,6 +205,15 @@ export default function StockOptionsPage() {
   const editInvoiceAmount = useMemo(() => {
     return toNumber(editStockQuantity) * toNumber(editPrice);
   }, [editStockQuantity, editPrice]);
+
+  const collectionTotals = useMemo(() => {
+    return collectionRows.reduce((totals, row) => ({
+      quantity: totals.quantity + toNumber(row.quantity),
+      cash: totals.cash + toNumber(row.cash),
+      upi: totals.upi + toNumber(row.upi),
+      amount: totals.amount + toNumber(row.amount),
+    }), { quantity: 0, cash: 0, upi: 0, amount: 0 });
+  }, [collectionRows]);
 
   const handleSave = async (event) => {
     event.preventDefault();
@@ -336,38 +380,96 @@ export default function StockOptionsPage() {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-gray-200 bg-white p-3 md:p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-5">
-            <div className="flex flex-wrap gap-2">
-              {ALL_ZONES.map((zoneName) => (
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-gray-200 bg-white p-4 md:p-6 shadow-sm w-full">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Retail Admin Collection Summary</h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Delivered customer collections from Retail Admin for {selectedDate}.
+                </p>
+              </div>
+              <div className="flex gap-2">
                 <button
-                  key={zoneName}
                   type="button"
-                  onClick={() => setSelectedZone(zoneName)}
-                  className={[
-                    "rounded-full border px-4 py-2 text-sm font-semibold transition-colors",
-                    selectedZone === zoneName
-                      ? "border-orange-500 bg-orange-500 text-white"
-                      : "border-gray-200 bg-white text-gray-700 hover:border-orange-300 hover:text-orange-600",
-                  ].join(" ")}
+                  onClick={() => loadCollectionRows()}
+                  disabled={isCollectionLoading}
+                  className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-semibold text-orange-700 hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {zoneName}
+                  {isCollectionLoading ? "Fetching..." : "Fetch Collections"}
                 </button>
-              ))}
+              </div>
             </div>
 
-            <button
-              type="button"
-              onClick={loadRows}
-              disabled={isLoading}
-              className="w-38 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2.5 text-xs font-semibold text-orange-700 hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isLoading ? "Refreshing..." : "Refresh"}
-            </button>
-          </div>
-        </div>
+            {collectionError ? (
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                {collectionError}
+              </div>
+            ) : null}
 
-        <div className="space-y-6">
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-7">
+              <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Delivered Rows</p>
+                <p className="mt-1 text-lg font-semibold text-gray-900">{collectionRows.length.toLocaleString("en-IN")}</p>
+              </div>
+              <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Quantity</p>
+                <p className="mt-1 text-lg font-semibold text-gray-900">{collectionTotals.quantity.toLocaleString("en-IN")}</p>
+              </div>
+              <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Cash</p>
+                <p className="mt-1 text-lg font-semibold text-gray-900">Rs. {collectionTotals.cash.toLocaleString("en-IN")}</p>
+              </div>
+              <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">UPI</p>
+                <p className="mt-1 text-lg font-semibold text-gray-900">Rs. {collectionTotals.upi.toLocaleString("en-IN")}</p>
+              </div>
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-red-600">Total Damage</p>
+                <p className="mt-1 text-lg font-semibold text-red-700">{collectionDamageTotal.toLocaleString("en-IN")}</p>
+              </div>
+              <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">Total Return</p>
+                <p className="mt-1 text-lg font-semibold text-blue-700">{collectionReturnTotal.toLocaleString("en-IN")}</p>
+              </div>
+              <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">UPI + Cash</p>
+                <p className="mt-1 text-lg font-semibold text-gray-900">Rs. {collectionTotals.amount.toLocaleString("en-IN")}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-gray-200 bg-white p-3 md:p-4 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-5">
+              <div className="flex flex-wrap gap-2">
+                {ALL_ZONES.map((zoneName) => (
+                  <button
+                    key={zoneName}
+                    type="button"
+                    onClick={() => setSelectedZone(zoneName)}
+                    className={[
+                      "rounded-full border px-4 py-2 text-sm font-semibold transition-colors",
+                      selectedZone === zoneName
+                        ? "border-orange-500 bg-orange-500 text-white"
+                        : "border-gray-200 bg-white text-gray-700 hover:border-orange-300 hover:text-orange-600",
+                    ].join(" ")}
+                  >
+                    {zoneName}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={loadRows}
+                disabled={isLoading}
+                className="w-38 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2.5 text-xs font-semibold text-orange-700 hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isLoading ? "Refreshing..." : "Refresh"}
+              </button>
+            </div>
+          </div>
+
           <form onSubmit={handleSave} className="rounded-2xl border border-gray-200 bg-white p-4 md:p-6 shadow-sm w-full">
             <h2 className="text-xl font-semibold text-gray-900">New Stock Entry</h2>
             <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-5 md:items-end">
@@ -523,6 +625,7 @@ export default function StockOptionsPage() {
               </table>
             </div>
           </div>
+
         </div>
 
         {isAdmin && editModalOpen && editRow ? (
