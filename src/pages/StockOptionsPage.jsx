@@ -54,6 +54,14 @@ const getDocTimestamp = (doc) => {
   return Number.isNaN(parsed) ? 0 : parsed;
 };
 
+const sortRowsByDateDesc = (a, b) => {
+  const aDate = normalizeDate(a?.date || a?.createdAt);
+  const bDate = normalizeDate(b?.date || b?.createdAt);
+  const dateDiff = String(bDate || "").localeCompare(String(aDate || ""));
+  if (dateDiff !== 0) return dateDiff;
+  return getDocTimestamp(b) - getDocTimestamp(a);
+};
+
 const dedupeRowsByZoneDate = (rows) => {
   const byKey = new Map();
 
@@ -78,7 +86,7 @@ const dedupeRowsByZoneDate = (rows) => {
     }
   }
 
-  return Array.from(byKey.values()).sort((a, b) => getDocTimestamp(b) - getDocTimestamp(a));
+  return Array.from(byKey.values()).sort(sortRowsByDateDesc);
 };
 
 const getResponseErrorMessage = async (response, fallbackMessage) => {
@@ -187,7 +195,7 @@ export default function StockOptionsPage() {
   const filteredRows = useMemo(() => {
     return dedupeRowsByZoneDate(Array.isArray(rows) ? rows : [])
       .filter((row) => row?.zone === selectedZone)
-      .sort((a, b) => getDocTimestamp(b) - getDocTimestamp(a));
+      .sort(sortRowsByDateDesc);
   }, [rows, selectedZone]);
 
   const selectedDateRows = useMemo(() => {

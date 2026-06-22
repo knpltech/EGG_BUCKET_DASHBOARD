@@ -4,6 +4,7 @@ import {
   getAllDigitalPayments,
   getDigitalPaymentsByDate,
   updateDigitalPayment,
+  updateDigitalPaymentAuditStatus,
   deleteDigitalPaymentsByDate,
   deleteDigitalPaymentByOutletAndDate
 } from "../controllers/digitalPaymentsController.js";
@@ -15,6 +16,7 @@ router.delete("/date/:date", deleteDigitalPaymentsByDate);
 router.get("/date/:date", getDigitalPaymentsByDate);
 router.get("/all", getAllDigitalPayments);
 router.post("/add", addDigitalPayment);
+router.patch("/:id/audit-status", updateDigitalPaymentAuditStatus);
 router.patch("/:id", updateDigitalPayment);
 
 export default router;

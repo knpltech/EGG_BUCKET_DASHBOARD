@@ -48,6 +48,27 @@ const formatDisplayDate = (iso) => {
   });
 };
 
+const AUDIT_STATUSES = {
+  verified: { label: "Verified", dot: "bg-emerald-600", badge: "bg-emerald-50 text-emerald-700" },
+  pending: { label: "Pending", dot: "bg-amber-600", badge: "bg-amber-50 text-amber-700" },
+  mismatch: { label: "Mismatch", dot: "bg-red-600", badge: "bg-red-50 text-red-700" },
+};
+
+const getAuditStatus = (row, outletKey) => {
+  const raw = row.auditStatuses?.[outletKey];
+  return AUDIT_STATUSES[raw] ? raw : "pending";
+};
+
+const AuditBadge = ({ status }) => {
+  const config = AUDIT_STATUSES[status] || AUDIT_STATUSES.verified;
+  return (
+    <span className={`mt-1 inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium ${config.badge}`}>
+      <span className={`h-2 w-2 rounded-full ${config.dot}`} />
+      {config.label}
+    </span>
+  );
+};
+
 const CalendarIcon = ({ className = "" }) => (
   <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
@@ -136,10 +157,10 @@ const BaseCalendar = ({ rows, selectedDate, onSelectDate, showDots }) => {
 };
 
 export default function DigitalPayments() {
-  const { isAdmin, isViewer, isDataAgent, isSupervisor, zone } = getRoleFlags();
+  const { isAdmin, isViewer, isDataAgent, isSupervisor, isPaymentAuditor, zone } = getRoleFlags();
   const defaultWeekRange = useMemo(() => getThisWeekRange(), []);
   const showForms = isAdmin || isDataAgent;
-  const showTable = isAdmin || isDataAgent || isSupervisor || isViewer;
+  const showTable = isAdmin || isDataAgent || isSupervisor || isViewer || isPaymentAuditor;
 
   const entryCalendarRef = useRef(null);
   const filterFromRef = useRef(null);
@@ -165,12 +186,14 @@ export default function DigitalPayments() {
   const [isFilterFromOpen, setIsFilterFromOpen] = useState(false);
   const [isFilterToOpen, setIsFilterToOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [openAuditCell, setOpenAuditCell] = useState(null);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (entryCalendarRef.current && !entryCalendarRef.current.contains(event.target)) setIsEntryCalendarOpen(false);
       if (filterFromRef.current && !filterFromRef.current.contains(event.target)) setIsFilterFromOpen(false);
       if (filterToRef.current && !filterToRef.current.contains(event.target)) setIsFilterToOpen(false);
+      if (!event.target.closest("[data-audit-cell]")) setOpenAuditCell(null);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -311,6 +334,45 @@ export default function DigitalPayments() {
     } catch { alert('Error adding payment'); } finally { setIsSaving(false); }
   }, [entryDate, entryValues, formOutlets, hasEntry, isSaving]);
 
+  const handleAuditStatusChange = useCallback(async (row, outletKey, status) => {
+    if (!isPaymentAuditor || !row?.id || !outletKey) return;
+
+    let user = null;
+    try { user = JSON.parse(localStorage.getItem("user")); } catch {}
+
+    const previousRows = rows;
+    setRows((currentRows) => currentRows.map((item) => (
+      item.id === row.id
+        ? { ...item, auditStatuses: { ...(item.auditStatuses || {}), [outletKey]: status } }
+        : item
+    )));
+    setOpenAuditCell(null);
+
+    try {
+      const response = await fetch(`${API_URL}/digital-payments/${row.id}/audit-status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          outlet: outletKey,
+          status,
+          auditedBy: {
+            username: user?.username || user?.uid || "Unknown",
+            role: user?.role || "PaymentAuditor",
+            timestamp: new Date().toISOString(),
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        setRows(previousRows);
+        alert("Failed to update audit status");
+      }
+    } catch {
+      setRows(previousRows);
+      alert("Error updating audit status");
+    }
+  }, [isPaymentAuditor, rows]);
+
   const downloadExcel = useCallback(() => {
     if (!filteredRows?.length) { alert("No data available"); return; }
     const data = filteredRows.map((row) => {
@@ -413,7 +475,38 @@ export default function DigitalPayments() {
                             <td className="sticky left-0 bg-inherit z-10 whitespace-nowrap px-4 py-3">{formatDisplayDate(row.date)}</td>
                             {displayedOutlets.map((outlet) => {
                               const area = outlet.area || outlet.name || outlet.id;
-                              return <td key={outlet.id} className="whitespace-nowrap px-4 py-3">{formatSmart(row.outlets?.[area])}</td>;
+                              const status = getAuditStatus(row, area);
+                              const auditCellKey = `${row.id}-${area}`;
+                              return (
+                                <td key={outlet.id} className="whitespace-nowrap px-4 py-3 align-top">
+                                  <div className="relative inline-block" data-audit-cell>
+                                    <button
+                                      type="button"
+                                      disabled={!isPaymentAuditor}
+                                      onClick={() => isPaymentAuditor && setOpenAuditCell((current) => current === auditCellKey ? null : auditCellKey)}
+                                      className={`text-left ${isPaymentAuditor ? "rounded-lg px-2 py-1 hover:bg-orange-50 focus:outline-none focus:ring-1 focus:ring-orange-300" : ""}`}
+                                    >
+                                      <span className="block font-medium text-gray-900">{formatSmart(row.outlets?.[area])}</span>
+                                      <AuditBadge status={status} />
+                                    </button>
+                                    {isPaymentAuditor && openAuditCell === auditCellKey && (
+                                      <div className="absolute left-0 top-full z-40 mt-2 w-36 rounded-xl border border-gray-200 bg-white p-1 shadow-lg">
+                                        {Object.entries(AUDIT_STATUSES).map(([statusKey, config]) => (
+                                          <button
+                                            key={statusKey}
+                                            type="button"
+                                            onClick={() => handleAuditStatusChange(row, area, statusKey)}
+                                            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-gray-700 hover:bg-gray-50"
+                                          >
+                                            <span className={`h-2 w-2 rounded-full ${config.dot}`} />
+                                            {config.label}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                              );
                             })}
                             <td className="sticky right-0 bg-inherit z-10 whitespace-nowrap px-4 py-3 text-right font-semibold">
                               {formatSmart(rowTotal)}

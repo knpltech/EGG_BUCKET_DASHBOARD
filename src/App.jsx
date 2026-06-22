@@ -42,13 +42,16 @@ function ProtectedRoute({ element, requiredRole }) {
   const isAdmin = role === "admin" || roles.includes("admin");
   const isViewer = role === "viewer" || roles.includes("viewer");
   const isSupervisor = role === "supervisor" || roles.includes("supervisor");
+  const isPaymentAuditor = role === "paymentauditor" || roles.includes("paymentauditor");
+  const normalizedRequiredRole = String(requiredRole || "").toLowerCase();
   const dataAgentRoles = roles.length ? roles : (role ? [role] : []);
   if (
     isAdmin ||
     !requiredRole ||
-    dataAgentRoles.includes(String(requiredRole).toLowerCase()) ||
+    dataAgentRoles.includes(normalizedRequiredRole) ||
     isViewer ||
-    (String(requiredRole).toLowerCase() === "supervisor" && isSupervisor)
+    (normalizedRequiredRole === "supervisor" && isSupervisor) ||
+    (normalizedRequiredRole === "digital_payments" && isPaymentAuditor)
   ) {
     return element;
   }

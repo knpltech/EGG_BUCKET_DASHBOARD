@@ -29,6 +29,11 @@ const Supervisor = () => {
     confirmPassword: "",
     zone: "",
   });
+  const [auditorForm, setAuditorForm] = useState({
+    username: "",
+    password: "",
+    confirmPassword: "",
+  });
 
   const zones = ["Zone 1", "Zone 2", "Zone 3","Zone 4","Zone 5"];
   const [existingSupervisors, setExistingSupervisors] = useState([]);
@@ -100,6 +105,41 @@ const Supervisor = () => {
         }
       })
       .catch(() => alert("Failed to create supervisor"));
+  };
+
+  const handleAuditorSubmit = () => {
+    if (!auditorForm.username || !auditorForm.password) {
+      alert("Auditor username and password are required");
+      return;
+    }
+
+    if (auditorForm.password !== auditorForm.confirmPassword) {
+      alert("Auditor passwords do not match");
+      return;
+    }
+
+    fetch(`${API_URL}/admin/add-payment-auditor`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: auditorForm.username.trim(),
+        password: auditorForm.password,
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          alert("Payment auditor created successfully");
+          setAuditorForm({
+            username: "",
+            password: "",
+            confirmPassword: "",
+          });
+        } else {
+          alert(data.error || "Failed to create payment auditor");
+        }
+      })
+      .catch(() => alert("Failed to create payment auditor"));
   };
 
   return (
@@ -212,6 +252,73 @@ const Supervisor = () => {
             className="bg-orange-600 hover:bg-orange-700 text-white px-8 py-3 rounded-lg font-semibold transition"
           >
             Create Supervisor
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-8 bg-white rounded-2xl shadow-lg border border-gray-100">
+        <div className="px-6 py-6 rounded-t-2xl">
+          <h2 className="text-lg font-semibold flex items-center gap-2">
+            <FontAwesomeIcon icon={faUser} />
+            Payment Auditor Account Details
+          </h2>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div>
+            <label className="text-sm text-gray-600 font-medium">
+              Username
+            </label>
+            <input
+              type="text"
+              placeholder="Enter auditor username"
+              value={auditorForm.username}
+              onChange={(e) =>
+                setAuditorForm({ ...auditorForm, username: e.target.value })
+              }
+              className="w-full mt-1 p-3 rounded-lg border focus:ring-2 focus:ring-blue-400 outline-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="text-sm text-gray-600 font-medium">
+                Password
+              </label>
+              <input
+                type="password"
+                placeholder="Create password"
+                value={auditorForm.password}
+                onChange={(e) =>
+                  setAuditorForm({ ...auditorForm, password: e.target.value })
+                }
+                className="w-full mt-1 p-3 rounded-lg border focus:ring-2 focus:ring-orange-400 outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm text-gray-600 font-medium">
+                Confirm Password
+              </label>
+              <input
+                type="password"
+                placeholder="Confirm password"
+                value={auditorForm.confirmPassword}
+                onChange={(e) =>
+                  setAuditorForm({ ...auditorForm, confirmPassword: e.target.value })
+                }
+                className="w-full mt-1 p-3 rounded-lg border focus:ring-2 focus:ring-orange-400 outline-none"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 py-4 rounded-b-2xl flex justify-end">
+          <button
+            onClick={handleAuditorSubmit}
+            className="bg-orange-600 hover:bg-orange-700 text-white px-8 py-3 rounded-lg font-semibold transition"
+          >
+            Create Payment Auditor
           </button>
         </div>
       </div>

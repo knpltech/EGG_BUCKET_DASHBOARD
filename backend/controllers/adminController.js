@@ -26,6 +26,20 @@ export const getAllSupervisors = async (req, res) => {
     res.status(500).json({ message: "Error fetching supervisors", error: error.message });
   }
 };
+// Get all payment auditors from Firestore
+export const getAllPaymentAuditors = async (req, res) => {
+  try {
+    const snapshot = await db.collection("paymentAuditors").get();
+    const auditors = snapshot.docs.map(doc => {
+      const data = doc.data();
+      delete data.password;
+      return { id: doc.id, ...data };
+    });
+    res.status(200).json(auditors);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching payment auditors", error: error.message });
+  }
+};
 // Get all distributors from Firestore
 export const getAllDistributors = async (req, res) => {
   try {
@@ -288,6 +302,31 @@ export const addSupervisor = async (req, res) => {
     };
     await db.collection("supervisors").doc(username).set(supervisorData);
     return res.json({ success: true, message: "Supervisor created successfully" });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+};
+
+export const addPaymentAuditor = async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    const trimmedUsername = String(username || "").trim();
+
+    if (!trimmedUsername || !password) {
+      return res.status(400).json({ success: false, error: "Missing fields" });
+    }
+
+    const hashed = await bcrypt.hash(password, 10);
+    const auditorData = {
+      username: trimmedUsername,
+      password: hashed,
+      role: "PaymentAuditor",
+      roles: ["paymentauditor", "digital_payments"],
+      createdAt: new Date()
+    };
+
+    await db.collection("paymentAuditors").doc(trimmedUsername).set(auditorData);
+    return res.json({ success: true, message: "Payment auditor created successfully" });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

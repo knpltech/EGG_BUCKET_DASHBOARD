@@ -1,6 +1,8 @@
 import { db } from "../config/firebase.js";
 import { validateSupervisorSameDayEntry } from "../utils/entryCutoff.js";
 
+const AUDIT_STATUSES = new Set(["verified", "pending", "mismatch"]);
+
 // Add a new digital payment entry to Firestore
 // If an entry already exists for the date, merge the outlets instead of creating a new one
 export const addDigitalPayment = async (req, res) => {
@@ -133,6 +135,53 @@ export const updateDigitalPayment = async (req, res) => {
     res.status(200).json({ message: "Digital payment updated" });
   } catch (error) {
     res.status(500).json({ message: "Error updating digital payment", error: error.message });
+  }
+};
+
+export const updateDigitalPaymentAuditStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { outlet, status, auditedBy } = req.body;
+    const normalizedStatus = String(status || "").trim().toLowerCase();
+    const outletKey = String(outlet || "").trim();
+
+    if (!id || !outletKey || !AUDIT_STATUSES.has(normalizedStatus)) {
+      return res.status(400).json({ message: "Missing or invalid audit status fields" });
+    }
+
+    const docRef = db.collection("digitalPayments").doc(id);
+    const docSnap = await docRef.get();
+    if (!docSnap.exists) {
+      return res.status(404).json({ message: "Digital payment entry not found" });
+    }
+
+    const data = docSnap.data();
+    if (!data.outlets || data.outlets[outletKey] === undefined) {
+      return res.status(404).json({ message: "Outlet not found for this payment entry" });
+    }
+
+    const auditStatuses = {
+      ...(data.auditStatuses || {}),
+      [outletKey]: normalizedStatus,
+    };
+    const auditedByPerOutlet = {
+      ...(data.auditedByPerOutlet || {}),
+      [outletKey]: {
+        username: auditedBy?.username || "Unknown",
+        role: auditedBy?.role || "PaymentAuditor",
+        timestamp: auditedBy?.timestamp || new Date().toISOString(),
+      },
+    };
+
+    await docRef.update({
+      auditStatuses,
+      auditedByPerOutlet,
+      updatedAt: new Date(),
+    });
+
+    res.status(200).json({ message: "Digital payment audit status updated", auditStatuses });
+  } catch (error) {
+    res.status(500).json({ message: "Error updating audit status", error: error.message });
   }
 };
 

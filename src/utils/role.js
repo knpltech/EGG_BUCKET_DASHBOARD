@@ -11,6 +11,7 @@ export const getRoleFlags = () => {
       isViewer: role === "viewer" || roles.includes("viewer"),
       isDataAgent: role === "dataagent" || roles.includes("dataagent"),
       isSupervisor: role === "supervisor" || roles.includes("supervisor"),
+      isPaymentAuditor: role === "paymentauditor" || roles.includes("paymentauditor"),
       zone: user.zoneId || user.zone || null,
     };
   } catch {

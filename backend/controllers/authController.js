@@ -39,6 +39,7 @@ export const loginUser = async (req, res) => {
     else if (role === "dataagent") collection = "dataagents";
     else if (role === "viewer") collection = "viewers";
     else if (role === "supervisor") collection = "supervisors";
+    else if (role === "paymentauditor") collection = "paymentAuditors";
     if (!collection)
       return res.status(400).json({ success: false, error: "Invalid role" });
 
@@ -103,6 +104,13 @@ export const loginUser = async (req, res) => {
     if (
       role === "viewer" &&
       !(user.role === "Viewer" || (Array.isArray(user.roles) && user.roles.includes("viewer")))
+    ) {
+      return res.status(401).json({ success: false, error: "Invalid credentials" });
+    }
+
+    if (
+      role === "paymentauditor" &&
+      !(user.role === "PaymentAuditor" || (Array.isArray(user.roles) && user.roles.includes("paymentauditor")))
     ) {
       return res.status(401).json({ success: false, error: "Invalid credentials" });
     }

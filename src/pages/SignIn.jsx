@@ -98,6 +98,8 @@ export default function SignIn() {
         // Redirect based on role
         if (role === 'supervisor') {
           navigate('/supervisor/dashboard');
+        } else if (role === 'paymentauditor') {
+          navigate('/admin/digital-payments');
         } else if (role === 'admin') {
           navigate('/admin/dashboard');
         } else if (role === 'dataagent') {
@@ -181,6 +183,7 @@ export default function SignIn() {
             <option value="admin">Admin</option>
             <option value="supervisor">Supervisor</option>
             <option value="viewer">Viewer</option>
+            <option value="paymentauditor">Payment Auditor</option>
           </select>
           {/* ZONE (only for data agents and supervisors) */}
           {[
