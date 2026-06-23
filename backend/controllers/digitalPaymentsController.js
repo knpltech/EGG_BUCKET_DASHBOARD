@@ -1,4 +1,5 @@
 import { db } from "../config/firebase.js";
+import { FieldPath } from "firebase-admin/firestore";
 import { validateSupervisorSameDayEntry } from "../utils/entryCutoff.js";
 
 const AUDIT_STATUSES = new Set(["verified", "pending", "mismatch"]);
@@ -59,7 +60,17 @@ export const addDigitalPayment = async (req, res) => {
       }
 
       await existingDoc.ref.update(updatedData);
-      res.status(200).json({ id: existingDoc.id, message: "Digital payment merged with existing entry", merged: true });
+      res.status(200).json({
+        id: existingDoc.id,
+        date,
+        outlets: mergedOutlets,
+        total: mergedTotal,
+        auditStatuses: existingData.auditStatuses || {},
+        auditedByPerOutlet: existingData.auditedByPerOutlet || {},
+        addedByPerOutlet: updatedData.addedByPerOutlet || existingData.addedByPerOutlet || {},
+        message: "Digital payment merged with existing entry",
+        merged: true,
+      });
     } else {
       const total = Object.values(outletsWithDup).reduce((sum, val) => sum + (parseFloat(val) || 0), 0);
       const docData = {
@@ -83,7 +94,7 @@ export const addDigitalPayment = async (req, res) => {
       }
 
       const docRef = await db.collection("digitalPayments").add(docData);
-      res.status(201).json({ id: docRef.id, message: "Digital payment recorded" });
+      res.status(201).json({ id: docRef.id, ...docData, message: "Digital payment recorded" });
     }
   } catch (error) {
     res.status(500).json({ message: "Error adding digital payment", error: error.message });
@@ -150,37 +161,31 @@ export const updateDigitalPaymentAuditStatus = async (req, res) => {
     }
 
     const docRef = db.collection("digitalPayments").doc(id);
-    const docSnap = await docRef.get();
-    if (!docSnap.exists) {
+    const auditedByEntry = {
+      username: auditedBy?.username || "Unknown",
+      role: auditedBy?.role || "PaymentAuditor",
+      timestamp: auditedBy?.timestamp || new Date().toISOString(),
+    };
+
+    await docRef.update(
+      new FieldPath("auditStatuses", outletKey),
+      normalizedStatus,
+      new FieldPath("auditedByPerOutlet", outletKey),
+      auditedByEntry,
+      "updatedAt",
+      new Date(),
+    );
+
+    res.status(200).json({
+      message: "Digital payment audit status updated",
+      outlet: outletKey,
+      status: normalizedStatus,
+      auditedBy: auditedByEntry,
+    });
+  } catch (error) {
+    if (error?.code === 5 || error?.code === "not-found") {
       return res.status(404).json({ message: "Digital payment entry not found" });
     }
-
-    const data = docSnap.data();
-    if (!data.outlets || data.outlets[outletKey] === undefined) {
-      return res.status(404).json({ message: "Outlet not found for this payment entry" });
-    }
-
-    const auditStatuses = {
-      ...(data.auditStatuses || {}),
-      [outletKey]: normalizedStatus,
-    };
-    const auditedByPerOutlet = {
-      ...(data.auditedByPerOutlet || {}),
-      [outletKey]: {
-        username: auditedBy?.username || "Unknown",
-        role: auditedBy?.role || "PaymentAuditor",
-        timestamp: auditedBy?.timestamp || new Date().toISOString(),
-      },
-    };
-
-    await docRef.update({
-      auditStatuses,
-      auditedByPerOutlet,
-      updatedAt: new Date(),
-    });
-
-    res.status(200).json({ message: "Digital payment audit status updated", auditStatuses });
-  } catch (error) {
     res.status(500).json({ message: "Error updating audit status", error: error.message });
   }
 };

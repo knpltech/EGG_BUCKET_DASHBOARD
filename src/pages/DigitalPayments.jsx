@@ -54,6 +54,8 @@ const AUDIT_STATUSES = {
   mismatch: { label: "Mismatch", dot: "bg-red-600", badge: "bg-red-50 text-red-700" },
 };
 
+const normalizePaymentRow = (row) => ({ ...row, id: row.id || row._id });
+
 const getAuditStatus = (row, outletKey) => {
   const raw = row.auditStatuses?.[outletKey];
   return AUDIT_STATUSES[raw] ? raw : "pending";
@@ -237,7 +239,7 @@ export default function DigitalPayments() {
       try {
         const res = await fetch(`${API_URL}/digital-payments/all`);
         const data = await res.json();
-        setRows(Array.isArray(data) ? data.map(d => ({ id: d.id || d._id, ...d })) : []);
+        setRows(Array.isArray(data) ? data.map(normalizePaymentRow) : []);
       } catch { setRows([]); }
     };
     fetchPayments();
@@ -327,9 +329,12 @@ export default function DigitalPayments() {
     try {
       const response = await fetch(`${API_URL}/digital-payments/add`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date: entryDate, outlets: outletAmounts, addedBy }) });
       if (!response.ok) { alert('Failed to add payment'); return; }
-      const res = await fetch(`${API_URL}/digital-payments/all`);
-      const data = await res.json();
-      setRows(Array.isArray(data) ? data.map(d => ({ id: d.id || d._id, ...d })) : []);
+      const savedRow = normalizePaymentRow(await response.json());
+      setRows((currentRows) => {
+        const existingIndex = currentRows.findIndex((row) => row.id === savedRow.id || row.date === savedRow.date);
+        if (existingIndex === -1) return [savedRow, ...currentRows];
+        return currentRows.map((row, index) => index === existingIndex ? { ...row, ...savedRow } : row);
+      });
       alert(`Saved digital payment entry for ${entryDate}`);
     } catch { alert('Error adding payment'); } finally { setIsSaving(false); }
   }, [entryDate, entryValues, formOutlets, hasEntry, isSaving]);

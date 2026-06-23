@@ -62,33 +62,6 @@ const sortRowsByDateDesc = (a, b) => {
   return getDocTimestamp(b) - getDocTimestamp(a);
 };
 
-const dedupeRowsByZoneDate = (rows) => {
-  const byKey = new Map();
-
-  for (const row of rows || []) {
-    const zone = row?.zone;
-    const date = normalizeDate(row?.date || row?.createdAt);
-    if (!zone || !date) continue;
-
-    const key = `${zone}__${date}`;
-    const current = byKey.get(key);
-    const candidateTimestamp = getDocTimestamp(row);
-    const currentTimestamp = current ? getDocTimestamp(current) : -1;
-    const candidateQuantity = toNumber(row?.stockQuantity);
-
-    if (!current || candidateTimestamp >= currentTimestamp) {
-      byKey.set(key, {
-        ...row,
-        zone,
-        date,
-        stockQuantity: candidateQuantity,
-      });
-    }
-  }
-
-  return Array.from(byKey.values()).sort(sortRowsByDateDesc);
-};
-
 const getResponseErrorMessage = async (response, fallbackMessage) => {
   try {
     const responseClone = response.clone();
@@ -147,7 +120,10 @@ export default function StockOptionsPage() {
   const loadRows = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_URL}/stock-options/all`);
+      const endpoint = selectedZone
+        ? `${API_URL}/stock-options/zone/${encodeURIComponent(selectedZone)}`
+        : `${API_URL}/stock-options/all`;
+      const response = await fetch(endpoint);
       const data = response.ok ? await response.json() : [];
       setRows(Array.isArray(data) ? data : []);
       setLastRefreshedAt(new Date());
@@ -156,7 +132,7 @@ export default function StockOptionsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [selectedZone]);
 
   const loadCollectionRows = useCallback(async () => {
     setIsCollectionLoading(true);
@@ -193,7 +169,7 @@ export default function StockOptionsPage() {
   }, [loadCollectionRows]);
 
   const filteredRows = useMemo(() => {
-    return dedupeRowsByZoneDate(Array.isArray(rows) ? rows : [])
+    return (Array.isArray(rows) ? rows : [])
       .filter((row) => row?.zone === selectedZone)
       .sort(sortRowsByDateDesc);
   }, [rows, selectedZone]);
@@ -265,12 +241,14 @@ export default function StockOptionsPage() {
         throw new Error(message);
       }
 
+      const savedRow = await response.json();
+      setRows((currentRows) => [savedRow, ...currentRows].sort(sortRowsByDateDesc));
       setStockQuantity("0");
       setPrice("0");
       setFarmName("");
       setRemarks("");
-      await loadRows();
-      alert("Stock entry updated successfully.");
+      setLastRefreshedAt(new Date());
+      alert("Stock entry saved successfully.");
     } catch (error) {
       alert(error?.message || "Failed to save stock entry");
     } finally {
@@ -310,7 +288,10 @@ export default function StockOptionsPage() {
     setIsSaving(true);
     try {
       const token = localStorage.getItem("token");
-      const response = await fetch(`${API_URL}/stock-options/zone/${encodeURIComponent(rowZone)}/date/${encodeURIComponent(rowDate)}`, {
+      const endpoint = editRow.id
+        ? `${API_URL}/stock-options/${encodeURIComponent(editRow.id)}`
+        : `${API_URL}/stock-options/zone/${encodeURIComponent(rowZone)}/date/${encodeURIComponent(rowDate)}`;
+      const response = await fetch(endpoint, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -336,7 +317,11 @@ export default function StockOptionsPage() {
         throw new Error(message);
       }
 
-      await loadRows();
+      const updatedRow = await response.json();
+      setRows((currentRows) => currentRows
+        .map((row) => row.id === updatedRow.id ? updatedRow : row)
+        .sort(sortRowsByDateDesc));
+      setLastRefreshedAt(new Date());
       handleEditCancel();
       alert("Stock entry updated successfully.");
     } catch (error) {
@@ -344,7 +329,7 @@ export default function StockOptionsPage() {
     } finally {
       setIsSaving(false);
     }
-  }, [isAdmin, editRow, editStockQuantity, editPrice, editInvoiceAmount, editFarmName, editRemarks, selectedDate, selectedZone, user, loadRows, handleEditCancel]);
+  }, [isAdmin, editRow, editStockQuantity, editPrice, editInvoiceAmount, editFarmName, editRemarks, selectedDate, selectedZone, user, handleEditCancel]);
 
   if (!isAdmin) {
     return (
