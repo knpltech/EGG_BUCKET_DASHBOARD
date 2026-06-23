@@ -215,6 +215,8 @@ export default function DataEntry() {
   const [remarksLocked,   setRemarksLocked]   = useState(false);
   const [isSubmitting,    setIsSubmitting]    = useState(false);
   const [isDeleting,      setIsDeleting]      = useState(false);
+  const [isFetchingSummary, setIsFetchingSummary] = useState(false);
+  const prevOutletDateRef = useRef({ outlet: "", date: "" });
 
   const { isAdmin, isSupervisor } = getRoleFlags();
   const todayIso = useMemo(() => {
@@ -426,66 +428,60 @@ export default function DataEntry() {
     setSupervisorZones(Array.from(allZones).sort());
   }, [date, outlet, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allAdvanceData, allFoodAllowanceData, allRemarksData]);
 
+  /* ================= RESET ON DATE/OUTLET CHANGE ================= */
+  useEffect(() => {
+    setNeccrate(""); setNeccrateLocked(false);
+    setSales(""); setSalesLocked(false);
+    setDamages(""); setDamagesLocked(false);
+    setCash(""); setCashLocked(false);
+    setDigital(""); setDigitalLocked(false);
+    setIncentive(""); setIncentiveLocked(false);
+    setAdvance(""); setAdvanceLocked(false);
+    setFoodAllowance(""); setFoodAllowanceLocked(false);
+    setRemarks(""); setRemarksLocked(false);
+  }, [outlet, date]);
+
   /* ================= LOCK CHECK ================= */
   useEffect(() => {
-    if (!outlet || !date) {
-      setNeccrate(""); setNeccrateLocked(false);
-      setSales(""); setSalesLocked(false);
-      setDamages(""); setDamagesLocked(false);
-      setCash(""); setCashLocked(false);
-      setDigital(""); setDigitalLocked(false);
-      setIncentive(""); setIncentiveLocked(false);
-      setAdvance(""); setAdvanceLocked(false);
-      setRemarks(""); setRemarksLocked(false);
-      return;
-    }
+    if (!outlet || !date) return;
 
     const foundSales = allSalesData.find(doc =>
       normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
     if (foundSales) { setSales(foundSales.outlets[outlet]); setSalesLocked(true); }
-    else { setSales(""); setSalesLocked(false); }
 
     const foundCash = allCashData.find(doc =>
       normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
     if (foundCash) { setCash(foundCash.outlets[outlet]); setCashLocked(true); }
-    else { setCash(""); setCashLocked(false); }
 
     const foundDigital = allDigitalData.find(doc =>
       normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
     if (foundDigital) { setDigital(foundDigital.outlets[outlet]); setDigitalLocked(true); }
-    else { setDigital(""); setDigitalLocked(false); }
 
     const foundDamages = allDamagesData.find(doc =>
       normalizeDate(doc.date || doc.createdAt) === date && doc.damages && doc.damages[outlet] !== undefined);
     if (foundDamages) { setDamages(foundDamages.damages[outlet]); setDamagesLocked(true); }
-    else { setDamages(""); setDamagesLocked(false); }
 
     const foundNecc = allNeccData.find(doc =>
       normalizeDate(doc.date || doc.createdAt) === date && doc.outletId === outlet);
     if (foundNecc) { setNeccrate(foundNecc.rateValue ?? ""); setNeccrateLocked(true); }
-    else { setNeccrate(""); setNeccrateLocked(false); }
 
     const foundIncentive = allIncentiveData.find(doc =>
       normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
     if (foundIncentive) { setIncentive(foundIncentive.outlets[outlet]); setIncentiveLocked(true); }
-    else { setIncentive(""); setIncentiveLocked(false); }
 
     const foundAdvance = allAdvanceData.find(doc =>
       normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
     if (foundAdvance) { setAdvance(foundAdvance.outlets[outlet]); setAdvanceLocked(true); }
-    else { setAdvance(""); setAdvanceLocked(false); }
 
     const foundFoodAllowance = allFoodAllowanceData.find(doc =>
       normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
     if (foundFoodAllowance) { setFoodAllowance(foundFoodAllowance.outlets[outlet]); setFoodAllowanceLocked(true); }
-    else { setFoodAllowance(""); setFoodAllowanceLocked(false); }
 
     const foundRemarks = allRemarksData.find(doc =>
-      normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
-    if (foundRemarks) { setRemarks(String(foundRemarks.form_remark ?? foundRemarks.outlets[outlet] ?? "")); setRemarksLocked(true); }
-    else { setRemarks(""); setRemarksLocked(false); }
+      normalizeDate(doc.date || doc.createdAt) === date && doc.remarks && doc.remarks[outlet] !== undefined);
+    if (foundRemarks) { setRemarks(foundRemarks.remarks[outlet]); setRemarksLocked(true); }
 
-  }, [outlet, date, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allAdvanceData, allFoodAllowanceData, allRemarksData]);
+  }, [date, outlet, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allAdvanceData, allFoodAllowanceData, allRemarksData]);
 
   /* ================= RESET ================= */
   const handleReset = () => {
@@ -499,6 +495,68 @@ export default function DataEntry() {
     if (!foodAllowanceLocked) setFoodAllowance("");
     if (!remarksLocked)   setRemarks("");
   };
+
+  /* ================= FETCH OUTLET SUMMARY ================= */
+  useEffect(() => {
+    if (!outlet || !date) {
+      prevOutletDateRef.current = { outlet: "", date: "" };
+      return;
+    }
+    
+    // Only run if outlet or date actually changed
+    if (prevOutletDateRef.current.outlet === outlet && prevOutletDateRef.current.date === date) {
+      return;
+    }
+    prevOutletDateRef.current = { outlet, date };
+
+    // Check synchronous lock status based on loaded data
+    const hasSales = allSalesData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
+    const hasCash = allCashData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
+    const hasDigital = allDigitalData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
+
+    if (hasSales && hasCash && hasDigital) return;
+
+    let isMounted = true;
+    const fetchSummary = async () => {
+      setIsFetchingSummary(true);
+      try {
+        const token = localStorage.getItem("token");
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const url = `${API}/outlet-summary?outlet=${encodeURIComponent(outlet)}&date=${encodeURIComponent(date)}`;
+        const res = await fetch(url, { headers });
+        if (!res.ok) throw new Error("Failed to fetch outlet summary");
+        
+        const data = await res.json();
+        console.log("🟢 fetchSummary RECEIVED FROM BACKEND:", outlet, date, data);
+        console.log("🟢 hasSales?", hasSales, "hasCash?", hasCash, "hasDigital?", hasDigital);
+        
+        if (isMounted) {
+          // Auto-fill values if not locked and value > 0
+          if (!hasSales && data.salesQty > 0) {
+            console.log("🟢 CALLING setSales with:", data.salesQty);
+            setSales(String(data.salesQty));
+          }
+          if (!hasCash && data.cashPayment > 0) {
+            console.log("🟢 CALLING setCash with:", data.cashPayment);
+            setCash(String(data.cashPayment));
+          }
+          if (!hasDigital && data.digitalPayment > 0) {
+            console.log("🟢 CALLING setDigital with:", data.digitalPayment);
+            setDigital(String(data.digitalPayment));
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching outlet summary:", err);
+      } finally {
+        if (isMounted) setIsFetchingSummary(false);
+      }
+    };
+    
+    fetchSummary();
+    
+    return () => { isMounted = false; };
+  }, [outlet, date, allSalesData, allCashData, allDigitalData]);
+
 
   /* ================= DELETE OUTLET DATA FOR DATE (admin only) ================= */
   const handleDeleteDate = async () => {
@@ -763,6 +821,11 @@ export default function DataEntry() {
 
         <h2 className="text-2xl md:text-3xl font-semibold mb-6 text-center text-gray-900">
           Common Data Entry
+          {isFetchingSummary && (
+            <span className="flex items-center justify-center gap-2 text-sm text-orange-500 mt-2 font-normal animate-pulse">
+              <Spinner /> Fetching outlet summary...
+            </span>
+          )}
         </h2>
 
         {/* ---- Outlet Dropdown ---- */}

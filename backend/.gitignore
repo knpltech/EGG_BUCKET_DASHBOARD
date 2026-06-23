@@ -1,15 +1,5 @@
-backend/config/serviceAccountKey.json
+config/serviceAccountKey.json
+config/collectionServiceAccountKey.json
 .env
-backend/.env
-backend/node_modules
-backend/dist        # Add this line to ignore the dist folder in the backend
-frontend/node_modules
-frontend/.next
-frontend/out
-frontend/.env.local
-backend/config/serviceAccountKey.json
-backend/.env
-backend/node_modules
-backend/dist
-frontend/node_modules
-frontend/.env
+node_modules
+dist

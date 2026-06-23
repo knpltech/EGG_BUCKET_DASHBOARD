@@ -24,6 +24,7 @@ import zoneStockRoutes from "./routes/zoneStockRoutes.js";
 import stockOptionsRoutes from "./routes/stockOptionsRoutes.js";
 import cashClosureRoutes from "./routes/cashClosureRoutes.js";
 import remarksRoutes from "./routes/remarksRoutes.js";
+import outletSummaryRoutes from "./routes/outletSummaryRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -70,6 +71,7 @@ app.use("/api/zone-stock", zoneStockRoutes);
 app.use("/api/stock-options", stockOptionsRoutes);
 app.use("/api/cash-closure", cashClosureRoutes);
 app.use("/api/remarks", remarksRoutes);
+app.use("/api/outlet-summary", outletSummaryRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () =>
