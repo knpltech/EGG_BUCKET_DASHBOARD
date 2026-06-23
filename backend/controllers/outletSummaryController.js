@@ -40,7 +40,7 @@ export const getOutletSummary = async (req, res) => {
 
     // 2. Find agents assigned to the selected outlet
     const searchOutletName = outlet.toLowerCase().replace(/eggbucket/g, "").trim();
-    
+
     const assignedAgents = deliveryManCache
       .filter(agent => {
         if (!agent.outlet) return false;
@@ -63,7 +63,7 @@ export const getOutletSummary = async (req, res) => {
     // 3. Query customers collection efficiently using a targeted query for the specific date
     let customersForDate = [];
     const cacheEntry = customersDateCache[date];
-    
+
     if (!cacheEntry || now - cacheEntry.time > CUSTOMERS_CACHE_TTL) {
       try {
         // Only fetch customers that actually have a delivered order on this specific date!
@@ -71,9 +71,9 @@ export const getOutletSummary = async (req, res) => {
         const snapshot = await collectionDb.collection("customers")
           .where(`last8Days.${date}.status`, "==", "delivered")
           .get();
-          
+
         customersForDate = snapshot.docs.map(doc => doc.data());
-        
+
         // Cache the specific date
         customersDateCache[date] = {
           data: customersForDate,
@@ -105,7 +105,7 @@ export const getOutletSummary = async (req, res) => {
         if (delivery.status === "delivered") {
           // Match agentId against delivery agents belonging to the selected outlet
           if (assignedAgents.includes(delivery.agentId)) {
-            salesQty += delivery.quantity || 0;
+            salesQty += (delivery.quantity || 0) * 30; // Multiply by 30 as requested
             cashPayment += delivery.cashAmount || 0;
             digitalPayment += delivery.upiAmount || delivery.digitalAmount || 0; // Check upiAmount or digitalAmount
             totalAmount += delivery.totalAmount || 0;
