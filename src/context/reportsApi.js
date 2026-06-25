@@ -232,6 +232,32 @@ export const exportReports = async (outletId, format = 'excel', filters = {}) =>
   }
 };
 
+export const fetchStatisticsData = async (filters = {}) => {
+  try {
+    const queryParams = new URLSearchParams(
+      Object.fromEntries(
+        Object.entries(filters).filter(([, value]) => value !== undefined && value !== null && value !== '')
+      )
+    ).toString();
+
+    const response = await fetch(`${API_BASE_URL}/reports/statistics${queryParams ? `?${queryParams}` : ''}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch statistics: ${response.statusText}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error('Error fetching statistics data:', error);
+    throw error;
+  }
+};
+
 /**
  * Fetch today's revenue data (cash + digital payments)
  * @returns {Promise<Object>} Object with cashTotal, digitalTotal, and combinedTotal
@@ -355,6 +381,7 @@ export default {
   fetchReportsData,
   fetchOutlets,
   exportReports,
+  fetchStatisticsData,
   fetchTodayRevenue,
   fetchZoneWiseRevenue
 };

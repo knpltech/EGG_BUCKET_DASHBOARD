@@ -106,6 +106,10 @@ export default function Sidebar({ supervisor }) {
               <FontAwesomeIcon icon={faChartLine} />
               {open && "Reports"}
             </Link>
+            <Link to="/supervisor/statistics" className={linkClass("/supervisor/statistics")}> 
+              <FontAwesomeIcon icon={faChartLine} />
+              {open && "Statistics"}
+            </Link>
           </>
         )}
         {/* Admin: show all links. Data Agent: show only allowed links. Viewer: show only data pages. */}
@@ -167,9 +171,13 @@ export default function Sidebar({ supervisor }) {
               <FontAwesomeIcon icon={faMoneyBillWave} />
               {open && "Cash Payments"}
             </Link>
-            <Link to="/admin/daily-revenue" className={linkClass("/admin/daily-revenue")}> 
+            <Link to="/admin/daily-revenue" className={linkClass("/admin/daily-revenue")}>
               <FontAwesomeIcon icon={faDollarSign} />
               {open && "Daily Revenue"}
+            </Link>
+            <Link to="/admin/statistics" className={linkClass("/admin/statistics")}>
+              <FontAwesomeIcon icon={faChartLine} />
+              {open && "Statistics"}
             </Link>
             <Link to="/admin/distribution" className={linkClass("/admin/distribution")}> 
               <FontAwesomeIcon icon={faUsers} />
@@ -219,6 +227,10 @@ export default function Sidebar({ supervisor }) {
             <FontAwesomeIcon icon={faChartLine} />
             {open && "Reports"}
           </Link>
+            <Link to="/viewer/statistics" className={linkClass("/viewer/statistics")}> 
+              <FontAwesomeIcon icon={faChartLine} />
+              {open && "Statistics"}
+            </Link>
           </>
         )}
         {dataAgentRoles && dataAgentRoles.includes("distribution") && !isAdmin && (

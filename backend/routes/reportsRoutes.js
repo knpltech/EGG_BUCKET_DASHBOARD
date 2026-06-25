@@ -14,6 +14,14 @@ const router = express.Router();
 router.get('/outlets', reportsController.getAvailableOutlets);
 
 /**
+ * @route   GET /api/reports/statistics
+ * @desc    Get cross-outlet statistics with charts-ready aggregates
+ * @access  Private (add authentication middleware if needed)
+ * @query   dateFrom (optional), dateTo (optional), zone (optional)
+ */
+router.get('/statistics', reportsController.getStatistics);
+
+/**
  * @route   GET /api/reports
  * @desc    Get aggregated reports data for an outlet
  * @access  Private (add authentication middleware if needed)
