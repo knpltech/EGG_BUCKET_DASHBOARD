@@ -52,6 +52,11 @@ const toNumber = (value) => {
   return Number.isFinite(numeric) ? numeric : 0;
 };
 
+const normalizePaymentStatus = (value) => {
+  const status = String(value || "").trim().toLowerCase();
+  return status === "paid" ? "Paid" : "Unpaid";
+};
+
 const toMillis = (value) => {
   if (!value) return 0;
   if (value && typeof value === "object" && typeof value.toDate === "function") {
@@ -169,6 +174,7 @@ const buildEntryPayload = (body = {}) => {
     stockQuantity: toNumber(body.stockQuantity),
     price: toNumber(body.price),
     invoiceAmount: toNumber(body.invoiceAmount ?? toNumber(body.stockQuantity) * toNumber(body.price)),
+    paymentStatus: normalizePaymentStatus(body.paymentStatus),
     farmName: String(body.farmName || "").trim().slice(0, 200),
     remarks: String(body.remarks || "").trim().slice(0, 500),
     updatedAt: new Date(),

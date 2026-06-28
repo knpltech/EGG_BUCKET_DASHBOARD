@@ -3,6 +3,7 @@ import { getRoleFlags } from "../utils/role";
 
 const API_URL = import.meta.env.VITE_API_URL || "/api";
 const ALL_ZONES = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"];
+const PAYMENT_STATUSES = ["Paid", "Unpaid"];
 
 const getLocalIsoDate = (value = new Date()) => {
   const date = value instanceof Date ? value : new Date(value);
@@ -79,18 +80,31 @@ const getResponseErrorMessage = async (response, fallbackMessage) => {
   }
 };
 
+const normalizePaymentStatus = (value) => {
+  const status = String(value || "").trim().toLowerCase();
+  return status === "paid" ? "Paid" : "Unpaid";
+};
+
+const getPaymentStatusClasses = (status) => {
+  return normalizePaymentStatus(status) === "Paid"
+    ? "bg-green-600 text-white"
+    : "bg-red-600 text-white";
+};
+
 export default function StockOptionsPage() {
   const { isAdmin } = getRoleFlags();
   const [selectedDate, setSelectedDate] = useState(getLocalIsoDate());
   const [selectedZone, setSelectedZone] = useState("Zone 1");
   const [stockQuantity, setStockQuantity] = useState("0");
   const [price, setPrice] = useState("0");
+  const [paymentStatus, setPaymentStatus] = useState("Unpaid");
   const [farmName, setFarmName] = useState("");
   const [remarks, setRemarks] = useState("");
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);
   const [editStockQuantity, setEditStockQuantity] = useState("0");
   const [editPrice, setEditPrice] = useState("0");
+  const [editPaymentStatus, setEditPaymentStatus] = useState("Unpaid");
   const [editFarmName, setEditFarmName] = useState("");
   const [editRemarks, setEditRemarks] = useState("");
   const [rows, setRows] = useState([]);
@@ -225,6 +239,7 @@ export default function StockOptionsPage() {
           stockQuantity: toNumber(stockQuantity),
           price: toNumber(price),
           invoiceAmount,
+          paymentStatus,
           farmName: String(farmName || "").trim(),
           remarks: String(remarks || "").trim(),
           addedBy: {
@@ -245,6 +260,7 @@ export default function StockOptionsPage() {
       setRows((currentRows) => [savedRow, ...currentRows].sort(sortRowsByDateDesc));
       setStockQuantity("0");
       setPrice("0");
+      setPaymentStatus("Unpaid");
       setFarmName("");
       setRemarks("");
       setLastRefreshedAt(new Date());
@@ -261,6 +277,7 @@ export default function StockOptionsPage() {
     setEditRow(row);
     setEditStockQuantity(String(toNumber(row.stockQuantity)));
     setEditPrice(String(toNumber(row.price)));
+    setEditPaymentStatus(normalizePaymentStatus(row.paymentStatus));
     setEditFarmName(String(row.farmName || ""));
     setEditRemarks(String(row.remarks || ""));
     setEditModalOpen(true);
@@ -271,6 +288,7 @@ export default function StockOptionsPage() {
     setEditRow(null);
     setEditStockQuantity("0");
     setEditPrice("0");
+    setEditPaymentStatus("Unpaid");
     setEditFarmName("");
     setEditRemarks("");
   }, []);
@@ -301,6 +319,7 @@ export default function StockOptionsPage() {
           stockQuantity: toNumber(editStockQuantity),
           price: toNumber(editPrice),
           invoiceAmount: editInvoiceAmount,
+          paymentStatus: editPaymentStatus,
           farmName: String(editFarmName || "").trim(),
           remarks: String(editRemarks || "").trim(),
           addedBy: {
@@ -329,7 +348,7 @@ export default function StockOptionsPage() {
     } finally {
       setIsSaving(false);
     }
-  }, [isAdmin, editRow, editStockQuantity, editPrice, editInvoiceAmount, editFarmName, editRemarks, selectedDate, selectedZone, user, handleEditCancel]);
+  }, [isAdmin, editRow, editStockQuantity, editPrice, editInvoiceAmount, editPaymentStatus, editFarmName, editRemarks, selectedDate, selectedZone, user, handleEditCancel]);
 
   if (!isAdmin) {
     return (
@@ -465,7 +484,7 @@ export default function StockOptionsPage() {
 
           <form onSubmit={handleSave} className="rounded-2xl border border-gray-200 bg-white p-4 md:p-6 shadow-sm w-full">
             <h2 className="text-xl font-semibold text-gray-900">New Stock Entry</h2>
-            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-5 md:items-end">
+            <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-6 md:items-end">
               <div>
                 <label className="mb-1 block text-sm font-semibold text-gray-700">Date</label>
                 <input
@@ -521,7 +540,20 @@ export default function StockOptionsPage() {
                 />
               </div>
 
-              <div className="md:col-span-5">
+              <div>
+                <label className="mb-1 block text-sm font-semibold text-gray-700">Status</label>
+                <select
+                  value={paymentStatus}
+                  onChange={(e) => setPaymentStatus(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                >
+                  {PAYMENT_STATUSES.map((status) => (
+                    <option key={status} value={status}>{status}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="md:col-span-6">
                 <label className="mb-1 block text-sm font-semibold text-gray-700">Remarks</label>
                 <textarea
                   rows="2"
@@ -532,7 +564,7 @@ export default function StockOptionsPage() {
                 />
               </div>
 
-              <div className="md:col-span-5 flex flex-col">
+              <div className="md:col-span-6 flex flex-col">
                 <label className="mb-1 block text-sm font-semibold text-gray-700"></label>
                 <div className="flex gap-2">
                   <button
@@ -544,7 +576,7 @@ export default function StockOptionsPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setStockQuantity("0"); setPrice("0"); setFarmName(""); setRemarks(""); }}
+                    onClick={() => { setStockQuantity("0"); setPrice("0"); setPaymentStatus("Unpaid"); setFarmName(""); setRemarks(""); }}
                     className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50"
                   >
                     Reset
@@ -579,6 +611,7 @@ export default function StockOptionsPage() {
                     <th className="px-4 py-3">Price</th>
                     <th className="px-4 py-3">Invoice Amount</th>
                     <th className="px-4 py-3">Farm Name</th>
+                    <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3">Remarks</th>
                     {isAdmin ? <th className="px-4 py-3 text-right">Action</th> : null}
                   </tr>
@@ -593,6 +626,11 @@ export default function StockOptionsPage() {
                         <td className="px-4 py-3 text-gray-700">₹{toNumber(row.price).toLocaleString("en-IN")}</td>
                         <td className="px-4 py-3 text-gray-700">₹{toNumber(row.invoiceAmount ?? toNumber(row.stockQuantity) * toNumber(row.price)).toLocaleString("en-IN")}</td>
                         <td className="px-4 py-3 text-gray-700">{row.farmName || "-"}</td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex min-w-[70px] items-center justify-center rounded-full px-3 py-1 text-xs font-bold ${getPaymentStatusClasses(row.paymentStatus)}`}>
+                            {normalizePaymentStatus(row.paymentStatus)}
+                          </span>
+                        </td>
                         <td className="px-4 py-3 text-gray-700">{row.remarks || "-"}</td>
                         {isAdmin ? (
                           <td className="px-4 py-3 text-right">
@@ -609,7 +647,7 @@ export default function StockOptionsPage() {
                     ))
                   ) : (
                     <tr>
-                      <td className="px-4 py-6 text-center text-gray-500" colSpan="7">
+                      <td className="px-4 py-6 text-center text-gray-500" colSpan={isAdmin ? 8 : 7}>
                         No stock entries found for {selectedZone}.
                       </td>
                     </tr>
@@ -668,6 +706,19 @@ export default function StockOptionsPage() {
                 <div className="rounded-lg bg-gray-50 px-3 py-2 text-sm">
                   <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Invoice Amount</p>
                   <p className="mt-1 text-base font-bold text-gray-900">₹{editInvoiceAmount.toLocaleString("en-IN")}</p>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-semibold text-gray-700">Status</label>
+                  <select
+                    value={editPaymentStatus}
+                    onChange={(e) => setEditPaymentStatus(e.target.value)}
+                    className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  >
+                    {PAYMENT_STATUSES.map((status) => (
+                      <option key={status} value={status}>{status}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
