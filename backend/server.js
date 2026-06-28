@@ -4,6 +4,7 @@ import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
 import { db } from "./config/firebase.js";
+import { cacheJsonResponse } from "./middleware/responseCache.js";
 
 import authRoutes from "./routes/authRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
@@ -30,12 +31,34 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+const env = globalThis.process?.env || {};
+const HEAVY_GET_CACHE_TTL_MS = Number(env.HEAVY_GET_CACHE_TTL_MS || 30_000);
+const HEAVY_GET_CACHE_PATHS = new Set([
+  "/api/dailysales/all",
+  "/api/daily-damage/all",
+  "/api/cash-payments/all",
+  "/api/digital-payments/all",
+  "/api/neccrate/all",
+  "/api/incentive/all",
+  "/api/advance/all",
+  "/api/food-allowance/all",
+  "/api/remarks/all",
+  "/api/cash-closure/all",
+  "/api/zone-stock/all",
+  "/api/stock-options/all",
+]);
 
 app.use(cors());
 app.use(express.json());
+app.use(cacheJsonResponse({
+  ttlMs: HEAVY_GET_CACHE_TTL_MS,
+  maxEntries: 200,
+  namespace: "heavy-get",
+  shouldCache: (req) => HEAVY_GET_CACHE_PATHS.has(req.path),
+}));
 
 // Optional Firestore warmup. Keep disabled by default to avoid an extra read on startup.
-if (String(process.env.ENABLE_FIRESTORE_WARMUP || "").toLowerCase() === "true") {
+if (String(env.ENABLE_FIRESTORE_WARMUP || "").toLowerCase() === "true") {
   (async () => {
     try {
       await db.collection("admin").limit(1).get();
@@ -73,7 +96,7 @@ app.use("/api/cash-closure", cashClosureRoutes);
 app.use("/api/remarks", remarksRoutes);
 app.use("/api/outlet-summary", outletSummaryRoutes);
 
-const PORT = process.env.PORT || 5000;
+const PORT = env.PORT || 5000;
 app.listen(PORT, () =>
   console.log(`Backend running at http://localhost:${PORT}`)
 );
