@@ -110,6 +110,7 @@ export default function StockOptionsPage() {
   const [rows, setRows] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [togglingStatusId, setTogglingStatusId] = useState(null);
   const [lastRefreshedAt, setLastRefreshedAt] = useState(null);
   const [collectionRows, setCollectionRows] = useState([]);
   const [collectionDamageTotal, setCollectionDamageTotal] = useState(0);
@@ -349,6 +350,80 @@ export default function StockOptionsPage() {
       setIsSaving(false);
     }
   }, [isAdmin, editRow, editStockQuantity, editPrice, editInvoiceAmount, editPaymentStatus, editFarmName, editRemarks, selectedDate, selectedZone, user, handleEditCancel]);
+
+  const handlePaymentStatusToggle = useCallback(async (row) => {
+    if (!isAdmin || !row) return;
+
+    const rowZone = row.zone || selectedZone;
+    const rowDate = normalizeDate(row.date || row.createdAt) || selectedDate;
+    if (!rowZone || !rowDate) {
+      alert("Missing row date or zone.");
+      return;
+    }
+
+    const currentStatus = normalizePaymentStatus(row.paymentStatus);
+    const nextStatus = currentStatus === "Paid" ? "Unpaid" : "Paid";
+    const rowKey = row.id || `${rowZone}-${rowDate}`;
+
+    setTogglingStatusId(rowKey);
+    setRows((currentRows) => currentRows.map((item) => (
+      item === row || (row.id && item.id === row.id)
+        ? { ...item, paymentStatus: nextStatus }
+        : item
+    )));
+
+    try {
+      const token = localStorage.getItem("token");
+      const endpoint = row.id
+        ? `${API_URL}/stock-options/${encodeURIComponent(row.id)}`
+        : `${API_URL}/stock-options/zone/${encodeURIComponent(rowZone)}/date/${encodeURIComponent(rowDate)}`;
+      const stockQuantityValue = toNumber(row.stockQuantity);
+      const priceValue = toNumber(row.price);
+      const response = await fetch(endpoint, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          zone: rowZone,
+          date: rowDate,
+          stockQuantity: stockQuantityValue,
+          price: priceValue,
+          invoiceAmount: stockQuantityValue * priceValue,
+          paymentStatus: nextStatus,
+          farmName: String(row.farmName || "").trim(),
+          remarks: String(row.remarks || "").trim(),
+          addedBy: {
+            username: user?.username || user?.uid || "unknown",
+            role: user?.role || "unknown",
+            zone: rowZone,
+            timestamp: new Date().toISOString(),
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const message = await getResponseErrorMessage(response, "Failed to update payment status");
+        throw new Error(message);
+      }
+
+      const updatedRow = await response.json();
+      setRows((currentRows) => currentRows
+        .map((item) => item.id === updatedRow.id ? updatedRow : item)
+        .sort(sortRowsByDateDesc));
+      setLastRefreshedAt(new Date());
+    } catch (error) {
+      setRows((currentRows) => currentRows.map((item) => (
+        item === row || (row.id && item.id === row.id)
+          ? { ...item, paymentStatus: currentStatus }
+          : item
+      )));
+      alert(error?.message || "Failed to update payment status");
+    } finally {
+      setTogglingStatusId(null);
+    }
+  }, [isAdmin, selectedDate, selectedZone, user]);
 
   if (!isAdmin) {
     return (
@@ -627,9 +702,15 @@ export default function StockOptionsPage() {
                         <td className="px-4 py-3 text-gray-700">₹{toNumber(row.invoiceAmount ?? toNumber(row.stockQuantity) * toNumber(row.price)).toLocaleString("en-IN")}</td>
                         <td className="px-4 py-3 text-gray-700">{row.farmName || "-"}</td>
                         <td className="px-4 py-3">
-                          <span className={`inline-flex min-w-[70px] items-center justify-center rounded-full px-3 py-1 text-xs font-bold ${getPaymentStatusClasses(row.paymentStatus)}`}>
+                          <button
+                            type="button"
+                            onDoubleClick={() => handlePaymentStatusToggle(row)}
+                            disabled={togglingStatusId === (row.id || `${row.zone}-${normalizeDate(row.date || row.createdAt)}`)}
+                            title="Double-click to toggle status"
+                            className={`inline-flex min-w-[70px] items-center justify-center rounded-full px-3 py-1 text-xs font-bold transition hover:opacity-90 disabled:cursor-wait disabled:opacity-70 ${getPaymentStatusClasses(row.paymentStatus)}`}
+                          >
                             {normalizePaymentStatus(row.paymentStatus)}
-                          </span>
+                          </button>
                         </td>
                         <td className="px-4 py-3 text-gray-700">{row.remarks || "-"}</td>
                         {isAdmin ? (
