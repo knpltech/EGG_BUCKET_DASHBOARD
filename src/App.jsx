@@ -32,6 +32,7 @@ import SupervisorLayout from "./layouts/SupervisorLayout";
 import DataEntry from "./pages/DataEntry";
 import ZoneStockEntry from "./pages/ZoneStockEntry";
 import StockOptionsPage from "./pages/StockOptionsPage";
+import OutletSalary from "./pages/OutletSalary";
 
 function ProtectedRoute({ element, requiredRole }) {
   let user = null;
@@ -151,6 +152,10 @@ function App() {
             <Route
               path="/admin/stock-options"
               element={<ProtectedRoute element={<AdminLayoutWithPanel><StockOptionsPage /></AdminLayoutWithPanel>} requiredRole="admin" />}
+            />
+            <Route
+              path="/admin/outlet-salary"
+              element={<ProtectedRoute element={<AdminLayoutWithPanel><OutletSalary /></AdminLayoutWithPanel>} requiredRole="admin" />}
             />
 
             {/* SUPERVISOR ROUTES */}

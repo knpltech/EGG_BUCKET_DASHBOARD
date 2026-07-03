@@ -135,6 +135,10 @@ export default function Sidebar({ supervisor }) {
               <FontAwesomeIcon icon={faReceipt} />
               {open && "Cash Closure"}
             </Link>
+            <Link to="/admin/outlet-salary" className={linkClass("/admin/outlet-salary")}> 
+              <FontAwesomeIcon icon={faMoneyBillWave} />
+              {open && " Outlets Salaries"}
+            </Link>
             <Link to="/admin/damages" className={linkClass("/admin/damages")}> 
               <FontAwesomeIcon icon={faExclamationTriangle} />
               {open && "Daily Damages"}
