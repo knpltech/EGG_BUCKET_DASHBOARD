@@ -27,8 +27,12 @@ import { fetchStatisticsData } from "../context/reportsApi";
 import { getRoleFlags } from "../utils/role";
 import { getThisWeekRange, toLocalIsoDate } from "../utils/dateRange";
 
+const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/$/, "");
+
 const currency = (value) => `Rs. ${Math.round(Number(value) || 0).toLocaleString("en-IN")}`;
 const number = (value) => Math.round(Number(value) || 0).toLocaleString("en-IN");
+
+const toNumber = (value) => Number(value) || 0;
 
 const formatLongDate = (iso) => {
   if (!iso) return "-";
@@ -52,30 +56,40 @@ const getRange = (type) => {
   return getThisWeekRange(today);
 };
 
-const getAprilToTodayRange = () => {
-  const today = new Date();
-  const aprilYear = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1;
-  return {
-    from: toLocalIsoDate(new Date(aprilYear, 3, 1)),
-    to: toLocalIsoDate(today),
-  };
+const getMonthKeysInRange = (from, to) => {
+  if (!from || !to) return [];
+
+  const start = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) return [];
+
+  const keys = [];
+  const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+  const endCursor = new Date(end.getFullYear(), end.getMonth(), 1);
+
+  while (cursor <= endCursor) {
+    const year = cursor.getFullYear();
+    const month = String(cursor.getMonth() + 1).padStart(2, "0");
+    keys.push(`${year}-${month}`);
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  return keys;
 };
 
-const getComparison = (current, previous, inverse = false) => {
-  const currentValue = Number(current) || 0;
-  const previousValue = Number(previous) || 0;
+const fetchOutletSalaryEntries = async (year) => {
+  try {
+    const response = await fetch(`${API_URL}/outlet-salary/all?year=${year}`, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+    });
 
-  if (!previousValue && !currentValue) return { type: "flat", text: "0%" };
-  if (!previousValue) return { type: inverse ? "down" : "up", text: "New" };
-
-  const percent = ((currentValue - previousValue) / Math.abs(previousValue)) * 100;
-  const isFlat = Math.abs(percent) < 0.01;
-  if (isFlat) return { type: "flat", text: "0%" };
-  const isUp = percent > 0;
-  return {
-    type: inverse ? (isUp ? "down" : "up") : (isUp ? "up" : "down"),
-    text: `${Math.abs(percent).toFixed(1)}%`,
-  };
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
 };
 
 const getOutletStatus = (item) => {
@@ -90,7 +104,7 @@ const OutletPerformance = () => {
   const [rangeType, setRangeType] = useState("week");
   const [dateRange, setDateRange] = useState(() => getRange("week"));
   const [stats, setStats] = useState(null);
-  const [comparisonStats, setComparisonStats] = useState(null);
+  const [salaryEntries, setSalaryEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -101,26 +115,24 @@ const OutletPerformance = () => {
 
       try {
         const zoneFilter = isSupervisor ? zone : "";
-        const comparisonRange = getAprilToTodayRange();
-        const [rangeData, comparisonData] = await Promise.all([
+        const monthKeys = getMonthKeysInRange(dateRange.from, dateRange.to);
+        const yearList = Array.from(new Set(monthKeys.map((key) => Number(key.slice(0, 4))).filter((year) => Number.isFinite(year))));
+
+        const [rangeData, ...salaryData] = await Promise.all([
           fetchStatisticsData({
             dateFrom: dateRange.from,
             dateTo: dateRange.to,
             zone: zoneFilter,
           }),
-          fetchStatisticsData({
-            dateFrom: comparisonRange.from,
-            dateTo: comparisonRange.to,
-            zone: zoneFilter,
-          }),
+          ...yearList.map((year) => fetchOutletSalaryEntries(year)),
         ]);
 
         setStats(rangeData);
-        setComparisonStats(comparisonData);
+        setSalaryEntries(salaryData.flat());
       } catch {
         setError("Failed to load outlet performance data");
         setStats(null);
-        setComparisonStats(null);
+        setSalaryEntries([]);
       } finally {
         setLoading(false);
       }
@@ -131,25 +143,74 @@ const OutletPerformance = () => {
 
   const totals = stats?.totals || {};
   const outletRows = useMemo(() => stats?.outletBreakdown || [], [stats]);
-  const monthlyRows = useMemo(() => {
-    const rows = comparisonStats?.monthly || [];
-    return rows.map((item, index) => {
-      const previous = rows[index - 1] || {};
-      return {
-        ...item,
-        eggGrowth: getComparison(item.salesQty, previous.salesQty),
-        costGrowth: getComparison(item.totalCost, previous.totalCost, true),
-        closingGrowth: getComparison(item.closingAmount, previous.closingAmount),
-      };
+  const selectedMonthKeys = useMemo(() => new Set(getMonthKeysInRange(dateRange.from, dateRange.to)), [dateRange.from, dateRange.to]);
+  const salaryByOutlet = useMemo(() => {
+    const map = new Map();
+
+    salaryEntries.forEach((entry) => {
+      const entryKey = `${entry.year}-${String(entry.month).padStart(2, "0")}`;
+      if (!selectedMonthKeys.has(entryKey)) return;
+
+      const entryOutlets = entry?.outlets && typeof entry.outlets === "object" ? entry.outlets : {};
+      Object.entries(entryOutlets).forEach(([outletId, value]) => {
+        map.set(outletId, (map.get(outletId) || 0) + toNumber(value));
+      });
     });
-  }, [comparisonStats]);
+
+    return map;
+  }, [salaryEntries, selectedMonthKeys]);
+
+  const performanceRows = useMemo(() => outletRows.map((item) => {
+    const salary = salaryByOutlet.get(item.key) || 0;
+    const damageCost = toNumber(item.damages) * 5;
+    const incentive = toNumber(item.incentive);
+    const foodAllowance = toNumber(item.foodAllowance);
+    const totalEggs = toNumber(item.salesQty);
+    const totalCost = salary + damageCost + incentive + foodAllowance;
+    const costPerEgg = totalEggs > 0 ? totalCost / totalEggs : 0;
+    const totalReceived = toNumber(item.totalReceived);
+    const closingAmount = totalReceived - totalCost;
+
+    return {
+      ...item,
+      salary,
+      damageCost,
+      totalCost,
+      costPerEgg,
+      closingAmount,
+    };
+  }), [outletRows, salaryByOutlet]);
+
+  const derivedTotals = useMemo(() => performanceRows.reduce((acc, item) => ({
+    salesQty: acc.salesQty + toNumber(item.salesQty),
+    salary: acc.salary + toNumber(item.salary),
+    damages: acc.damages + toNumber(item.damages),
+    damageCost: acc.damageCost + toNumber(item.damageCost),
+    incentive: acc.incentive + toNumber(item.incentive),
+    foodAllowance: acc.foodAllowance + toNumber(item.foodAllowance),
+    totalCost: acc.totalCost + toNumber(item.totalCost),
+    closingAmount: acc.closingAmount + toNumber(item.closingAmount),
+    totalReceived: acc.totalReceived + toNumber(item.totalReceived),
+    revenue: acc.revenue + toNumber(item.revenue),
+  }), {
+    salesQty: 0,
+    salary: 0,
+    damages: 0,
+    damageCost: 0,
+    incentive: 0,
+    foodAllowance: 0,
+    totalCost: 0,
+    closingAmount: 0,
+    totalReceived: 0,
+    revenue: 0,
+  }), [performanceRows]);
 
   const costBreakdown = useMemo(() => ([
-    { name: "Egg Cost", value: Number(totals.revenue) || 0, color: "#f97316" },
-    { name: "Damage Cost", value: Number(totals.damageCost) || 0, color: "#ef4444" },
-    { name: "Incentive", value: Number(totals.incentive) || 0, color: "#22c55e" },
-    { name: "Food Allowance", value: Number(totals.foodAllowance) || 0, color: "#0ea5e9" },
-  ]), [totals]);
+    { name: "Salary", value: derivedTotals.salary, color: "#f97316" },
+    { name: "Damage Cost", value: derivedTotals.damageCost, color: "#ef4444" },
+    { name: "Incentive", value: derivedTotals.incentive, color: "#22c55e" },
+    { name: "Food Allowance", value: derivedTotals.foodAllowance, color: "#0ea5e9" },
+  ]), [derivedTotals]);
 
   const handleQuickRange = (type) => {
     setRangeType(type);
@@ -163,14 +224,17 @@ const OutletPerformance = () => {
 
   const handleExport = () => {
     const rows = [
-      ["Outlet", "Total Eggs", "Damage", "Incentive", "Food Allowance", "Total Cost", "Status"],
-      ...outletRows.map((item) => [
+      ["Outlet", "Salary", "Total Eggs", "Damage", "Damage Cost", "Incentive", "Food Allowance", "Total Cost", "Cost/Egg", "Status"],
+      ...performanceRows.map((item) => [
         item.label,
+        item.salary,
         item.salesQty,
         item.damages,
+        item.damageCost,
         item.incentive,
         item.foodAllowance,
         item.totalCost,
+        item.costPerEgg,
         getOutletStatus(item).label,
       ]),
     ];
@@ -185,13 +249,13 @@ const OutletPerformance = () => {
   };
 
   const kpis = [
-    { label: "Egg Delivered", value: number(totals.salesQty), icon: faEgg, tone: "orange" },
-    { label: "Egg Cost", value: currency(totals.revenue), icon: faMoneyBillWave, tone: "green" },
-    { label: "Damage", value: number(totals.damages), icon: faCircleExclamation, tone: "red" },
-    { label: "Damage Cost", value: currency(totals.damageCost), icon: faCircleExclamation, tone: "red" },
-    { label: "Incentive", value: currency(totals.incentive), icon: faChartLine, tone: "blue" },
-    { label: "Food Allowance", value: currency(totals.foodAllowance), icon: faUtensils, tone: "blue" },
-    { label: "Closing Amount", value: currency(totals.closingAmount), icon: faWallet, tone: Number(totals.closingAmount) < 0 ? "red" : "green" },
+    { label: "Egg Delivered", value: number(derivedTotals.salesQty), icon: faEgg, tone: "orange" },
+    { label: "Egg Cost", value: currency(derivedTotals.revenue), icon: faMoneyBillWave, tone: "green" },
+    { label: "Damage", value: number(derivedTotals.damages), icon: faCircleExclamation, tone: "red" },
+    { label: "Damage Cost", value: currency(derivedTotals.damageCost), icon: faCircleExclamation, tone: "red" },
+    { label: "Incentive", value: currency(derivedTotals.incentive), icon: faChartLine, tone: "blue" },
+    { label: "Food Allowance", value: currency(derivedTotals.foodAllowance), icon: faUtensils, tone: "blue" },
+    { label: "Closing Amount", value: currency(derivedTotals.closingAmount), icon: faWallet, tone: derivedTotals.closingAmount < 0 ? "red" : "green" },
     { label: "Avg NECC Rate", value: `Rs. ${Number(totals.averageNeccRate || 0).toFixed(2)}`, icon: faEgg, tone: "orange" },
     { label: "Active Outlets", value: number(totals.outletCount), icon: faStore, tone: "gray" },
   ];
@@ -246,37 +310,46 @@ const OutletPerformance = () => {
 
           <section className="mb-6 rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
             <SectionHeader title="Performance Breakdown" subtitle="Outlet-wise totals for the selected period" />
+            <div className="mt-3 rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-xs font-medium text-amber-800">
+              Damage Cost = Damage x 5. Total Cost = Salary + Damage Cost + Incentive + Food Allowance. Cost per Egg = Total Cost / Total Eggs.
+            </div>
             <div className="mt-4 max-h-[430px] overflow-auto rounded-lg border border-gray-100">
               <table className="min-w-full text-sm">
                 <thead className="sticky top-0 bg-gray-50 text-xs font-semibold uppercase text-gray-500">
                   <tr>
                     <th className="px-4 py-3 text-left">Outlet</th>
+                    <th className="px-4 py-3 text-right">Salary</th>
                     <th className="px-4 py-3 text-right">Total Eggs</th>
                     <th className="px-4 py-3 text-right">Damage</th>
+                    <th className="px-4 py-3 text-right">Damage Cost</th>
                     <th className="px-4 py-3 text-right">Incentive</th>
                     <th className="px-4 py-3 text-right">Food Allow</th>
                     <th className="px-4 py-3 text-right">Total Cost</th>
+                    <th className="px-4 py-3 text-right">Cost/Egg</th>
                     <th className="px-4 py-3 text-right">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {outletRows.length ? outletRows.map((item) => {
+                  {performanceRows.length ? performanceRows.map((item) => {
                     const status = getOutletStatus(item);
                     return (
                       <tr key={item.key} className="border-t border-gray-100 text-gray-700">
                         <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">{item.label}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.salary)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{number(item.salesQty)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{number(item.damages)}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.damageCost)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.incentive)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.foodAllowance)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{currency(item.totalCost)}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.costPerEgg)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">
                           <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-bold ${status.className}`}>{status.label}</span>
                         </td>
                       </tr>
                     );
                   }) : (
-                    <tr><td colSpan="7"><EmptyState /></td></tr>
+                    <tr><td colSpan="9"><EmptyState /></td></tr>
                   )}
                 </tbody>
               </table>
@@ -313,26 +386,6 @@ const OutletPerformance = () => {
             </div>
           </section>
 
-          <section className="mb-6 rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
-            <SectionHeader title="Monthly Comparison" subtitle="April to today comparison" />
-            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {monthlyRows.length ? monthlyRows.map((item) => (
-                <div key={item.key} className="rounded-lg border border-gray-100 bg-gray-50 p-4">
-                  <div className="mb-4 flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="font-semibold text-gray-900">{item.label}</h3>
-                      <p className="text-xs text-gray-500">Monthly outlet performance</p>
-                    </div>
-                    <GrowthPill comparison={item.eggGrowth} />
-                  </div>
-                  <MetricRow label="Total Eggs" value={number(item.salesQty)} />
-                  <MetricRow label="Total Cost" value={currency(item.totalCost)} />
-                  <MetricRow label="Closing Amount" value={currency(item.closingAmount)} />
-                </div>
-              )) : <EmptyState />}
-            </div>
-          </section>
-
           <section className="rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
             <SectionHeader title="Cost Breakdown" subtitle="Egg cost, damage cost, incentive, and food allowance" />
             <div className="mt-4 grid grid-cols-1 gap-5 xl:grid-cols-12">
@@ -359,7 +412,7 @@ const OutletPerformance = () => {
                   ))}
                   <div className="flex items-center justify-between gap-3 border-t border-gray-200 bg-gray-50 px-4 py-4 text-sm">
                     <span className="font-bold text-gray-900">Total Cost</span>
-                    <span className="font-bold text-gray-900">{currency(totals.totalCost)}</span>
+                    <span className="font-bold text-gray-900">{currency(derivedTotals.totalCost)}</span>
                   </div>
                 </div>
               </div>
