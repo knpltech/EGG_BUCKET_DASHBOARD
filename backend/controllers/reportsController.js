@@ -305,6 +305,8 @@ export const getStatistics = async (req, res) => {
       cashPaymentsSnapshot,
       neccRateSnapshot,
       dailyDamagesSnapshot,
+      incentiveSnapshot,
+      foodAllowanceSnapshot,
       outletsSnapshot,
     ] = await Promise.all([
       db.collection('dailySales').get(),
@@ -312,6 +314,8 @@ export const getStatistics = async (req, res) => {
       db.collection('cashPayments').get(),
       db.collection('neccRates').get(),
       db.collection('dailyDamages').get(),
+      db.collection('incentive').get(),
+      db.collection('foodAllowance').get(),
       db.collection('outlets').get(),
     ]);
 
@@ -383,6 +387,8 @@ export const getStatistics = async (req, res) => {
           digitalPay: 0,
           cashPay: 0,
           damages: 0,
+          incentive: 0,
+          foodAllowance: 0,
         });
       }
       return outletDateMap.get(mapKey);
@@ -405,6 +411,8 @@ export const getStatistics = async (req, res) => {
     digitalPaymentsSnapshot.forEach((doc) => addMappedValues(doc.data() || {}, 'outlets', 'digitalPay'));
     cashPaymentsSnapshot.forEach((doc) => addMappedValues(doc.data() || {}, 'outlets', 'cashPay'));
     dailyDamagesSnapshot.forEach((doc) => addMappedValues(doc.data() || {}, 'damages', 'damages'));
+    incentiveSnapshot.forEach((doc) => addMappedValues(doc.data() || {}, 'outlets', 'incentive'));
+    foodAllowanceSnapshot.forEach((doc) => addMappedValues(doc.data() || {}, 'outlets', 'foodAllowance'));
 
     neccRateSnapshot.forEach((doc) => {
       const data = doc.data() || {};
@@ -449,6 +457,11 @@ export const getStatistics = async (req, res) => {
           cashPay: 0,
           totalReceived: 0,
           damages: 0,
+          damageCost: 0,
+          incentive: 0,
+          foodAllowance: 0,
+          totalCost: 0,
+          closingAmount: 0,
           pending: 0,
           neccRateTotal: 0,
           neccRateCount: 0,
@@ -459,7 +472,10 @@ export const getStatistics = async (req, res) => {
 
     outletDateMap.forEach((entry) => {
       const revenue = Number((entry.salesQty * entry.neccRate).toFixed(2));
+      const damageCost = Number((entry.damages * entry.neccRate).toFixed(2));
+      const totalCost = Number((revenue + damageCost + entry.incentive + entry.foodAllowance).toFixed(2));
       const totalReceived = Number((entry.digitalPay + entry.cashPay).toFixed(2));
+      const closingAmount = Number((totalReceived - totalCost).toFixed(2));
       const pending = Number((totalReceived - revenue).toFixed(2));
       const week = getWeekBucket(entry.date);
       const month = entry.date.slice(0, 7);
@@ -479,6 +495,11 @@ export const getStatistics = async (req, res) => {
         bucket.cashPay += entry.cashPay;
         bucket.totalReceived += totalReceived;
         bucket.damages += entry.damages;
+        bucket.damageCost += damageCost;
+        bucket.incentive += entry.incentive;
+        bucket.foodAllowance += entry.foodAllowance;
+        bucket.totalCost += totalCost;
+        bucket.closingAmount += closingAmount;
         bucket.pending += pending;
         if (entry.neccRate > 0) {
           bucket.neccRateTotal += entry.neccRate;
@@ -497,6 +518,11 @@ export const getStatistics = async (req, res) => {
       cashPay: Number(bucket.cashPay.toFixed(2)),
       totalReceived: Number(bucket.totalReceived.toFixed(2)),
       damages: Math.round(bucket.damages),
+      damageCost: Number(bucket.damageCost.toFixed(2)),
+      incentive: Number(bucket.incentive.toFixed(2)),
+      foodAllowance: Number(bucket.foodAllowance.toFixed(2)),
+      totalCost: Number(bucket.totalCost.toFixed(2)),
+      closingAmount: Number(bucket.closingAmount.toFixed(2)),
       pending: Number(bucket.pending.toFixed(2)),
       averageNeccRate: bucket.neccRateCount ? Number((bucket.neccRateTotal / bucket.neccRateCount).toFixed(2)) : 0,
     });
@@ -516,8 +542,26 @@ export const getStatistics = async (req, res) => {
       cashPay: acc.cashPay + item.cashPay,
       totalReceived: acc.totalReceived + item.totalReceived,
       damages: acc.damages + item.damages,
+      damageCost: acc.damageCost + item.damageCost,
+      incentive: acc.incentive + item.incentive,
+      foodAllowance: acc.foodAllowance + item.foodAllowance,
+      totalCost: acc.totalCost + item.totalCost,
+      closingAmount: acc.closingAmount + item.closingAmount,
       pending: acc.pending + item.pending,
-    }), { salesQty: 0, revenue: 0, digitalPay: 0, cashPay: 0, totalReceived: 0, damages: 0, pending: 0 });
+    }), {
+      salesQty: 0,
+      revenue: 0,
+      digitalPay: 0,
+      cashPay: 0,
+      totalReceived: 0,
+      damages: 0,
+      damageCost: 0,
+      incentive: 0,
+      foodAllowance: 0,
+      totalCost: 0,
+      closingAmount: 0,
+      pending: 0,
+    });
 
     const bestSalesDay = [...daily].sort((a, b) => b.salesQty - a.salesQty)[0] || null;
     const bestRevenueDay = [...daily].sort((a, b) => b.revenue - a.revenue)[0] || null;
@@ -535,6 +579,11 @@ export const getStatistics = async (req, res) => {
         ...totals,
         revenue: Number(totals.revenue.toFixed(2)),
         totalReceived: Number(totals.totalReceived.toFixed(2)),
+        damageCost: Number(totals.damageCost.toFixed(2)),
+        incentive: Number(totals.incentive.toFixed(2)),
+        foodAllowance: Number(totals.foodAllowance.toFixed(2)),
+        totalCost: Number(totals.totalCost.toFixed(2)),
+        closingAmount: Number(totals.closingAmount.toFixed(2)),
         pending: Number(totals.pending.toFixed(2)),
         averageDailySales,
         averageDailyRevenue,
@@ -555,7 +604,9 @@ export const getStatistics = async (req, res) => {
           digitalPaymentsSnapshot.size +
           cashPaymentsSnapshot.size +
           neccRateSnapshot.size +
-          dailyDamagesSnapshot.size,
+          dailyDamagesSnapshot.size +
+          incentiveSnapshot.size +
+          foodAllowanceSnapshot.size,
       },
     });
   } catch (error) {

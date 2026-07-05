@@ -20,6 +20,7 @@ import RemarksPage from "./pages/RemarksPage";
 import DailyRevenue from "./pages/DailyRevenue";
 import Reports from "./pages/Reports";
 import Statistics from "./pages/Statistics";
+import OutletPerformance from "./pages/OutletPerformance";
 import { Navigate } from "react-router-dom";
 
 import DataAgentDashboard from "./pages/DataAgentDashboard";
@@ -142,6 +143,10 @@ function App() {
               element={<ProtectedRoute element={<AdminLayoutWithPanel><Statistics /></AdminLayoutWithPanel>} requiredRole={null} />}
             />
             <Route
+              path="/admin/outlet-performance"
+              element={<ProtectedRoute element={<AdminLayoutWithPanel><OutletPerformance /></AdminLayoutWithPanel>} requiredRole={null} />}
+            />
+            <Route
               path="/admin/data-entry"
               element={<ProtectedRoute element={<AdminLayoutWithPanel><DataEntry /></AdminLayoutWithPanel>} requiredRole={null} />}
             />
@@ -168,6 +173,7 @@ function App() {
             <Route path="/supervisor/cash-closure" element={<ProtectedRoute element={<SupervisorLayout><CashClosure /></SupervisorLayout>} requiredRole="supervisor" />} />
             <Route path="/supervisor/reports" element={<ProtectedRoute element={<SupervisorLayout><Reports supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
             <Route path="/supervisor/statistics" element={<ProtectedRoute element={<SupervisorLayout><Statistics supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
+            <Route path="/supervisor/outlet-performance" element={<ProtectedRoute element={<SupervisorLayout><OutletPerformance /></SupervisorLayout>} requiredRole="supervisor" />} />
             <Route path="/supervisor/data-entry" element={<ProtectedRoute element={<SupervisorLayout><DataEntry supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
             <Route path="/supervisor/inventory" element={<ProtectedRoute element={<SupervisorLayout><ZoneStockEntry /></SupervisorLayout>} requiredRole="supervisor" />} />
             <Route path="/supervisor/incentive" element={<ProtectedRoute element={<SupervisorLayout><IncentivePage supervisor /></SupervisorLayout>} requiredRole="supervisor" />} />
@@ -200,6 +206,19 @@ function App() {
                   element={
                     <AdminLayoutWithPanel>
                       <Statistics />
+                    </AdminLayoutWithPanel>
+                  }
+                  requiredRole={null}
+                />
+              }
+            />
+            <Route
+              path="/viewer/outlet-performance"
+              element={
+                <ProtectedRoute
+                  element={
+                    <AdminLayoutWithPanel>
+                      <OutletPerformance />
                     </AdminLayoutWithPanel>
                   }
                   requiredRole={null}

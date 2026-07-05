@@ -110,6 +110,10 @@ export default function Sidebar({ supervisor }) {
               <FontAwesomeIcon icon={faChartLine} />
               {open && "Statistics"}
             </Link>
+            <Link to="/supervisor/outlet-performance" className={linkClass("/supervisor/outlet-performance")}> 
+              <FontAwesomeIcon icon={faStore} />
+              {open && "Outlet Performance"}
+            </Link>
           </>
         )}
         {/* Admin: show all links. Data Agent: show only allowed links. Viewer: show only data pages. */}
@@ -183,6 +187,10 @@ export default function Sidebar({ supervisor }) {
               <FontAwesomeIcon icon={faChartLine} />
               {open && "Statistics"}
             </Link>
+            <Link to="/admin/outlet-performance" className={linkClass("/admin/outlet-performance")}>
+              <FontAwesomeIcon icon={faStore} />
+              {open && "Outlet Performance"}
+            </Link>
             <Link to="/admin/distribution" className={linkClass("/admin/distribution")}> 
               <FontAwesomeIcon icon={faUsers} />
               {open && "Add Supervisor"}
@@ -234,6 +242,10 @@ export default function Sidebar({ supervisor }) {
             <Link to="/viewer/statistics" className={linkClass("/viewer/statistics")}> 
               <FontAwesomeIcon icon={faChartLine} />
               {open && "Statistics"}
+            </Link>
+            <Link to="/viewer/outlet-performance" className={linkClass("/viewer/outlet-performance")}> 
+              <FontAwesomeIcon icon={faStore} />
+              {open && "Outlet Performance"}
             </Link>
           </>
         )}
