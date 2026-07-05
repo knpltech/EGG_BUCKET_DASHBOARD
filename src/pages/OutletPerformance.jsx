@@ -1,17 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import {
   faChartLine,
   faCircleExclamation,
@@ -29,8 +18,9 @@ import { getThisWeekRange, toLocalIsoDate } from "../utils/dateRange";
 
 const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/$/, "");
 
-const currency = (value) => `Rs. ${Math.round(Number(value) || 0).toLocaleString("en-IN")}`;
+const currency = (value) => `Rs. ${(Number(value) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const number = (value) => Math.round(Number(value) || 0).toLocaleString("en-IN");
+const percent = (value) => `${(Number(value) || 0).toFixed(2)}%`;
 
 const toNumber = (value) => Number(value) || 0;
 
@@ -250,7 +240,7 @@ const OutletPerformance = () => {
 
   const kpis = [
     { label: "Egg Delivered", value: number(derivedTotals.salesQty), icon: faEgg, tone: "orange" },
-    { label: "Egg Cost", value: currency(derivedTotals.revenue), icon: faMoneyBillWave, tone: "green" },
+    { label: "Egg Cost", value: currency(derivedTotals.salesQty ? derivedTotals.totalCost / derivedTotals.salesQty : 0), icon: faMoneyBillWave, tone: "green" },
     { label: "Damage", value: number(derivedTotals.damages), icon: faCircleExclamation, tone: "red" },
     { label: "Damage Cost", value: currency(derivedTotals.damageCost), icon: faCircleExclamation, tone: "red" },
     { label: "Incentive", value: currency(derivedTotals.incentive), icon: faChartLine, tone: "blue" },
@@ -357,37 +347,43 @@ const OutletPerformance = () => {
           </section>
 
           <section className="mb-6 rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
-            <SectionHeader title="Outlet Overall Performance" subtitle="Top outlets by total eggs and total cost" />
-            <div className="mt-4 grid grid-cols-1 gap-5 xl:grid-cols-2">
-              <div>
-                <ChartTitle title="Eggs Delivered by Outlet" />
-                <ResponsiveContainer width="100%" height={320}>
-                  <BarChart data={outletRows.slice(0, 12)} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
-                    <CartesianGrid stroke="#f1f5f9" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} interval={0} angle={-20} height={70} />
-                    <YAxis tick={{ fontSize: 11, fill: "#64748b" }} tickLine={false} axisLine={false} width={52} />
-                    <Tooltip formatter={(value) => `${number(value)} eggs`} />
-                    <Bar dataKey="salesQty" name="Eggs Delivered" fill="#f97316" radius={[5, 5, 0, 0]} maxBarSize={42} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              <div>
-                <ChartTitle title="Total Cost by Outlet" />
-                <ResponsiveContainer width="100%" height={320}>
-                  <BarChart data={outletRows.slice(0, 12)} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
-                    <CartesianGrid stroke="#f1f5f9" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} interval={0} angle={-20} height={70} />
-                    <YAxis tick={{ fontSize: 11, fill: "#64748b" }} tickLine={false} axisLine={false} width={58} />
-                    <Tooltip formatter={(value) => currency(value)} />
-                    <Bar dataKey="totalCost" name="Total Cost" fill="#0ea5e9" radius={[5, 5, 0, 0]} maxBarSize={42} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+            <SectionHeader title="Outlet Overall Performance" subtitle="Each outlet shows eggs delivered, per egg cost, damage %, outlet cost, damage cost, and average NECC" />
+            <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3">
+              {performanceRows.length ? performanceRows.map((item) => {
+                const status = getOutletStatus(item);
+                const eggsDelivered = toNumber(item.salesQty);
+                const damagePercent = eggsDelivered > 0 ? (toNumber(item.damages) / eggsDelivered) * 100 : 0;
+
+                return (
+                  <article key={item.key} className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.05)]">
+                    <div className="flex items-start justify-between gap-3 border-b border-gray-200 bg-white px-5 py-4">
+                      <div>
+                        <h3 className="text-lg font-bold text-black">{item.label}</h3>
+                        <p className="mt-1 text-xs text-gray-500">Outlet performance for the selected range</p>
+                      </div>
+                      <span className={`inline-flex shrink-0 rounded-full px-3 py-1 text-[11px] font-bold ${status.label === "Healthy" ? "bg-green-50 text-green-700" : status.label === "Needs Review" ? "bg-red-50 text-red-700" : "bg-gray-100 text-gray-700"}`}>{status.label}</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-px bg-gray-200 sm:grid-cols-2 lg:grid-cols-3">
+                      <MetricTile label="Eggs Delivered" value={number(item.salesQty)} accent="text-black" />
+                      <MetricTile label="Per Egg Cost" value={currency(item.costPerEgg)} accent="text-black" />
+                      <MetricTile label="Damage %" value={percent(damagePercent)} accent="text-red-600" />
+                      <MetricTile label="Outlet Cost" value={currency(item.totalCost)} accent="text-black" />
+                      <MetricTile label="Damage Cost" value={currency(item.damageCost)} accent="text-red-600" />
+                      <MetricTile label="Average NECC" value={currency(item.averageNeccRate)} accent="text-green-600" />
+                    </div>
+                  </article>
+                );
+              }) : (
+                <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50 px-5 py-10 text-center text-sm text-gray-500">
+                  No outlet performance data found.
+                </div>
+              )}
             </div>
           </section>
 
           <section className="rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
-            <SectionHeader title="Cost Breakdown" subtitle="Egg cost, damage cost, incentive, and food allowance" />
+            <SectionHeader title="Cost Breakdown" subtitle="Salary, damage cost, incentive, and food allowance for the selected range" />
             <div className="mt-4 grid grid-cols-1 gap-5 xl:grid-cols-12">
               <div className="xl:col-span-5">
                 <ResponsiveContainer width="100%" height={300}>
@@ -453,26 +449,10 @@ const SectionHeader = ({ title, subtitle }) => (
   </div>
 );
 
-const ChartTitle = ({ title }) => <div className="mb-2 text-sm font-semibold text-gray-900">{title}</div>;
-
-const GrowthPill = ({ comparison }) => {
-  const styles = {
-    up: "bg-emerald-50 text-emerald-700",
-    down: "bg-red-50 text-red-600",
-    flat: "bg-gray-100 text-gray-600",
-  };
-
-  return (
-    <span className={`inline-flex items-center rounded-md px-2 py-1 text-[11px] font-bold ${styles[comparison.type]}`}>
-      {comparison.text}
-    </span>
-  );
-};
-
-const MetricRow = ({ label, value }) => (
-  <div className="flex items-center justify-between gap-3 border-t border-gray-200 py-3 text-sm first:border-t-0">
-    <span className="text-gray-500">{label}</span>
-    <span className="font-bold text-gray-900">{value}</span>
+const MetricTile = ({ label, value, accent }) => (
+  <div className="bg-white px-4 py-4">
+    <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{label}</div>
+    <div className={`mt-2 text-lg font-bold ${accent}`}>{value}</div>
   </div>
 );
 
