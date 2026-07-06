@@ -46,6 +46,13 @@ const getRange = (type) => {
   return getThisWeekRange(today);
 };
 
+const formatMonthLabel = (monthKey) => {
+  if (!monthKey) return "-";
+  const date = new Date(`${monthKey}-01T00:00:00`);
+  if (Number.isNaN(date.getTime())) return monthKey;
+  return date.toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+};
+
 const getMonthKeysInRange = (from, to) => {
   if (!from || !to) return [];
 
@@ -201,6 +208,61 @@ const OutletPerformance = () => {
     { name: "Incentive", value: derivedTotals.incentive, color: "#22c55e" },
     { name: "Food Allowance", value: derivedTotals.foodAllowance, color: "#0ea5e9" },
   ]), [derivedTotals]);
+
+  const monthlySalaryByKey = useMemo(() => {
+    const map = new Map();
+    const monthlyKeys = new Set((stats?.monthly || []).map((item) => item.key));
+
+    salaryEntries.forEach((entry) => {
+      const entryKey = `${entry.year}-${String(entry.month).padStart(2, "0")}`;
+      if (!monthlyKeys.has(entryKey)) return;
+
+      const monthSalary = entry?.outlets && typeof entry.outlets === "object"
+        ? Object.values(entry.outlets).reduce((sum, value) => sum + toNumber(value), 0)
+        : 0;
+
+      map.set(entryKey, (map.get(entryKey) || 0) + monthSalary);
+    });
+
+    return map;
+  }, [salaryEntries, stats]);
+
+  const monthlyComparisonRows = useMemo(() => (stats?.monthly || []).map((item) => {
+    const driverCost = monthlySalaryByKey.get(item.key) || 0;
+    const costPerEgg = item.salesQty > 0 ? item.totalCost / item.salesQty : 0;
+    const damagePercent = item.salesQty > 0 ? (item.damages / item.salesQty) * 100 : 0;
+
+    return {
+      ...item,
+      driverCost,
+      costPerEgg,
+      damagePercent,
+    };
+  }), [monthlySalaryByKey, stats]);
+
+  const monthlyComparisonTotals = useMemo(() => monthlyComparisonRows.reduce((acc, item) => ({
+    salesQty: acc.salesQty + toNumber(item.salesQty),
+    driverCost: acc.driverCost + toNumber(item.driverCost),
+    damages: acc.damages + toNumber(item.damages),
+    damageCost: acc.damageCost + toNumber(item.damageCost),
+    incentive: acc.incentive + toNumber(item.incentive),
+    foodAllowance: acc.foodAllowance + toNumber(item.foodAllowance),
+    totalCost: acc.totalCost + toNumber(item.totalCost),
+  }), {
+    salesQty: 0,
+    driverCost: 0,
+    damages: 0,
+    damageCost: 0,
+    incentive: 0,
+    foodAllowance: 0,
+    totalCost: 0,
+  }), [monthlyComparisonRows]);
+
+  const monthlyComparisonSummary = {
+    ...monthlyComparisonTotals,
+    costPerEgg: monthlyComparisonTotals.salesQty > 0 ? monthlyComparisonTotals.totalCost / monthlyComparisonTotals.salesQty : 0,
+    damagePercent: monthlyComparisonTotals.salesQty > 0 ? (monthlyComparisonTotals.damages / monthlyComparisonTotals.salesQty) * 100 : 0,
+  };
 
   const handleQuickRange = (type) => {
     setRangeType(type);
@@ -383,7 +445,7 @@ const OutletPerformance = () => {
           </section>
 
           <section className="rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
-            <SectionHeader title="Cost Breakdown" subtitle="Salary, damage cost, incentive, and food allowance for the selected range" />
+            <SectionHeader title="Cost Breakdown" subtitle="Salary, damage cost, incentive, food allowance, and per egg cost for the selected range" />
             <div className="mt-4 grid grid-cols-1 gap-5 xl:grid-cols-12">
               <div className="xl:col-span-5">
                 <ResponsiveContainer width="100%" height={300}>
@@ -411,7 +473,79 @@ const OutletPerformance = () => {
                     <span className="font-bold text-gray-900">{currency(derivedTotals.totalCost)}</span>
                   </div>
                 </div>
+
+                <div className="mt-4 rounded-2xl border border-orange-100 bg-gradient-to-r from-orange-50 via-amber-50 to-white px-5 py-4 shadow-sm">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div className="grid gap-3 sm:grid-cols-3 md:min-w-[420px]">
+                      <div className="rounded-xl border border-orange-100 bg-white px-4 py-3 text-center shadow-sm">
+                        <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Total Costs</div>
+                        <div className="mt-1 text-lg font-bold text-gray-900">{currency(derivedTotals.totalCost)}</div>
+                      </div>
+                      <div className="rounded-xl border border-orange-100 bg-white px-4 py-3 text-center shadow-sm">
+                        <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Total Eggs Sales Count</div>
+                        <div className="mt-1 text-lg font-bold text-gray-900">{number(derivedTotals.salesQty)}</div>
+                      </div>
+                      <div className="rounded-xl border border-orange-200 bg-orange-500 px-4 py-3 text-center text-white shadow-sm">
+                        <div className="text-[11px] font-semibold uppercase tracking-wide text-orange-100">Per Egg Cost</div>
+                        <div className="mt-1 text-2xl font-extrabold">{currency(derivedTotals.salesQty ? derivedTotals.totalCost / derivedTotals.salesQty : 0)}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
+            </div>
+          </section>
+
+          <section className="mt-6 rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
+            <SectionHeader title="Monthly Comparison" subtitle={`Monthly totals from ${formatMonthLabel(dateRange.from?.slice(0, 7))} to ${formatMonthLabel(dateRange.to?.slice(0, 7))}`} />
+            <div className="mt-4 overflow-auto rounded-lg border border-gray-100">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Month</th>
+                    <th className="px-4 py-3 text-right">Eggs Delivered</th>
+                    <th className="px-4 py-3 text-right">Cost Per Egg</th>
+                    <th className="px-4 py-3 text-right">Damage %</th>
+                    <th className="px-4 py-3 text-right">Driver Cost</th>
+                    <th className="px-4 py-3 text-right">Damage Cost</th>
+                    <th className="px-4 py-3 text-right">Incentives</th>
+                    <th className="px-4 py-3 text-right">Food Allowance</th>
+                    <th className="px-4 py-3 text-right">Total Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {monthlyComparisonRows.length ? monthlyComparisonRows.map((item, index) => (
+                    <tr key={item.key} className={`border-t border-gray-100 ${index === 0 ? "bg-amber-50" : "bg-white"}`}>
+                      <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">{item.label || formatMonthLabel(item.key)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right">{number(item.salesQty)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.costPerEgg)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right">{percent(item.damagePercent)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.driverCost)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.damageCost)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.incentive)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.foodAllowance)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{currency(item.totalCost)}</td>
+                    </tr>
+                  )) : (
+                    <tr><td colSpan="9"><EmptyState /></td></tr>
+                  )}
+                </tbody>
+                  {monthlyComparisonRows.length ? (
+                  <tfoot className="border-t border-gray-200 bg-gray-50">
+                    <tr className="text-sm font-bold text-gray-900">
+                      <td className="px-4 py-3">Total</td>
+                      <td className="px-4 py-3 text-right">{number(monthlyComparisonSummary.salesQty)}</td>
+                      <td className="px-4 py-3 text-right">{currency(monthlyComparisonSummary.costPerEgg)}</td>
+                      <td className="px-4 py-3 text-right">{percent(monthlyComparisonSummary.damagePercent)}</td>
+                      <td className="px-4 py-3 text-right">{currency(monthlyComparisonSummary.driverCost)}</td>
+                      <td className="px-4 py-3 text-right">{currency(monthlyComparisonSummary.damageCost)}</td>
+                      <td className="px-4 py-3 text-right">{currency(monthlyComparisonSummary.incentive)}</td>
+                      <td className="px-4 py-3 text-right">{currency(monthlyComparisonSummary.foodAllowance)}</td>
+                      <td className="px-4 py-3 text-right">{currency(monthlyComparisonSummary.totalCost)}</td>
+                    </tr>
+                  </tfoot>
+                ) : null}
+              </table>
             </div>
           </section>
         </>
