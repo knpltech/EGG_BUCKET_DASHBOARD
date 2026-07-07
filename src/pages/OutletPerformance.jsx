@@ -46,6 +46,16 @@ const getRange = (type) => {
   return getThisWeekRange(today);
 };
 
+const getAprilToTodayRange = () => {
+  const today = new Date();
+  const aprilYear = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1;
+
+  return {
+    from: toLocalIsoDate(new Date(aprilYear, 3, 1)),
+    to: toLocalIsoDate(today),
+  };
+};
+
 const formatMonthLabel = (monthKey) => {
   if (!monthKey) return "-";
   const date = new Date(`${monthKey}-01T00:00:00`);
@@ -74,6 +84,80 @@ const getMonthKeysInRange = (from, to) => {
   return keys;
 };
 
+const createEmptyMonthlyBucket = (key, label) => ({
+  key,
+  label,
+  salesQty: 0,
+  revenue: 0,
+  digitalPay: 0,
+  cashPay: 0,
+  totalReceived: 0,
+  damages: 0,
+  damageCost: 0,
+  incentive: 0,
+  foodAllowance: 0,
+  totalCost: 0,
+  closingAmount: 0,
+  pending: 0,
+  averageNeccRate: 0,
+});
+
+const buildMonthlyTimeline = (months, from, to) => {
+  if (!from || !to) return months;
+
+  const byKey = new Map(months.map((month) => [month.key, month]));
+  const cursor = new Date(`${from.slice(0, 7)}-01T00:00:00`);
+  const end = new Date(`${to.slice(0, 7)}-01T00:00:00`);
+  const rows = [];
+
+  while (!Number.isNaN(cursor.getTime()) && cursor <= end) {
+    const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`;
+    const label = cursor.toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+    rows.push(byKey.get(key) || createEmptyMonthlyBucket(key, label));
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  return rows;
+};
+
+const getSalaryEntryMonthKey = (entry) => {
+  const year = Number(entry?.year);
+  const month = Number(entry?.month);
+
+  if (Number.isFinite(year) && month >= 1 && month <= 12) {
+    return `${year}-${String(month).padStart(2, "0")}`;
+  }
+
+  const monthIndex = [
+    "jan",
+    "feb",
+    "mar",
+    "apr",
+    "may",
+    "jun",
+    "jul",
+    "aug",
+    "sep",
+    "oct",
+    "nov",
+    "dec",
+  ].findIndex((label) => String(entry?.monthName || "").trim().toLowerCase().startsWith(label));
+
+  if (Number.isFinite(year) && monthIndex >= 0) {
+    return `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+  }
+
+  return "";
+};
+
+const getMonthlySalaryValue = (entry) => {
+  const total = toNumber(entry?.total);
+  if (total > 0) return total;
+
+  const outlets = entry?.outlets && typeof entry.outlets === "object" ? entry.outlets : {};
+  return Object.values(outlets).reduce((sum, value) => sum + toNumber(value), 0);
+};
+
 const fetchOutletSalaryEntries = async (year) => {
   try {
     const response = await fetch(`${API_URL}/outlet-salary/all?year=${year}`, {
@@ -100,6 +184,7 @@ const OutletPerformance = () => {
   const { isSupervisor, zone } = getRoleFlags();
   const [rangeType, setRangeType] = useState("week");
   const [dateRange, setDateRange] = useState(() => getRange("week"));
+  const [comparisonStats, setComparisonStats] = useState(null);
   const [stats, setStats] = useState(null);
   const [salaryEntries, setSalaryEntries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -113,22 +198,34 @@ const OutletPerformance = () => {
       try {
         const zoneFilter = isSupervisor ? zone : "";
         const monthKeys = getMonthKeysInRange(dateRange.from, dateRange.to);
-        const yearList = Array.from(new Set(monthKeys.map((key) => Number(key.slice(0, 4))).filter((year) => Number.isFinite(year))));
+        const comparisonRange = getAprilToTodayRange();
+        const comparisonMonthKeys = getMonthKeysInRange(comparisonRange.from, comparisonRange.to);
+        const yearList = Array.from(new Set([
+          ...monthKeys,
+          ...comparisonMonthKeys,
+        ].map((key) => Number(key.slice(0, 4))).filter((year) => Number.isFinite(year))));
 
-        const [rangeData, ...salaryData] = await Promise.all([
+        const [rangeData, comparisonData, ...salaryData] = await Promise.all([
           fetchStatisticsData({
             dateFrom: dateRange.from,
             dateTo: dateRange.to,
+            zone: zoneFilter,
+          }),
+          fetchStatisticsData({
+            dateFrom: comparisonRange.from,
+            dateTo: comparisonRange.to,
             zone: zoneFilter,
           }),
           ...yearList.map((year) => fetchOutletSalaryEntries(year)),
         ]);
 
         setStats(rangeData);
+        setComparisonStats(comparisonData);
         setSalaryEntries(salaryData.flat());
       } catch {
         setError("Failed to load outlet performance data");
         setStats(null);
+        setComparisonStats(null);
         setSalaryEntries([]);
       } finally {
         setLoading(false);
@@ -140,7 +237,9 @@ const OutletPerformance = () => {
 
   const totals = stats?.totals || {};
   const outletRows = useMemo(() => stats?.outletBreakdown || [], [stats]);
+  const comparisonRange = useMemo(() => getAprilToTodayRange(), []);
   const selectedMonthKeys = useMemo(() => new Set(getMonthKeysInRange(dateRange.from, dateRange.to)), [dateRange.from, dateRange.to]);
+  const comparisonMonthKeys = useMemo(() => new Set(getMonthKeysInRange(comparisonRange.from, comparisonRange.to)), [comparisonRange.from, comparisonRange.to]);
   const salaryByOutlet = useMemo(() => {
     const map = new Map();
 
@@ -156,6 +255,21 @@ const OutletPerformance = () => {
 
     return map;
   }, [salaryEntries, selectedMonthKeys]);
+
+  const monthlySalaryByKey = useMemo(() => {
+    const map = new Map();
+
+    salaryEntries.forEach((entry) => {
+      const entryKey = getSalaryEntryMonthKey(entry);
+      if (!comparisonMonthKeys.has(entryKey)) return;
+
+      const monthSalary = getMonthlySalaryValue(entry);
+
+      map.set(entryKey, (map.get(entryKey) || 0) + monthSalary);
+    });
+
+    return map;
+  }, [salaryEntries, comparisonMonthKeys]);
 
   const performanceRows = useMemo(() => outletRows.map((item) => {
     const salary = salaryByOutlet.get(item.key) || 0;
@@ -209,40 +323,27 @@ const OutletPerformance = () => {
     { name: "Food Allowance", value: derivedTotals.foodAllowance, color: "#0ea5e9" },
   ]), [derivedTotals]);
 
-  const monthlySalaryByKey = useMemo(() => {
-    const map = new Map();
-    const monthlyKeys = new Set((stats?.monthly || []).map((item) => item.key));
-
-    salaryEntries.forEach((entry) => {
-      const entryKey = `${entry.year}-${String(entry.month).padStart(2, "0")}`;
-      if (!monthlyKeys.has(entryKey)) return;
-
-      const monthSalary = entry?.outlets && typeof entry.outlets === "object"
-        ? Object.values(entry.outlets).reduce((sum, value) => sum + toNumber(value), 0)
-        : 0;
-
-      map.set(entryKey, (map.get(entryKey) || 0) + monthSalary);
-    });
-
-    return map;
-  }, [salaryEntries, stats]);
-
-  const monthlyComparisonRows = useMemo(() => (stats?.monthly || []).map((item) => {
-    const driverCost = monthlySalaryByKey.get(item.key) || 0;
-    const costPerEgg = item.salesQty > 0 ? item.totalCost / item.salesQty : 0;
+  const monthlyComparisonRows = useMemo(() => buildMonthlyTimeline(comparisonStats?.monthly || [], comparisonRange.from, comparisonRange.to).map((item) => {
+    const driverSalary = monthlySalaryByKey.get(item.key) || 0;
+    const damageCost = toNumber(item.damageCost);
+    const incentive = toNumber(item.incentive);
+    const foodAllowance = toNumber(item.foodAllowance);
+    const totalCost = driverSalary + damageCost + incentive + foodAllowance;
+    const costPerEgg = item.salesQty > 0 ? totalCost / item.salesQty : 0;
     const damagePercent = item.salesQty > 0 ? (item.damages / item.salesQty) * 100 : 0;
 
     return {
       ...item,
-      driverCost,
+      driverSalary,
+      totalCost,
       costPerEgg,
       damagePercent,
     };
-  }), [monthlySalaryByKey, stats]);
+  }), [comparisonRange.from, comparisonRange.to, comparisonStats, monthlySalaryByKey]);
 
   const monthlyComparisonTotals = useMemo(() => monthlyComparisonRows.reduce((acc, item) => ({
     salesQty: acc.salesQty + toNumber(item.salesQty),
-    driverCost: acc.driverCost + toNumber(item.driverCost),
+    driverSalary: acc.driverSalary + toNumber(item.driverSalary),
     damages: acc.damages + toNumber(item.damages),
     damageCost: acc.damageCost + toNumber(item.damageCost),
     incentive: acc.incentive + toNumber(item.incentive),
@@ -250,7 +351,7 @@ const OutletPerformance = () => {
     totalCost: acc.totalCost + toNumber(item.totalCost),
   }), {
     salesQty: 0,
-    driverCost: 0,
+    driverSalary: 0,
     damages: 0,
     damageCost: 0,
     incentive: 0,
@@ -307,9 +408,6 @@ const OutletPerformance = () => {
     { label: "Damage Cost", value: currency(derivedTotals.damageCost), icon: faCircleExclamation, tone: "red" },
     { label: "Incentive", value: currency(derivedTotals.incentive), icon: faChartLine, tone: "blue" },
     { label: "Food Allowance", value: currency(derivedTotals.foodAllowance), icon: faUtensils, tone: "blue" },
-    { label: "Closing Amount", value: currency(derivedTotals.closingAmount), icon: faWallet, tone: derivedTotals.closingAmount < 0 ? "red" : "green" },
-    { label: "Avg NECC Rate", value: `Rs. ${Number(totals.averageNeccRate || 0).toFixed(2)}`, icon: faEgg, tone: "orange" },
-    { label: "Active Outlets", value: number(totals.outletCount), icon: faStore, tone: "gray" },
   ];
 
   return (
@@ -356,7 +454,7 @@ const OutletPerformance = () => {
         </div>
       ) : (
         <>
-          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+          <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
             {kpis.map((item) => <KpiCard key={item.label} item={item} />)}
           </div>
 
@@ -497,16 +595,16 @@ const OutletPerformance = () => {
           </section>
 
           <section className="mt-6 rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
-            <SectionHeader title="Monthly Comparison" subtitle={`Monthly totals from ${formatMonthLabel(dateRange.from?.slice(0, 7))} to ${formatMonthLabel(dateRange.to?.slice(0, 7))}`} />
+            <SectionHeader title="Monthly Comparison" subtitle={`Monthly totals from ${formatMonthLabel(comparisonRange.from?.slice(0, 7))} to ${formatMonthLabel(comparisonRange.to?.slice(0, 7))}`} />
             <div className="mt-4 overflow-auto rounded-lg border border-gray-100">
               <table className="min-w-full text-sm">
                 <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-500">
                   <tr>
                     <th className="px-4 py-3 text-left">Month</th>
                     <th className="px-4 py-3 text-right">Eggs Delivered</th>
-                    <th className="px-4 py-3 text-right">Cost Per Egg</th>
+                    <th className="px-4 py-3 text-right">Delivery Cost Per Egg</th>
                     <th className="px-4 py-3 text-right">Damage %</th>
-                    <th className="px-4 py-3 text-right">Driver Cost</th>
+                    <th className="px-4 py-3 text-right">Driver Salary</th>
                     <th className="px-4 py-3 text-right">Damage Cost</th>
                     <th className="px-4 py-3 text-right">Incentives</th>
                     <th className="px-4 py-3 text-right">Food Allowance</th>
@@ -520,7 +618,7 @@ const OutletPerformance = () => {
                       <td className="whitespace-nowrap px-4 py-3 text-right">{number(item.salesQty)}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.costPerEgg)}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-right">{percent(item.damagePercent)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.driverCost)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.driverSalary)}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.damageCost)}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.incentive)}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.foodAllowance)}</td>
@@ -537,7 +635,7 @@ const OutletPerformance = () => {
                       <td className="px-4 py-3 text-right">{number(monthlyComparisonSummary.salesQty)}</td>
                       <td className="px-4 py-3 text-right">{currency(monthlyComparisonSummary.costPerEgg)}</td>
                       <td className="px-4 py-3 text-right">{percent(monthlyComparisonSummary.damagePercent)}</td>
-                      <td className="px-4 py-3 text-right">{currency(monthlyComparisonSummary.driverCost)}</td>
+                      <td className="px-4 py-3 text-right">{currency(monthlyComparisonSummary.driverSalary)}</td>
                       <td className="px-4 py-3 text-right">{currency(monthlyComparisonSummary.damageCost)}</td>
                       <td className="px-4 py-3 text-right">{currency(monthlyComparisonSummary.incentive)}</td>
                       <td className="px-4 py-3 text-right">{currency(monthlyComparisonSummary.foodAllowance)}</td>
