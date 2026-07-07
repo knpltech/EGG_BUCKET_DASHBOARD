@@ -16,6 +16,15 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
+const toLocalIsoDate = (value) => {
+  const date = value instanceof Date ? new Date(value) : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
@@ -458,7 +467,7 @@ export default function DailyDamages() {
 
   const handleQuickRange = (type) => {
     const today = new Date();
-    const iso   = (d) => d.toISOString().slice(0, 10);
+    const iso   = toLocalIsoDate;
     if (type === "thisMonth") { setFromDate(iso(new Date(today.getFullYear(), today.getMonth(), 1)));      setToDate(iso(today)); return; }
     if (type === "lastMonth") { setFromDate(iso(new Date(today.getFullYear(), today.getMonth() - 1, 1))); setToDate(iso(new Date(today.getFullYear(), today.getMonth(), 0))); return; }
     if (type === "thisWeek")  { const s = new Date(today); s.setDate(today.getDate() - today.getDay());   setFromDate(iso(s)); setToDate(iso(today)); return; }

@@ -12,6 +12,15 @@ import {
 } from "recharts";
 import { useEffect, useMemo, useState } from "react";
 
+const toLocalIsoDate = (value) => {
+  const date = value instanceof Date ? new Date(value) : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 /* ---------------- HELPERS ---------------- */
 
 // Convert "₹6.50 per egg" or 6.5 → 6.5
@@ -154,7 +163,7 @@ export default function Rateanalytics({ rows = [], outlets: allowedOutlets = [] 
 
     const dayToRates = new Map();
     parsedRows.forEach(({ timestamp, row }) => {
-      const dayKey = new Date(timestamp).toISOString().slice(0, 10);
+      const dayKey = toLocalIsoDate(timestamp);
       if (!dayToRates.has(dayKey)) dayToRates.set(dayKey, {});
       const bucket = dayToRates.get(dayKey);
 
@@ -175,7 +184,7 @@ export default function Rateanalytics({ rows = [], outlets: allowedOutlets = [] 
     for (let i = 14; i >= 0; i--) {
       const day = new Date(today);
       day.setDate(today.getDate() - i);
-      const dayKey = day.toISOString().slice(0, 10);
+      const dayKey = toLocalIsoDate(day);
 
       finalData.push({
         date: dayKey,

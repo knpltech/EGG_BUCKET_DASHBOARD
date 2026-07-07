@@ -273,7 +273,7 @@ const OutletPerformance = () => {
 
   const performanceRows = useMemo(() => outletRows.map((item) => {
     const salary = salaryByOutlet.get(item.key) || 0;
-    const damageCost = toNumber(item.damages) * 5;
+    const damageCost = toNumber(item.damageCost);
     const incentive = toNumber(item.incentive);
     const foodAllowance = toNumber(item.foodAllowance);
     const totalEggs = toNumber(item.salesQty);
@@ -461,7 +461,7 @@ const OutletPerformance = () => {
           <section className="mb-6 rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
             <SectionHeader title="Performance Breakdown" subtitle="Outlet-wise totals for the selected period" />
             <div className="mt-3 rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-xs font-medium text-amber-800">
-              Damage Cost = Damage x 5. Total Cost = Salary + Damage Cost + Incentive + Food Allowance. Cost per Egg = Total Cost / Total Eggs.
+              Damage Cost is sourced from the backend reports aggregate for the selected range. Total Cost = Salary + Damage Cost + Incentive + Food Allowance. Cost per Egg = Total Cost / Total Eggs.
             </div>
             <div className="mt-4 max-h-[430px] overflow-auto rounded-lg border border-gray-100">
               <table className="min-w-full text-sm">

@@ -2,6 +2,15 @@ import React, { useEffect, useState } from "react";
 import logo from "../assets/Logo.png";
 import { Link, useLocation } from "react-router-dom";
 
+const toLocalIsoDate = (value = new Date()) => {
+  const date = value instanceof Date ? new Date(value) : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 export default function DataAgentDashboard() {
   let user = null;
   try {
@@ -57,7 +66,7 @@ export default function DataAgentDashboard() {
       try {
         const res = await fetch(`${API_URL}/dailysales/all`);
         const sales = await res.json();
-        const today = new Date().toISOString().slice(0, 10);
+        const today = toLocalIsoDate();
         const todayRow = Array.isArray(sales) ? sales.find(r => r.date === today) : null;
         setEggsToday(todayRow && !isNaN(Number(todayRow.total)) ? Number(todayRow.total) : 0);
       } catch {
@@ -93,7 +102,7 @@ export default function DataAgentDashboard() {
       try {
         const res = await fetch(`${API_URL}/digital-payments/all`);
         const payments = await res.json();
-        const today = new Date().toISOString().slice(0, 10);
+        const today = toLocalIsoDate();
         const todayRow = Array.isArray(payments) ? payments.find(r => r.date === today) : null;
         setDigitalPaymentsToday(todayRow && !isNaN(Number(todayRow.total)) ? Number(todayRow.total) : 0);
       } catch {
@@ -106,7 +115,7 @@ export default function DataAgentDashboard() {
       try {
         const res = await fetch(`${API_URL}/cash-payments/all`);
         const payments = await res.json();
-        const today = new Date().toISOString().slice(0, 10);
+        const today = toLocalIsoDate();
         const todayRow = Array.isArray(payments) ? payments.find(r => r.date === today) : null;
         setCashPaymentsToday(todayRow && !isNaN(Number(todayRow.total)) ? Number(todayRow.total) : 0);
       } catch {

@@ -11,6 +11,15 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December",
 ];
 
+const toLocalIsoDate = (value) => {
+  const date = value instanceof Date ? new Date(value) : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 const formatCurrencyTwoDecimals = (value) => {
   if (value == null || isNaN(value)) return "₹0.00";
   return "₹" + Number(value).toLocaleString("en-IN", {
@@ -299,7 +308,7 @@ export default function DigitalPayments() {
 
   const handleQuickRange = useCallback((type) => {
     const today = new Date();
-    const iso = (d) => d.toISOString().slice(0, 10);
+    const iso = toLocalIsoDate;
     if (type === "thisMonth") { setFilterFrom(iso(new Date(today.getFullYear(), today.getMonth(), 1))); setFilterTo(iso(today)); }
     else if (type === "lastMonth") { setFilterFrom(iso(new Date(today.getFullYear(), today.getMonth() - 1, 1))); setFilterTo(iso(new Date(today.getFullYear(), today.getMonth(), 0))); }
     else if (type === "thisWeek") { const s = new Date(today); s.setDate(today.getDate() - today.getDay()); setFilterFrom(iso(s)); setFilterTo(iso(today)); }

@@ -3,6 +3,15 @@ import { fetchReportsData, fetchOutlets, exportReports } from '../context/report
 import { getRoleFlags, zonesMatch } from '../utils/role';
 import { getThisWeekRange } from '../utils/dateRange';
 
+const toLocalIsoDate = (value) => {
+  const date = value instanceof Date ? new Date(value) : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 // DEBUG: Fetch all outlet names from backend data for troubleshooting
 async function fetchAllOutletNames() {
   try {
@@ -263,7 +272,7 @@ const Reports = () => {
           .sort((a, b) => a.parsedDate - b.parsedDate);
 
         const rowsByDate = new Map(
-          filteredRows.map((row) => [row.parsedDate.toISOString().slice(0, 10), row])
+          filteredRows.map((row) => [toLocalIsoDate(row.parsedDate), row])
         );
 
         let startDate = dateRange.from ? normaliseDate(dateRange.from) : null;
@@ -282,7 +291,7 @@ const Reports = () => {
         const chartRows = [];
         const cursor = new Date(startDate);
         while (cursor <= endDate) {
-          const key = cursor.toISOString().slice(0, 10);
+          const key = toLocalIsoDate(cursor);
           const sourceRow = rowsByDate.get(key);
           const point = {
             date: key,
@@ -317,15 +326,15 @@ const Reports = () => {
 
   const handleQuickRange = (type) => {
     const today = new Date();
-    const to = today.toISOString().slice(0, 10);
+    const to = toLocalIsoDate(today);
     let fromDate;
     if (type === 'lastWeek') {
       const d = new Date(today);
       d.setDate(d.getDate() - 7);
-      fromDate = d.toISOString().slice(0, 10);
+      fromDate = toLocalIsoDate(d);
     } else if (type === 'lastMonth') {
       const d = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-      fromDate = d.toISOString().slice(0, 10);
+      fromDate = toLocalIsoDate(d);
     }
     setDateRange({ from: fromDate || '', to });
   };
@@ -377,7 +386,7 @@ const Reports = () => {
       if (damagesExportData.length > 0) {
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(damagesExportData), 'Daily Damages');
       }
-      XLSX.writeFile(wb, `reports_${selectedOutlet}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      XLSX.writeFile(wb, `reports_${selectedOutlet}_${toLocalIsoDate(new Date())}.xlsx`);
     } catch (err) {
       console.error('Failed to export reports:', err);
       alert('Failed to export reports. Please try again.');
@@ -385,7 +394,7 @@ const Reports = () => {
   };
 
   const handleDateSelect = (date, type) => {
-    const formattedDate = date.toISOString().split('T')[0];
+    const formattedDate = toLocalIsoDate(date);
     setDateRange(prev => ({ ...prev, [type]: formattedDate }));
     if (type === 'from') setShowFromCalendar(false);
     else setShowToCalendar(false);

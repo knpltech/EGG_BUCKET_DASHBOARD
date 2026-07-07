@@ -152,7 +152,12 @@ const formatDisplayDate = (iso) => {
 const normalizeDate = (d) => {
   try {
     const n = new Date(d);
-    if (!isNaN(n.getTime())) return n.toISOString().slice(0, 10);
+    if (!isNaN(n.getTime())) {
+      const year = n.getFullYear();
+      const month = String(n.getMonth() + 1).padStart(2, "0");
+      const day = String(n.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    }
   } catch (e) {}
   return String(d).slice(0, 10);
 };
