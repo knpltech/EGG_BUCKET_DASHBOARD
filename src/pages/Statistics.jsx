@@ -55,7 +55,12 @@ const getRange = (type) => {
 
   if (type === "today") return { from: to, to };
   if (type === "week") return getThisWeekRange(today);
-  if (type === "month") return { from: toLocalIsoDate(new Date(today.getFullYear(), today.getMonth(), 1)), to };
+  if (type === "month") {
+    return {
+      from: toLocalIsoDate(new Date(today.getFullYear(), today.getMonth(), 1)),
+      to: toLocalIsoDate(new Date(today.getFullYear(), today.getMonth() + 1, 0)),
+    };
+  }
   if (type === "quarter") {
     const quarterStartMonth = Math.floor(today.getMonth() / 3) * 3;
     return { from: toLocalIsoDate(new Date(today.getFullYear(), quarterStartMonth, 1)), to };

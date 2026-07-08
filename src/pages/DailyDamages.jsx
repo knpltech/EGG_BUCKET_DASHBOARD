@@ -468,7 +468,7 @@ export default function DailyDamages() {
   const handleQuickRange = (type) => {
     const today = new Date();
     const iso   = toLocalIsoDate;
-    if (type === "thisMonth") { setFromDate(iso(new Date(today.getFullYear(), today.getMonth(), 1)));      setToDate(iso(today)); return; }
+    if (type === "thisMonth") { setFromDate(iso(new Date(today.getFullYear(), today.getMonth(), 1)));      setToDate(iso(new Date(today.getFullYear(), today.getMonth() + 1, 0))); return; }
     if (type === "lastMonth") { setFromDate(iso(new Date(today.getFullYear(), today.getMonth() - 1, 1))); setToDate(iso(new Date(today.getFullYear(), today.getMonth(), 0))); return; }
     if (type === "thisWeek")  { const s = new Date(today); s.setDate(today.getDate() - today.getDay());   setFromDate(iso(s)); setToDate(iso(today)); return; }
     if (type === "lastWeek")  {

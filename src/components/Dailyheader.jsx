@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { toLocalIsoDate } from "../utils/dateRange";
 
 /* ---------- CONSTANTS ---------- */
 
@@ -232,12 +233,13 @@ const Dailyheader = ({ title, subtitle, dailySalesData = [], fromDate, toDate, s
 
   const handleQuickRange = (type) => {
     const today = new Date();
-    const iso = (d) => d.toISOString().slice(0,10);
+    const iso = toLocalIsoDate;
 
     if (type === "thisMonth") {
       const from = new Date(today.getFullYear(), today.getMonth(), 1);
+      const to = new Date(today.getFullYear(), today.getMonth() + 1, 0);
       setFromDate(iso(from));
-      setToDate(iso(today));
+      setToDate(iso(to));
       return;
     }
 

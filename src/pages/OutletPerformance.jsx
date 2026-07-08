@@ -36,8 +36,24 @@ const getRange = (type) => {
   const to = toLocalIsoDate(today);
 
   if (type === "today") return { from: to, to };
+  if (type === "yesterday") {
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const yesterdayIso = toLocalIsoDate(yesterday);
+    return { from: yesterdayIso, to: yesterdayIso };
+  }
   if (type === "week") return getThisWeekRange(today);
-  if (type === "month") return { from: toLocalIsoDate(new Date(today.getFullYear(), today.getMonth(), 1)), to };
+  if (type === "month") {
+    return {
+      from: toLocalIsoDate(new Date(today.getFullYear(), today.getMonth(), 1)),
+      to: toLocalIsoDate(new Date(today.getFullYear(), today.getMonth() + 1, 0)),
+    };
+  }
+  if (type === "lastMonth") {
+    const firstDay = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const lastDay = new Date(today.getFullYear(), today.getMonth(), 0);
+    return { from: toLocalIsoDate(firstDay), to: toLocalIsoDate(lastDay) };
+  }
   if (type === "quarter") {
     const quarterStartMonth = Math.floor(today.getMonth() / 3) * 3;
     return { from: toLocalIsoDate(new Date(today.getFullYear(), quarterStartMonth, 1)), to };
@@ -425,8 +441,10 @@ const OutletPerformance = () => {
           <input type="date" value={dateRange.to || ""} onChange={(event) => handleDateChange("to", event.target.value)} className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-xs text-gray-700 shadow-sm focus:outline-none focus:ring-1 focus:ring-orange-400" />
           {[
             ["today", "Today"],
+            ["yesterday", "Yesterday"],
             ["week", "This Week"],
             ["month", "This Month"],
+            ["lastMonth", "Last Month"],
             ["quarter", "This Quarter"],
           ].map(([key, label]) => (
             <button key={key} type="button" onClick={() => handleQuickRange(key)} className={`h-10 rounded-lg border px-3 text-xs font-semibold shadow-sm transition ${rangeType === key ? "border-orange-500 bg-orange-500 text-white" : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"}`}>

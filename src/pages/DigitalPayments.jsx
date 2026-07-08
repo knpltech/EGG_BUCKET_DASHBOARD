@@ -309,7 +309,7 @@ export default function DigitalPayments() {
   const handleQuickRange = useCallback((type) => {
     const today = new Date();
     const iso = toLocalIsoDate;
-    if (type === "thisMonth") { setFilterFrom(iso(new Date(today.getFullYear(), today.getMonth(), 1))); setFilterTo(iso(today)); }
+    if (type === "thisMonth") { setFilterFrom(iso(new Date(today.getFullYear(), today.getMonth(), 1))); setFilterTo(iso(new Date(today.getFullYear(), today.getMonth() + 1, 0))); }
     else if (type === "lastMonth") { setFilterFrom(iso(new Date(today.getFullYear(), today.getMonth() - 1, 1))); setFilterTo(iso(new Date(today.getFullYear(), today.getMonth(), 0))); }
     else if (type === "thisWeek") { const s = new Date(today); s.setDate(today.getDate() - today.getDay()); setFilterFrom(iso(s)); setFilterTo(iso(today)); }
     else if (type === "lastWeek") { const e = new Date(today); e.setDate(today.getDate() - today.getDay() - 1); const s = new Date(e); s.setDate(e.getDate() - 6); setFilterFrom(iso(s)); setFilterTo(iso(e)); }

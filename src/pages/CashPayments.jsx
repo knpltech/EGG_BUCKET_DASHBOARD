@@ -389,8 +389,9 @@ export default function CashPayments() {
 
     if (rangeType === "thisMonth") {
       const first = new Date(now.getFullYear(), now.getMonth(), 1);
+      const last = new Date(now.getFullYear(), now.getMonth() + 1, 0);
       from = toLocalIso(first);
-      to = toLocalIso(now);
+      to = toLocalIso(last);
     } else if (rangeType === "lastMonth") {
       const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       from = toLocalIso(lastMonth);
