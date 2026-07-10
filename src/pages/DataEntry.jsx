@@ -3,6 +3,11 @@ import { getRoleFlags } from "../utils/role";
 
 const API = import.meta.env.VITE_API_URL;
 
+const formatNeccRate = (value) => {
+  const rate = Number(value);
+  return Number.isFinite(rate) ? rate.toFixed(3) : "";
+};
+
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
@@ -468,7 +473,7 @@ export default function DataEntry() {
 
     const foundNecc = allNeccData.find(doc =>
       normalizeDate(doc.date || doc.createdAt) === date && doc.outletId === outlet);
-    if (foundNecc) { setNeccrate(foundNecc.rateValue ?? ""); setNeccrateLocked(true); }
+    if (foundNecc) { setNeccrate(formatNeccRate(foundNecc.rateValue)); setNeccrateLocked(true); }
 
     const foundIncentive = allIncentiveData.find(doc =>
       normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
@@ -566,7 +571,7 @@ export default function DataEntry() {
           }
           const neccValue = Number(data.neccRate || (Number(data.salesPoint || 0) / 30)) || 0;
           if (!hasNecc) {
-            setNeccrate(String(Number(neccValue.toFixed(2))));
+            setNeccrate(formatNeccRate(neccValue));
           }
         }
       } catch (err) {
@@ -1008,7 +1013,7 @@ export default function DataEntry() {
       <span className="ml-1 text-xs text-gray-400 font-normal">(per outlet)</span>
     </label>
     <input
-      type="number" step="0.01" placeholder="NECC Rate for this outlet"
+      type="number" step="0.001" placeholder="NECC Rate for this outlet"
       className={inputCls(neccrateLocked)}
       value={neccrate} disabled={neccrateLocked || outletInactive}
       onChange={e => setNeccrate(e.target.value)}
