@@ -226,6 +226,7 @@ export default function DataEntry() {
   const [isSubmitting,    setIsSubmitting]    = useState(false);
   const [isDeleting,      setIsDeleting]      = useState(false);
   const [isFetchingSummary, setIsFetchingSummary] = useState(false);
+  const [aiTotalAmount, setAiTotalAmount] = useState(0);
   const prevOutletDateRef = useRef({ outlet: "", date: "" });
 
   const { isAdmin, isSupervisor } = getRoleFlags();
@@ -510,6 +511,7 @@ export default function DataEntry() {
   useEffect(() => {
     if (!outlet || !date) {
       prevOutletDateRef.current = { outlet: "", date: "" };
+      setAiTotalAmount(0);
       return;
     }
     
@@ -528,8 +530,6 @@ export default function DataEntry() {
     const hasIncentive = allIncentiveData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
     const hasFoodAllowance = allFoodAllowanceData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
 
-    if (hasSales && hasCash && hasDigital && hasDamages && hasNecc && hasIncentive && hasFoodAllowance) return;
-
     let isMounted = true;
     const fetchSummary = async () => {
       setIsFetchingSummary(true);
@@ -545,6 +545,10 @@ export default function DataEntry() {
         console.log("🟢 hasSales?", hasSales, "hasCash?", hasCash, "hasDigital?", hasDigital);
         
         if (isMounted) {
+          // The AI/Retail summary is the source of truth for the displayed
+          // total amount; it is not recalculated from local sales and rate.
+          setAiTotalAmount(Number(data.totalAmount) || 0);
+
           // Fill every summary field, including zero. A zero cash handover or
           // zero damage is still a real value for the selected outlet/date.
           if (!hasSales && data.salesQty !== undefined) {
@@ -793,15 +797,14 @@ export default function DataEntry() {
   };
 
   /* ================= DERIVED VALUES ================= */
-  const salesNum   = Number(sales)    || 0;
-  const neccNum    = Number(neccrate) || 0;
   const digitalNum = Number(digital)  || 0;
   const cashNum    = Number(cash)     || 0;
   const damagesNum = Number(damages)  || 0;
+  const foodAllowanceNum = Number(foodAllowance) || 0;
 
-  const totalAmount    = useMemo(() => +(salesNum * neccNum).toFixed(2),       [salesNum, neccNum]);
-  const totalRecv      = useMemo(() => +(digitalNum + cashNum),                [digitalNum, cashNum]);
-  const closingBalance = useMemo(() => +(totalRecv - totalAmount),             [totalRecv, totalAmount]);
+  const totalAmount    = useMemo(() => +aiTotalAmount.toFixed(2),              [aiTotalAmount]);
+  const totalRecv      = useMemo(() => +(digitalNum + cashNum + foodAllowanceNum).toFixed(2), [digitalNum, cashNum, foodAllowanceNum]);
+  const closingBalance = useMemo(() => +(totalAmount - totalRecv).toFixed(2),  [totalAmount, totalRecv]);
 
   const formatCurrency = (v) => `₹${Number(v || 0).toLocaleString()}`;
 
