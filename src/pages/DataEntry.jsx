@@ -518,8 +518,12 @@ export default function DataEntry() {
     const hasSales = allSalesData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
     const hasCash = allCashData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
     const hasDigital = allDigitalData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
+    const hasDamages = allDamagesData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.damages && doc.damages[outlet] !== undefined);
+    const hasNecc = allNeccData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outletId === outlet);
+    const hasIncentive = allIncentiveData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
+    const hasFoodAllowance = allFoodAllowanceData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
 
-    if (hasSales && hasCash && hasDigital) return;
+    if (hasSales && hasCash && hasDigital && hasDamages && hasNecc && hasIncentive && hasFoodAllowance) return;
 
     let isMounted = true;
     const fetchSummary = async () => {
@@ -536,18 +540,33 @@ export default function DataEntry() {
         console.log("🟢 hasSales?", hasSales, "hasCash?", hasCash, "hasDigital?", hasDigital);
         
         if (isMounted) {
-          // Auto-fill values if not locked and value > 0
-          if (!hasSales && data.salesQty > 0) {
+          // Fill every summary field, including zero. A zero cash handover or
+          // zero damage is still a real value for the selected outlet/date.
+          if (!hasSales && data.salesQty !== undefined) {
             console.log("🟢 CALLING setSales with:", data.salesQty);
             setSales(String(data.salesQty));
           }
-          if (!hasCash && data.cashPayment > 0) {
-            console.log("🟢 CALLING setCash with:", data.cashPayment);
-            setCash(String(data.cashPayment));
+          const cashHandoverValue = Number(data.cashHandover ?? data.cashPayment) || 0;
+          if (!hasCash) {
+            console.log("🟢 CALLING setCash with:", cashHandoverValue);
+            setCash(String(cashHandoverValue));
           }
-          if (!hasDigital && data.digitalPayment > 0) {
+          if (!hasDigital && data.digitalPayment !== undefined) {
             console.log("🟢 CALLING setDigital with:", data.digitalPayment);
             setDigital(String(data.digitalPayment));
+          }
+          if (!hasDamages) {
+            setDamages(String(Number(data.damage) || 0));
+          }
+          if (!hasIncentive) {
+            setIncentive(String(Number(data.incentive) || 0));
+          }
+          if (!hasFoodAllowance) {
+            setFoodAllowance(String(Number(data.foodAllowance) || 0));
+          }
+          const neccValue = Number(data.neccRate || (Number(data.salesPoint || 0) / 30)) || 0;
+          if (!hasNecc) {
+            setNeccrate(String(Number(neccValue.toFixed(2))));
           }
         }
       } catch (err) {
@@ -560,7 +579,7 @@ export default function DataEntry() {
     fetchSummary();
     
     return () => { isMounted = false; };
-  }, [outlet, date, allSalesData, allCashData, allDigitalData]);
+  }, [outlet, date, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allFoodAllowanceData]);
 
 
   /* ================= DELETE OUTLET DATA FOR DATE (admin only) ================= */

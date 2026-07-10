@@ -41,12 +41,13 @@ try {
         console.log("✅ Collection Firebase initialized via service account file.");
       } else {
         console.warn("⚠️ Collection Firebase credentials not found (env vars or collectionServiceAccountKey.json missing). Collection Website integration will fail.");
-        // Initialize an empty app if credentials are missing to prevent immediate crashes
-        collectionApp = admin.initializeApp({}, "collectionApp");
+        // Do not initialize an empty app: it can block initialization of the
+        // default application database when this module loads first.
+        collectionApp = null;
         configured = false;
       }
     }
-    collectionApp.isConfigured = configured;
+    if (collectionApp) collectionApp.isConfigured = configured;
   } else {
     collectionApp = admin.app("collectionApp");
   }
