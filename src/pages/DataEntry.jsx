@@ -804,7 +804,7 @@ export default function DataEntry() {
 
   const totalAmount    = useMemo(() => +aiTotalAmount.toFixed(2),              [aiTotalAmount]);
   const totalRecv      = useMemo(() => +(digitalNum + cashNum + foodAllowanceNum).toFixed(2), [digitalNum, cashNum, foodAllowanceNum]);
-  const closingBalance = useMemo(() => +(totalAmount - totalRecv).toFixed(2),  [totalAmount, totalRecv]);
+  const closingBalance = useMemo(() => +(totalRecv - totalAmount).toFixed(2),  [totalRecv, totalAmount]);
 
   const formatCurrency = (v) => `₹${Number(v || 0).toLocaleString()}`;
 
