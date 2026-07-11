@@ -304,11 +304,10 @@ export default function CashClosure() {
   const balance = useMemo(() => {
     const total = toNumber(totalCashAmount);
     const incentivesAmount = toNumber(incentives);
-    const foodAllowanceAmount = toNumber(foodAllowance);
-    const advanceAmount = toNumber(advance);
     const handoverAmount = toNumber(cashHandover);
-    return total - incentivesAmount - foodAllowanceAmount - advanceAmount - handoverAmount;
-  }, [totalCashAmount, incentives, foodAllowance, advance, cashHandover]);
+    const advanceAmount = toNumber(advance);
+    return total - incentivesAmount - handoverAmount - advanceAmount;
+  }, [totalCashAmount, incentives, cashHandover, advance]);
 
   const handleSave = async () => {
     if (isSupervisor && existingEntry) {
@@ -569,7 +568,7 @@ export default function CashClosure() {
                 </thead>
                 <tbody className="divide-y divide-gray-100 bg-white">
                   {sortedRows.map((row) => {
-                    const rowBalance = toNumber(row.totalCashAmount) - toNumber(row.incentives) - toNumber(row.foodAllowance) - toNumber(row.advance) - toNumber(row.cashHandover);
+                    const rowBalance = toNumber(row.totalCashAmount) - toNumber(row.incentives) - toNumber(row.cashHandover) - toNumber(row.advance);
                     return (
                       <tr key={row.id || `${row.zone}-${row.date}`} className="hover:bg-gray-50/70">
                         <td className="px-4 py-3 text-gray-700">{formatDisplayDate(normalizeDate(row.date || row.createdAt))}</td>

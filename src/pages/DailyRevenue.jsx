@@ -17,16 +17,7 @@ import Dailyheader from "../components/Dailyheader";
 import DailyTable from "../components/DailyTable";
 import { getThisWeekRange } from "../utils/dateRange";
 
-const getOutletRevenueValue = (row, outletRef) => {
-  const outletObj = typeof outletRef === "object" ? outletRef : null;
-  const outletId = outletObj?.id || outletRef;
-  const outletArea = outletObj?.area || outletObj?.name || outletId;
-  const values = row?.outlets || {};
-
-  if (values[outletId] !== undefined) return Number(values[outletId]) || 0;
-  if (outletArea && values[outletArea] !== undefined) return Number(values[outletArea]) || 0;
-  return 0;
-};
+const getOutletLabel = (outlet) => outlet?.area || outlet?.name || outlet?.id || "";
 
 const formatDateDMY = (iso) => {
   const date = new Date(iso);
@@ -84,6 +75,9 @@ export default function DailyRevenue() {
   const fetchRevenueData = useCallback(async () => {
     setLoading(true);
     try {
+      // Payment records provide the list of dates to display. Revenue itself
+      // comes from the saved Total Amount in each outlet's summary, rather
+      // than adding cash and digital payments together.
       const [outletsRes, cashRes, digitalRes] = await Promise.all([
         fetch(`${API_URL}/outlets/all`),
         fetch(`${API_URL}/cash-payments/all`),
@@ -100,30 +94,33 @@ export default function DailyRevenue() {
       const cashRows = Array.isArray(cashData) ? cashData : [];
       const digitalRows = Array.isArray(digitalData) ? digitalData : [];
 
-      const dateMap = new Map();
+      const dates = [...new Set([...cashRows, ...digitalRows]
+        .map((entry) => String(entry?.date || "").slice(0, 10))
+        .filter(Boolean))];
 
-      const applyPaymentRows = (paymentRows) => {
-        paymentRows.forEach((entry) => {
-          const date = String(entry?.date || "").slice(0, 10);
-          if (!date) return;
+      const summaryEntries = await Promise.all(dates.flatMap((date) => outletList.map(async (outlet) => {
+        const outletId = outlet?.id;
+        const outletLabel = getOutletLabel(outlet);
+        if (!outletId || !outletLabel) return { date, outletId, totalAmount: 0 };
 
-          if (!dateMap.has(date)) {
-            dateMap.set(date, { date, outlets: {} });
-          }
+        try {
+          const response = await fetch(
+            `${API_URL}/outlet-summary?outlet=${encodeURIComponent(outletLabel)}&date=${encodeURIComponent(date)}`,
+          );
+          if (!response.ok) return { date, outletId, totalAmount: 0 };
 
-          const current = dateMap.get(date);
-          outletList.forEach((outlet) => {
-            const outletId = outlet?.id;
-            if (!outletId) return;
+          const summary = await response.json();
+          return { date, outletId, totalAmount: Number(summary?.totalAmount) || 0 };
+        } catch {
+          return { date, outletId, totalAmount: 0 };
+        }
+      })));
 
-            const value = getOutletRevenueValue(entry, outlet);
-            current.outlets[outletId] = (Number(current.outlets[outletId]) || 0) + value;
-          });
-        });
-      };
-
-      applyPaymentRows(cashRows);
-      applyPaymentRows(digitalRows);
+      const dateMap = new Map(dates.map((date) => [date, { date, outlets: {} }]));
+      summaryEntries.forEach(({ date, outletId, totalAmount }) => {
+        if (!outletId || !dateMap.has(date)) return;
+        dateMap.get(date).outlets[outletId] = totalAmount;
+      });
 
       const mergedRows = Array.from(dateMap.values())
         .map((row) => ({
