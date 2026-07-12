@@ -444,7 +444,6 @@ export const getStatistics = async (req, res) => {
     const weeklyMap = new Map();
     const monthlyMap = new Map();
     const outletMap = new Map();
-    const neccRates = [];
 
     const ensureBucket = (map, key, label = key) => {
       if (!map.has(key)) {
@@ -463,8 +462,6 @@ export const getStatistics = async (req, res) => {
           totalCost: 0,
           closingAmount: 0,
           pending: 0,
-          neccRateTotal: 0,
-          neccRateCount: 0,
         });
       }
       return map.get(key);
@@ -501,13 +498,7 @@ export const getStatistics = async (req, res) => {
         bucket.totalCost += totalCost;
         bucket.closingAmount += closingAmount;
         bucket.pending += pending;
-        if (entry.neccRate > 0) {
-          bucket.neccRateTotal += entry.neccRate;
-          bucket.neccRateCount += 1;
-        }
       });
-
-      if (entry.neccRate > 0) neccRates.push(entry.neccRate);
     });
 
     const finalizeBucket = (bucket) => ({
@@ -524,7 +515,9 @@ export const getStatistics = async (req, res) => {
       totalCost: Number(bucket.totalCost.toFixed(2)),
       closingAmount: Number(bucket.closingAmount.toFixed(2)),
       pending: Number(bucket.pending.toFixed(2)),
-      averageNeccRate: bucket.neccRateCount ? Number((bucket.neccRateTotal / bucket.neccRateCount).toFixed(2)) : 0,
+      averageNeccRate: bucket.salesQty > 0
+        ? Number((bucket.revenue / bucket.salesQty).toFixed(3))
+        : 0,
     });
 
     const byKey = (a, b) => a.key.localeCompare(b.key);
@@ -568,8 +561,8 @@ export const getStatistics = async (req, res) => {
     const highestDamageDay = [...daily].sort((a, b) => b.damages - a.damages)[0] || null;
     const averageDailySales = daily.length ? Math.round(totals.salesQty / daily.length) : 0;
     const averageDailyRevenue = daily.length ? Number((totals.revenue / daily.length).toFixed(2)) : 0;
-    const averageNeccRate = neccRates.length
-      ? Number((neccRates.reduce((sum, value) => sum + value, 0) / neccRates.length).toFixed(2))
+    const averageNeccRate = totals.salesQty > 0
+      ? Number((totals.revenue / totals.salesQty).toFixed(3))
       : 0;
 
     res.status(200).json({

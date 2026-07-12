@@ -459,7 +459,7 @@ const Statistics = () => {
                           <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{number(item.salesQty)}</td>
                           <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.revenue)}</td>
                           <td className="whitespace-nowrap px-4 py-3 text-right">{number(item.damages)}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right">Rs. {Number(item.averageNeccRate || 0).toFixed(2)}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right">Rs. {Number(item.averageNeccRate || 0).toFixed(3)}</td>
                           <td className="whitespace-nowrap px-4 py-3 text-right">
                             <div className="flex justify-end gap-2">
                               <GrowthPill label="Egg" comparison={item.eggGrowth} />
