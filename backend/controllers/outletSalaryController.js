@@ -1,6 +1,7 @@
 import { db } from "../config/firebase.js";
 
 const COLLECTION = "outletSalaryEntries";
+const DAILY_RATE_COLLECTION = "outletDailySalaryRates";
 const MONTHS = [
   "Jan",
   "Feb",
@@ -39,6 +40,11 @@ const normalizeMonth = (value) => {
 };
 
 const getDocId = (year, month) => `${year}-${String(month).padStart(2, "0")}`;
+
+const normalizeIsoDate = (value) => {
+  const date = String(value || "").slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+};
 
 const normalizeOutletsPayload = (payload) => {
   const source = payload && typeof payload === "object" ? payload : {};
@@ -140,5 +146,51 @@ export const upsertOutletSalaryEntry = async (req, res) => {
     return res.status(existing.exists ? 200 : 201).json({ id: saved.id, ...saved.data() });
   } catch (error) {
     return res.status(500).json({ message: "Failed to save outlet salary entry", error: error.message });
+  }
+};
+
+export const getDailySalaryRates = async (_req, res) => {
+  try {
+    const snapshot = await db.collection(DAILY_RATE_COLLECTION).get();
+    const rows = snapshot.docs
+      .map(mapDoc)
+      .filter((item) => item.outletId && toNumber(item.dailyRate) > 0 && normalizeIsoDate(item.effectiveFrom))
+      .sort((a, b) => String(a.outletId).localeCompare(String(b.outletId)));
+    return res.json(rows);
+  } catch (error) {
+    console.error("Failed to fetch daily salary rates:", error.message);
+    return res.status(500).json({ message: "Failed to fetch daily salary rates", error: error.message });
+  }
+};
+
+export const saveDailySalaryRate = async (req, res) => {
+  try {
+    const outletId = String(req.body?.outletId || "").trim();
+    const dailyRate = toNumber(req.body?.dailyRate);
+    const effectiveFrom = normalizeIsoDate(req.body?.effectiveFrom);
+
+    if (!outletId || dailyRate <= 0 || !effectiveFrom) {
+      return res.status(400).json({ message: "Outlet, positive daily salary, and effective date are required" });
+    }
+
+    // One editable daily-salary rule per outlet.
+    const docRef = db.collection(DAILY_RATE_COLLECTION).doc(encodeURIComponent(outletId));
+    const existing = await docRef.get();
+    const now = new Date();
+    const payload = {
+      outletId,
+      dailyRate,
+      effectiveFrom,
+      updatedAt: now,
+      updatedBy: req.user?.username || req.user?.email || "admin",
+    };
+    if (!existing.exists) payload.createdAt = now;
+
+    await docRef.set(payload, { merge: true });
+    const saved = await docRef.get();
+    return res.status(existing.exists ? 200 : 201).json({ id: saved.id, ...saved.data() });
+  } catch (error) {
+    console.error("Failed to save daily salary rate:", error.message);
+    return res.status(500).json({ message: "Failed to save daily salary rate", error: error.message });
   }
 };

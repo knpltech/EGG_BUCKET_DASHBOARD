@@ -550,7 +550,7 @@ const GrowthPill = ({ label, comparison }) => {
   const styles = {
     up: "bg-emerald-50 text-emerald-700",
     down: "bg-red-50 text-red-600",
-    flat: "bg-gray-100 text-gray-600",
+    flat: "bg-orange-50 text-orange-600",
   };
   const icons = {
     up: faArrowUp,

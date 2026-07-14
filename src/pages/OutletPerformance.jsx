@@ -123,6 +123,27 @@ const getProvisionalSalaryForRange = (rates, outletId, from, to, finalizedMonths
   return total;
 };
 
+const getFinalizedSalaryForRange = (entry, outletId, from, to) => {
+  const monthlySalary = toNumber(entry?.outlets?.[outletId]);
+  const year = Number(entry?.year);
+  const month = Number(entry?.month);
+  if (!monthlySalary || !year || month < 1 || month > 12 || !from || !to) return 0;
+
+  const monthStart = new Date(year, month - 1, 1);
+  const monthEnd = new Date(year, month, 0);
+  const rangeStart = new Date(`${from}T00:00:00`);
+  const rangeEnd = new Date(`${to}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const start = rangeStart > monthStart ? rangeStart : monthStart;
+  const end = [rangeEnd, monthEnd, today].reduce((earliest, date) => date < earliest ? date : earliest);
+  if (start > end) return 0;
+
+  const selectedDays = Math.floor((end - start) / 86400000) + 1;
+  const monthDays = monthEnd.getDate();
+  return (monthlySalary / monthDays) * selectedDays;
+};
+
 const createEmptyMonthlyBucket = (key, label) => ({
   key,
   label,
@@ -304,8 +325,9 @@ const OutletPerformance = () => {
       finalizedMonths.add(entryKey);
 
       const entryOutlets = entry?.outlets && typeof entry.outlets === "object" ? entry.outlets : {};
-      Object.entries(entryOutlets).forEach(([outletId, value]) => {
-        map.set(outletId, (map.get(outletId) || 0) + toNumber(value));
+      Object.keys(entryOutlets).forEach((outletId) => {
+        const rangeSalary = getFinalizedSalaryForRange(entry, outletId, dateRange.from, dateRange.to);
+        map.set(outletId, (map.get(outletId) || 0) + rangeSalary);
       });
     });
 
@@ -325,18 +347,38 @@ const OutletPerformance = () => {
 
   const monthlySalaryByKey = useMemo(() => {
     const map = new Map();
+    const finalizedMonths = new Set();
 
     salaryEntries.forEach((entry) => {
       const entryKey = getSalaryEntryMonthKey(entry);
       if (!comparisonMonthKeys.has(entryKey)) return;
 
       const monthSalary = getMonthlySalaryValue(entry);
+      map.set(entryKey, monthSalary);
+      finalizedMonths.add(entryKey);
+    });
 
-      map.set(entryKey, (map.get(entryKey) || 0) + monthSalary);
+    // Until a month is finalized, show the automatically accrued daily salary
+    // in the monthly comparison as well.
+    const comparisonOutlets = comparisonStats?.outletBreakdown || [];
+    comparisonMonthKeys.forEach((monthKey) => {
+      if (finalizedMonths.has(monthKey)) return;
+      const [year, month] = monthKey.split("-").map(Number);
+      const monthEnd = toLocalIsoDate(new Date(year, month, 0));
+      const monthSalary = comparisonOutlets.reduce((sum, outlet) => (
+        sum + getProvisionalSalaryForRange(
+          dailySalaryRates,
+          outlet.key,
+          `${monthKey}-01`,
+          monthEnd,
+          new Set(),
+        )
+      ), 0);
+      map.set(monthKey, monthSalary);
     });
 
     return map;
-  }, [salaryEntries, comparisonMonthKeys]);
+  }, [comparisonMonthKeys, comparisonStats, dailySalaryRates, salaryEntries]);
 
   const performanceRows = useMemo(() => outletRows.map((item) => {
     const salary = salaryByOutlet.get(item.key) || 0;
