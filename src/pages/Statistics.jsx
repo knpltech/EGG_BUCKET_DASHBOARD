@@ -241,6 +241,7 @@ const Statistics = () => {
       eggGrowth: getComparison(item.salesQty, previous.salesQty),
       revenueGrowth: getComparison(item.revenue, previous.revenue),
       damageGrowth: getComparison(item.damages, previous.damages, true),
+      neccGrowth: getComparison(item.averageNeccRate, previous.averageNeccRate),
     };
   }), [monthly]);
 
@@ -464,6 +465,7 @@ const Statistics = () => {
                             <div className="flex justify-end gap-2">
                               <GrowthPill label="Egg" comparison={item.eggGrowth} />
                               <GrowthPill label="Rev" comparison={item.revenueGrowth} />
+                              <GrowthPill label="NECC" comparison={item.neccGrowth} />
                             </div>
                           </td>
                         </tr>
@@ -506,7 +508,7 @@ const Statistics = () => {
           </section>
 
           <section className="rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
-            <SectionHeader title="Monthly Data" subtitle="Egg count, revenue, and damage comparison" />
+            <SectionHeader title="Monthly Data" subtitle="Egg count, revenue, damage, and average NECC comparison" />
             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
               {monthlyRows.length ? monthlyRows.map((item) => (
                 <div key={item.key} className="rounded-lg border border-gray-100 bg-gray-50 p-4">
@@ -520,6 +522,7 @@ const Statistics = () => {
                   <MetricRow label="Egg Count" value={number(item.salesQty)} comparison={item.eggGrowth} />
                   <MetricRow label="Revenue" value={currency(item.revenue)} comparison={item.revenueGrowth} />
                   <MetricRow label="Damages" value={number(item.damages)} comparison={item.damageGrowth} />
+                  <MetricRow label="Average NECC" value={`Rs. ${Number(item.averageNeccRate || 0).toFixed(3)}`} comparison={item.neccGrowth} />
                 </div>
               )) : <EmptyState />}
             </div>

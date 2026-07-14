@@ -100,6 +100,29 @@ const getMonthKeysInRange = (from, to) => {
   return keys;
 };
 
+const getDailyRateForDate = (rates, outletId, isoDate) => rates
+  .filter((rate) => String(rate.outletId) === String(outletId)
+    && rate.effectiveFrom <= isoDate
+    && (!rate.effectiveTo || rate.effectiveTo >= isoDate))
+  .sort((a, b) => String(a.effectiveFrom).localeCompare(String(b.effectiveFrom)))
+  .pop();
+
+const getProvisionalSalaryForRange = (rates, outletId, from, to, finalizedMonths) => {
+  if (!from || !to) return 0;
+  const start = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const lastDay = end > today ? today : end;
+  let total = 0;
+  for (const day = new Date(start); day <= lastDay; day.setDate(day.getDate() + 1)) {
+    const iso = toLocalIsoDate(day);
+    if (finalizedMonths.has(iso.slice(0, 7))) continue;
+    total += toNumber(getDailyRateForDate(rates, outletId, iso)?.dailyRate);
+  }
+  return total;
+};
+
 const createEmptyMonthlyBucket = (key, label) => ({
   key,
   label,
@@ -189,6 +212,17 @@ const fetchOutletSalaryEntries = async (year) => {
   }
 };
 
+const fetchDailySalaryRates = async () => {
+  try {
+    const response = await fetch(`${API_URL}/outlet-salary/daily-rates`);
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+};
+
 const getOutletStatus = (item) => {
   const damageRate = item.salesQty ? (Number(item.damages || 0) / Number(item.salesQty || 1)) * 100 : 0;
   if (Number(item.salesQty || 0) <= 0) return { label: "No Sales", className: "bg-gray-100 text-gray-600" };
@@ -203,6 +237,7 @@ const OutletPerformance = () => {
   const [comparisonStats, setComparisonStats] = useState(null);
   const [stats, setStats] = useState(null);
   const [salaryEntries, setSalaryEntries] = useState([]);
+  const [dailySalaryRates, setDailySalaryRates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -221,7 +256,7 @@ const OutletPerformance = () => {
           ...comparisonMonthKeys,
         ].map((key) => Number(key.slice(0, 4))).filter((year) => Number.isFinite(year))));
 
-        const [rangeData, comparisonData, ...salaryData] = await Promise.all([
+        const [rangeData, comparisonData, dailyRates, ...salaryData] = await Promise.all([
           fetchStatisticsData({
             dateFrom: dateRange.from,
             dateTo: dateRange.to,
@@ -232,17 +267,20 @@ const OutletPerformance = () => {
             dateTo: comparisonRange.to,
             zone: zoneFilter,
           }),
+          fetchDailySalaryRates(),
           ...yearList.map((year) => fetchOutletSalaryEntries(year)),
         ]);
 
         setStats(rangeData);
         setComparisonStats(comparisonData);
         setSalaryEntries(salaryData.flat());
+        setDailySalaryRates(dailyRates);
       } catch {
         setError("Failed to load outlet performance data");
         setStats(null);
         setComparisonStats(null);
         setSalaryEntries([]);
+        setDailySalaryRates([]);
       } finally {
         setLoading(false);
       }
@@ -258,10 +296,12 @@ const OutletPerformance = () => {
   const comparisonMonthKeys = useMemo(() => new Set(getMonthKeysInRange(comparisonRange.from, comparisonRange.to)), [comparisonRange.from, comparisonRange.to]);
   const salaryByOutlet = useMemo(() => {
     const map = new Map();
+    const finalizedMonths = new Set();
 
     salaryEntries.forEach((entry) => {
       const entryKey = `${entry.year}-${String(entry.month).padStart(2, "0")}`;
       if (!selectedMonthKeys.has(entryKey)) return;
+      finalizedMonths.add(entryKey);
 
       const entryOutlets = entry?.outlets && typeof entry.outlets === "object" ? entry.outlets : {};
       Object.entries(entryOutlets).forEach(([outletId, value]) => {
@@ -269,8 +309,19 @@ const OutletPerformance = () => {
       });
     });
 
+    outletRows.forEach((outlet) => {
+      const provisional = getProvisionalSalaryForRange(
+        dailySalaryRates,
+        outlet.key,
+        dateRange.from,
+        dateRange.to,
+        finalizedMonths,
+      );
+      if (provisional) map.set(outlet.key, (map.get(outlet.key) || 0) + provisional);
+    });
+
     return map;
-  }, [salaryEntries, selectedMonthKeys]);
+  }, [dailySalaryRates, dateRange.from, dateRange.to, outletRows, salaryEntries, selectedMonthKeys]);
 
   const monthlySalaryByKey = useMemo(() => {
     const map = new Map();
@@ -592,7 +643,7 @@ const OutletPerformance = () => {
 
                 <div className="mt-4 rounded-2xl border border-orange-100 bg-gradient-to-r from-orange-50 via-amber-50 to-white px-5 py-4 shadow-sm">
                   <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <div className="grid gap-3 sm:grid-cols-3 md:min-w-[420px]">
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 md:min-w-[420px]">
                       <div className="rounded-xl border border-orange-100 bg-white px-4 py-3 text-center shadow-sm">
                         <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Total Costs</div>
                         <div className="mt-1 text-lg font-bold text-gray-900">{currency(derivedTotals.totalCost)}</div>
@@ -600,6 +651,10 @@ const OutletPerformance = () => {
                       <div className="rounded-xl border border-orange-100 bg-white px-4 py-3 text-center shadow-sm">
                         <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Total Eggs Sales Count</div>
                         <div className="mt-1 text-lg font-bold text-gray-900">{number(derivedTotals.salesQty)}</div>
+                      </div>
+                      <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-center shadow-sm">
+                        <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Average NECC Rate</div>
+                        <div className="mt-1 text-lg font-bold text-emerald-800">{currency(derivedTotals.salesQty ? derivedTotals.revenue / derivedTotals.salesQty : 0)}</div>
                       </div>
                       <div className="rounded-xl border border-orange-200 bg-orange-500 px-4 py-3 text-center text-white shadow-sm">
                         <div className="text-[11px] font-semibold uppercase tracking-wide text-orange-100">Per Egg Cost</div>
