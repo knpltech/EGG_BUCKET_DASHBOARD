@@ -228,3 +228,33 @@ export const getDataEntriesByDate = async (req, res) => {
     res.status(500).json({ message: "Error fetching data entries", error: error.message });
   }
 };
+
+// Delete data entry records for one outlet/date
+export const deleteDataEntryByOutletAndDate = async (req, res) => {
+  try {
+    const { date, outletId } = req.params;
+    if (!date || !outletId) {
+      return res.status(400).json({ message: "Date and outletId are required" });
+    }
+
+    const snapshot = await db.collection("dataEntries")
+      .where("date", "==", date)
+      .where("outletId", "==", outletId)
+      .get();
+
+    if (snapshot.empty) {
+      return res.status(404).json({ message: "No data entry found for this outlet and date" });
+    }
+
+    const batch = db.batch();
+    snapshot.docs.forEach(doc => batch.delete(doc.ref));
+    await batch.commit();
+
+    res.status(200).json({
+      message: `Deleted ${snapshot.size} data entry record(s) for outlet ${outletId} on ${date}`,
+      count: snapshot.size,
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Error deleting data entry", error: error.message });
+  }
+};

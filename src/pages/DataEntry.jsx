@@ -615,13 +615,18 @@ export default function DataEntry() {
         `${API}/advance/date/${date}/outlet/${encoded}`,
         `${API}/food-allowance/date/${date}/outlet/${encoded}`,
         `${API}/remarks/date/${date}/outlet/${encoded}`,
+        `${API}/data-entry/date/${date}/outlet/${encoded}`,
       ];
 
       const results = await Promise.all(endpoints.map(url =>
         fetch(url, { method: "DELETE", headers })
-          .then(r => {
+          .then(async r => {
+            if (r.status === 404) {
+              return { skipped: true, status: r.status, url };
+            }
             if (!r.ok) {
-              throw new Error(`Delete failed with status ${r.status}`);
+              const body = await r.text().catch(() => "");
+              throw new Error(`Delete failed with status ${r.status}${body ? `: ${body}` : ""}`);
             }
             return r.json();
           })
