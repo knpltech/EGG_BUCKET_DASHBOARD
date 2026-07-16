@@ -173,9 +173,16 @@ export const saveDailySalaryRate = async (req, res) => {
       return res.status(400).json({ message: "Outlet, positive daily salary, and effective date are required" });
     }
 
-    // One editable daily-salary rule per outlet.
-    const docRef = db.collection(DAILY_RATE_COLLECTION).doc(encodeURIComponent(outletId));
+    // Keep a rule for each effective date so rate changes never rewrite
+    // previously accrued salary.  `rateId` is only used when correcting an
+    // existing rule from the admin UI.
+    const requestedRateId = String(req.body?.rateId || "").trim();
+    const docId = requestedRateId || `${encodeURIComponent(outletId)}--${effectiveFrom}`;
+    const docRef = db.collection(DAILY_RATE_COLLECTION).doc(docId);
     const existing = await docRef.get();
+    if (existing.exists && String(existing.data()?.outletId || outletId) !== outletId) {
+      return res.status(400).json({ message: "Daily salary rule does not belong to the selected outlet" });
+    }
     const now = new Date();
     const payload = {
       outletId,

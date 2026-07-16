@@ -40,14 +40,28 @@ const getProvisionalSalary = (dailyRates, outletId, year, month) => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const end = monthEnd > today ? today : monthEnd;
-  const rate = dailyRates.find((item) => String(item.outletId) === String(outletId));
-  if (!rate || start > end) return 0;
+  if (start > end) return 0;
 
-  const effectiveFrom = new Date(`${rate.effectiveFrom}T00:00:00`);
-  const firstDay = start > effectiveFrom ? start : effectiveFrom;
-  if (firstDay > end) return 0;
-  const days = Math.floor((end - firstDay) / 86400000) + 1;
-  return days * toNumber(rate.dailyRate);
+  let total = 0;
+  for (const day = new Date(start); day <= end; day.setDate(day.getDate() + 1)) {
+    const iso = toIsoDate(day);
+    const rate = dailyRates
+      .filter((item) => String(item.outletId) === String(outletId)
+        && String(item.effectiveFrom) <= iso
+        && (!item.effectiveTo || String(item.effectiveTo) >= iso))
+      .sort((a, b) => String(a.effectiveFrom).localeCompare(String(b.effectiveFrom)))
+      .pop();
+    total += toNumber(rate?.dailyRate);
+  }
+  return total;
+};
+
+const hasDailyRateInMonth = (dailyRates, outletId, year, month) => {
+  const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
+  const monthEnd = toIsoDate(new Date(year, month, 0));
+  return dailyRates.some((rate) => String(rate.outletId) === String(outletId)
+    && String(rate.effectiveFrom) <= monthEnd
+    && (!rate.effectiveTo || String(rate.effectiveTo) >= monthStart));
 };
 
 const getOutletLabel = (outlet) => String(outlet?.area || outlet?.name || outlet?.id || "").trim();
@@ -79,6 +93,7 @@ export default function OutletSalary() {
   const [dailyRateAmount, setDailyRateAmount] = useState("");
   const [dailyRateDate, setDailyRateDate] = useState(() => toIsoDate(new Date()));
   const [editingDailyRate, setEditingDailyRate] = useState(false);
+  const [dailyRateId, setDailyRateId] = useState("");
 
   const sortedOutlets = useMemo(() => {
     const rows = Array.isArray(outlets) ? outlets : [];
@@ -108,9 +123,18 @@ export default function OutletSalary() {
         year: selectedYear,
         month,
         monthName: monthLabel(month),
-        outlets: finalEntry?.outlets || provisionalOutlets,
-        total: finalEntry ? toNumber(finalEntry.total) : provisionalTotal,
-        isProvisional: !finalEntry,
+        outlets: Object.fromEntries(sortedOutlets.map((outlet) => [
+          outlet.id,
+          hasDailyRateInMonth(dailyRates, outlet.id, selectedYear, month)
+            ? provisionalOutlets[outlet.id]
+            : toNumber(finalEntry?.outlets?.[outlet.id]),
+        ])),
+        total: sortedOutlets.reduce((sum, outlet) => sum + (
+          hasDailyRateInMonth(dailyRates, outlet.id, selectedYear, month)
+            ? provisionalOutlets[outlet.id]
+            : toNumber(finalEntry?.outlets?.[outlet.id])
+        ), 0),
+        isProvisional: !finalEntry || sortedOutlets.some((outlet) => hasDailyRateInMonth(dailyRates, outlet.id, selectedYear, month)),
       };
     }).filter(Boolean);
   }, [dailyRates, entries, selectedYear, sortedOutlets]);
@@ -190,6 +214,7 @@ export default function OutletSalary() {
     setDailyRateAmount(rate?.dailyRate ? String(rate.dailyRate) : "");
     setDailyRateDate(rate?.effectiveFrom || toIsoDate(new Date()));
     setEditingDailyRate(Boolean(rate));
+    setDailyRateId(rate?.id || "");
     setIsDailyRateModalOpen(true);
   };
 
@@ -240,7 +265,7 @@ export default function OutletSalary() {
       const response = await fetch(`${API_URL}/outlet-salary/daily-rates`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ outletId: dailyRateOutlet, dailyRate: toNumber(dailyRateAmount), effectiveFrom: dailyRateDate }),
+        body: JSON.stringify({ outletId: dailyRateOutlet, dailyRate: toNumber(dailyRateAmount), effectiveFrom: dailyRateDate, ...(dailyRateId ? { rateId: dailyRateId } : {}) }),
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));

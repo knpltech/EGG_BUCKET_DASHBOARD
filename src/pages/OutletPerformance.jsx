@@ -107,6 +107,12 @@ const getDailyRateForDate = (rates, outletId, isoDate) => rates
   .sort((a, b) => String(a.effectiveFrom).localeCompare(String(b.effectiveFrom)))
   .pop();
 
+const hasDailyRateInRange = (rates, outletId, from, to) => rates.some((rate) => (
+  String(rate.outletId) === String(outletId)
+  && String(rate.effectiveFrom) <= to
+  && (!rate.effectiveTo || String(rate.effectiveTo) >= from)
+));
+
 const getProvisionalSalaryForRange = (rates, outletId, from, to, finalizedMonths) => {
   if (!from || !to) return 0;
   const start = new Date(`${from}T00:00:00`);
@@ -208,14 +214,6 @@ const getSalaryEntryMonthKey = (entry) => {
   }
 
   return "";
-};
-
-const getMonthlySalaryValue = (entry) => {
-  const total = toNumber(entry?.total);
-  if (total > 0) return total;
-
-  const outlets = entry?.outlets && typeof entry.outlets === "object" ? entry.outlets : {};
-  return Object.values(outlets).reduce((sum, value) => sum + toNumber(value), 0);
 };
 
 const fetchOutletSalaryEntries = async (year) => {
@@ -332,14 +330,17 @@ const OutletPerformance = () => {
     });
 
     outletRows.forEach((outlet) => {
+      // A daily rule is authoritative.  A manually saved monthly value is
+      // retained only for legacy outlets that have no daily rule in range.
+      if (!hasDailyRateInRange(dailySalaryRates, outlet.key, dateRange.from, dateRange.to)) return;
       const provisional = getProvisionalSalaryForRange(
         dailySalaryRates,
         outlet.key,
         dateRange.from,
         dateRange.to,
-        finalizedMonths,
+        new Set(),
       );
-      if (provisional) map.set(outlet.key, (map.get(outlet.key) || 0) + provisional);
+      map.set(outlet.key, provisional);
     });
 
     return map;
@@ -347,33 +348,33 @@ const OutletPerformance = () => {
 
   const monthlySalaryByKey = useMemo(() => {
     const map = new Map();
-    const finalizedMonths = new Set();
+    const salaryEntryByMonth = new Map();
 
     salaryEntries.forEach((entry) => {
       const entryKey = getSalaryEntryMonthKey(entry);
       if (!comparisonMonthKeys.has(entryKey)) return;
-
-      const monthSalary = getMonthlySalaryValue(entry);
-      map.set(entryKey, monthSalary);
-      finalizedMonths.add(entryKey);
+      salaryEntryByMonth.set(entryKey, entry);
     });
 
-    // Until a month is finalized, show the automatically accrued daily salary
-    // in the monthly comparison as well.
+    // Apply the daily rule per outlet.  A saved monthly amount is only a
+    // fallback for an outlet with no daily rule for that particular month.
     const comparisonOutlets = comparisonStats?.outletBreakdown || [];
     comparisonMonthKeys.forEach((monthKey) => {
-      if (finalizedMonths.has(monthKey)) return;
       const [year, month] = monthKey.split("-").map(Number);
       const monthEnd = toLocalIsoDate(new Date(year, month, 0));
-      const monthSalary = comparisonOutlets.reduce((sum, outlet) => (
-        sum + getProvisionalSalaryForRange(
-          dailySalaryRates,
-          outlet.key,
-          `${monthKey}-01`,
-          monthEnd,
-          new Set(),
-        )
-      ), 0);
+      const savedEntry = salaryEntryByMonth.get(monthKey);
+      const monthSalary = comparisonOutlets.reduce((sum, outlet) => {
+        if (hasDailyRateInRange(dailySalaryRates, outlet.key, `${monthKey}-01`, monthEnd)) {
+          return sum + getProvisionalSalaryForRange(
+            dailySalaryRates,
+            outlet.key,
+            `${monthKey}-01`,
+            monthEnd,
+            new Set(),
+          );
+        }
+        return sum + getFinalizedSalaryForRange(savedEntry, outlet.key, `${monthKey}-01`, monthEnd);
+      }, 0);
       map.set(monthKey, monthSalary);
     });
 
