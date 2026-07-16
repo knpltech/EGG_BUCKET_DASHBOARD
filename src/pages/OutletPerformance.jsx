@@ -487,7 +487,7 @@ const OutletPerformance = () => {
 
   const handleExport = () => {
     const rows = [
-      ["Outlet", "Salary", "Total Eggs", "Damage", "Damage Cost", "Incentive", "Food Allowance", "Total Cost", "Cost/Egg", "Status"],
+      ["Outlet", "Salary", "Total Eggs", "Damage", "Damage Cost", "Incentive", "Food Allowance", "Total Cost", "Cost/Egg", "Avg NECC", "Status"],
       ...performanceRows.map((item) => [
         item.label,
         item.salary,
@@ -498,6 +498,7 @@ const OutletPerformance = () => {
         item.foodAllowance,
         item.totalCost,
         item.costPerEgg,
+        item.averageNeccRate,
         getOutletStatus(item).label,
       ]),
     ];
@@ -588,6 +589,7 @@ const OutletPerformance = () => {
                     <th className="px-4 py-3 text-right">Food Allow</th>
                     <th className="px-4 py-3 text-right">Total Cost</th>
                     <th className="px-4 py-3 text-right">Cost/Egg</th>
+                    <th className="px-4 py-3 text-right">Avg NECC</th>
                     <th className="px-4 py-3 text-right">Status</th>
                   </tr>
                 </thead>
@@ -605,13 +607,14 @@ const OutletPerformance = () => {
                         <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.foodAllowance)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{currency(item.totalCost)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.costPerEgg)}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.averageNeccRate)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">
                           <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-bold ${status.className}`}>{status.label}</span>
                         </td>
                       </tr>
                     );
                   }) : (
-                    <tr><td colSpan="9"><EmptyState /></td></tr>
+                    <tr><td colSpan="11"><EmptyState /></td></tr>
                   )}
                 </tbody>
               </table>

@@ -436,36 +436,35 @@ const Statistics = () => {
               title="Weekly Data"
               subtitle={`Fixed comparison: ${formatLongDate(comparisonFrom)} to ${formatLongDate(comparisonTo)}`}
             />
-            <div className="mt-4 grid grid-cols-1 gap-5 xl:grid-cols-12">
-              <div className="xl:col-span-7">
-                <div className="max-h-[460px] overflow-auto rounded-lg border border-gray-100">
-                  <table className="min-w-full text-sm">
-                    <thead className="sticky top-0 bg-gray-50 text-xs font-semibold uppercase text-gray-500">
+            <div className="mt-4">
+              <div className="overflow-hidden rounded-lg border border-gray-100">
+                <table className="w-full table-fixed text-xs sm:text-sm">
+                    <thead className="bg-gray-50 text-[10px] font-semibold uppercase text-gray-500 sm:text-xs">
                       <tr>
-                        <th className="px-4 py-3 text-left">Week</th>
-                        <th className="px-4 py-3 text-right">Egg Count</th>
-                        <th className="px-4 py-3 text-right">Revenue</th>
-                        <th className="px-4 py-3 text-right">Damages</th>
-                        <th className="px-4 py-3 text-right">Avg NECC</th>
-                        <th className="px-4 py-3 text-right">Growth</th>
+                        <th className="w-[12%] px-1.5 py-3 text-left sm:px-2">Week</th>
+                        <th className="w-[13%] px-1.5 py-3 text-right sm:px-2">Egg Count</th>
+                        <th className="w-[16%] px-1.5 py-3 text-right sm:px-2">Revenue</th>
+                        <th className="w-[13%] px-1.5 py-3 text-right sm:px-2">Damages</th>
+                        <th className="w-[15%] px-1.5 py-3 text-right sm:px-2">Avg NECC</th>
+                        <th className="w-[31%] px-1.5 py-3 text-left sm:px-2">Growth</th>
                       </tr>
                     </thead>
                     <tbody>
                       {weeklyRows.length ? weeklyRows.map((item) => (
                         <tr key={item.key} className="border-t border-gray-100 text-gray-700">
-                          <td className="whitespace-nowrap px-4 py-3">
+                          <td className="break-words px-1.5 py-3 sm:px-2">
                             <div className="font-semibold text-gray-900">{item.weekName}</div>
                             <div className="text-xs text-gray-500">{item.label}</div>
                           </td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{number(item.salesQty)}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.revenue)}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right">{number(item.damages)}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right">Rs. {Number(item.averageNeccRate || 0).toFixed(3)}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right">
-                            <div className="flex justify-end gap-2">
-                              <GrowthPill label="Egg" comparison={item.eggGrowth} />
-                              <GrowthPill label="Rev" comparison={item.revenueGrowth} />
-                              <GrowthPill label="NECC" comparison={item.neccGrowth} />
+                          <td className="break-words px-1.5 py-3 text-right font-semibold sm:px-2">{number(item.salesQty)}</td>
+                          <td className="break-words px-1.5 py-3 text-right sm:px-2">{currency(item.revenue)}</td>
+                          <td className="break-words px-1.5 py-3 text-right sm:px-2">{number(item.damages)}</td>
+                          <td className="break-words px-1.5 py-3 text-right sm:px-2">Rs. {Number(item.averageNeccRate || 0).toFixed(3)}</td>
+                          <td className="px-1.5 py-3 text-left sm:px-2">
+                            <div className="flex flex-wrap justify-start gap-1">
+                              <GrowthPill label="Egg" comparison={item.eggGrowth} compact />
+                              <GrowthPill label="Rev" comparison={item.revenueGrowth} compact />
+                              <GrowthPill label="NECC" comparison={item.neccGrowth} compact />
                             </div>
                           </td>
                         </tr>
@@ -475,10 +474,9 @@ const Statistics = () => {
                         </tr>
                       )}
                     </tbody>
-                  </table>
-                </div>
+                </table>
               </div>
-              <div className="space-y-5 xl:col-span-5">
+              <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
                 <div>
                   <ChartTitle title="Weekly Egg Count" />
                   <ResponsiveContainer width="100%" height={210}>
@@ -546,7 +544,7 @@ const ChartTitle = ({ title }) => (
   <div className="mb-2 text-sm font-semibold text-gray-900">{title}</div>
 );
 
-const GrowthPill = ({ label, comparison }) => {
+const GrowthPill = ({ label, comparison, compact = false }) => {
   const styles = {
     up: "bg-emerald-50 text-emerald-700",
     down: "bg-red-50 text-red-600",
@@ -559,7 +557,7 @@ const GrowthPill = ({ label, comparison }) => {
   };
 
   return (
-    <span className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-bold ${styles[comparison.type]}`}>
+    <span className={`inline-flex items-center gap-1 rounded-md px-2 py-1 font-bold ${compact ? "text-[9px] sm:text-[10px]" : "text-[11px]"} ${styles[comparison.type]}`}>
       <FontAwesomeIcon icon={icons[comparison.type]} />
       {label ? `${label} ` : ""}{comparison.text}
     </span>
