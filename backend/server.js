@@ -5,6 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { db } from "./config/firebase.js";
 import { cacheJsonResponse } from "./middleware/responseCache.js";
+import { requireAuthentication } from "./middleware/authMiddleware.js";
 
 import authRoutes from "./routes/authRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
@@ -77,6 +78,9 @@ app.get("/api", (req, res) => {
 
 // ✅ API routes ONLY
 app.use("/api/auth", authRoutes);
+// Every data endpoint requires a valid login token. Keep only the health check
+// and the sign-in endpoint public.
+app.use("/api", requireAuthentication);
 app.use("/api/incentive", incentiveRoutes);
 app.use("/api/advance", advanceRoutes);
 app.use("/api/food-allowance", foodAllowanceRoutes);

@@ -1,5 +1,5 @@
 // src/App.jsx
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import LandingPage from "./pages/LandingPage";
 import SignIn from "./pages/SignIn";
 
@@ -21,7 +21,6 @@ import DailyRevenue from "./pages/DailyRevenue";
 import Reports from "./pages/Reports";
 import Statistics from "./pages/Statistics";
 import OutletPerformance from "./pages/OutletPerformance";
-import { Navigate } from "react-router-dom";
 
 import DataAgentDashboard from "./pages/DataAgentDashboard";
 import SupervisorDashboard from "./pages/SupervisorDashboard";
@@ -36,10 +35,13 @@ import StockOptionsPage from "./pages/StockOptionsPage";
 import OutletSalary from "./pages/OutletSalary";
 
 function ProtectedRoute({ element, requiredRole }) {
+  const location = useLocation();
   let user = null;
   try {
     user = JSON.parse(localStorage.getItem("user"));
-  } catch {}
+  } catch {
+    user = null;
+  }
   const role = user?.role ? String(user.role).toLowerCase() : "";
   const roles = Array.isArray(user?.roles) ? user.roles.map(r => String(r).toLowerCase()) : [];
   const isAdmin = role === "admin" || roles.includes("admin");
@@ -48,18 +50,32 @@ function ProtectedRoute({ element, requiredRole }) {
   const isPaymentAuditor = role === "paymentauditor" || roles.includes("paymentauditor");
   const normalizedRequiredRole = String(requiredRole || "").toLowerCase();
   const dataAgentRoles = roles.length ? roles : (role ? [role] : []);
+
+  if (!user || !localStorage.getItem("token")) {
+    return <Navigate to="/signin" replace state={{ from: location }} />;
+  }
+
+  if (isAdmin) return element;
+
+  if (location.pathname.startsWith("/viewer/")) {
+    return isViewer ? element : <Navigate to="/signin" replace />;
+  }
+
+  if (location.pathname.startsWith("/supervisor/")) {
+    return isSupervisor ? element : <Navigate to="/signin" replace />;
+  }
+
+  if (location.pathname.startsWith("/dataagent/") || location.pathname === "/dashboard") {
+    return dataAgentRoles.includes("dataagent") ? element : <Navigate to="/signin" replace />;
+  }
+
   if (
-    isAdmin ||
-    !requiredRole ||
     dataAgentRoles.includes(normalizedRequiredRole) ||
-    isViewer ||
-    (normalizedRequiredRole === "supervisor" && isSupervisor) ||
     (normalizedRequiredRole === "digital_payments" && isPaymentAuditor)
   ) {
     return element;
   }
-  // Not allowed: redirect to data agent dashboard
-  return <Navigate to="/dashboard" replace />;
+  return <Navigate to="/signin" replace />;
 }
 
 function App() {
@@ -183,7 +199,7 @@ function App() {
 
             {/* DATA AGENT ROUTES */}
             <Route path="/dataagent/dashboard" element={<ProtectedRoute element={<DataAgentDashboard />} requiredRole="dataagent" />} />
-            <Route path="/dashboard" element={<DataAgentDashboard />} />
+            <Route path="/dashboard" element={<ProtectedRoute element={<DataAgentDashboard />} requiredRole="dataagent" />} />
             
             {/* VIEWER ROUTES */}
             <Route
@@ -225,7 +241,9 @@ function App() {
                 />
               }
             />
-            <Route path="/viewer/data" element={<ViewerData/>}/>
+            <Route path="/viewer/data" element={<ProtectedRoute element={<ViewerData />} requiredRole="viewer" />} />
+
+            <Route path="*" element={<Navigate to="/signin" replace />} />
 
             
           </Routes>
