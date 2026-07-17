@@ -429,6 +429,10 @@ const OutletPerformance = () => {
     revenue: 0,
   }), [performanceRows]);
 
+  const averageNeccRate = derivedTotals.salesQty ? derivedTotals.revenue / derivedTotals.salesQty : 0;
+  const perEggCost = derivedTotals.salesQty ? derivedTotals.totalCost / derivedTotals.salesQty : 0;
+  const profitScore = profitRate === null ? null : averageNeccRate - profitRate - perEggCost;
+
   const costBreakdown = useMemo(() => ([
     { name: "Salary", value: derivedTotals.salary, color: "#f97316" },
     { name: "Damage Cost", value: derivedTotals.damageCost, color: "#ef4444" },
@@ -716,6 +720,37 @@ const OutletPerformance = () => {
                     <Tooltip formatter={(value) => currency(value)} />
                   </PieChart>
                 </ResponsiveContainer>
+                <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-5 py-4 shadow-sm">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Profit Score</div>
+                      <div className="mt-1 text-2xl font-extrabold text-emerald-800">
+                        {profitScore === null ? "—" : currency(profitScore)}
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <label className="sr-only" htmlFor="cost-today-rate">Today&apos;s Price</label>
+                      <input
+                        id="cost-today-rate"
+                        type="number"
+                        min="0"
+                        step="0.001"
+                        inputMode="decimal"
+                        value={todayRate}
+                        onChange={(event) => handleTodayRateChange(event.target.value)}
+                        placeholder="Today&apos;s Price"
+                        className="h-9 min-w-0 flex-1 rounded-lg border border-emerald-200 bg-white px-3 text-sm text-gray-700 shadow-sm focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                      />
+                      <button type="button" onClick={handleCalculateProfit} className="h-9 rounded-lg bg-emerald-600 px-3 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700">
+                        Calculate
+                      </button>
+                    </div>
+                  </div>
+                  <p className="mt-1 text-xs text-emerald-700">
+                    Average NECC Rate − Today&apos;s Price − Per Egg Cost
+                  </p>
+                  {profitScore === null && <p className="mt-1 text-xs text-gray-500">Enter Today&apos;s Price to calculate.</p>}
+                </div>
               </div>
               <div className="xl:col-span-7">
                 <div className="rounded-lg border border-gray-100">
@@ -747,11 +782,11 @@ const OutletPerformance = () => {
                       </div>
                       <div className="rounded-xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-center shadow-sm">
                         <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Average NECC Rate</div>
-                        <div className="mt-1 text-lg font-bold text-emerald-800">{currency(derivedTotals.salesQty ? derivedTotals.revenue / derivedTotals.salesQty : 0)}</div>
+                        <div className="mt-1 text-lg font-bold text-emerald-800">{currency(averageNeccRate)}</div>
                       </div>
                       <div className="rounded-xl border border-orange-200 bg-orange-500 px-4 py-3 text-center text-white shadow-sm">
                         <div className="text-[11px] font-semibold uppercase tracking-wide text-orange-100">Per Egg Cost</div>
-                        <div className="mt-1 text-2xl font-extrabold">{currency(derivedTotals.salesQty ? derivedTotals.totalCost / derivedTotals.salesQty : 0)}</div>
+                        <div className="mt-1 text-2xl font-extrabold">{currency(perEggCost)}</div>
                       </div>
                     </div>
                   </div>
