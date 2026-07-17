@@ -441,12 +441,11 @@ const Statistics = () => {
                 <table className="w-full table-fixed text-xs sm:text-sm">
                     <thead className="bg-gray-50 text-[10px] font-semibold uppercase text-gray-500 sm:text-xs">
                       <tr>
-                        <th className="w-[12%] px-1.5 py-3 text-left sm:px-2">Week</th>
-                        <th className="w-[13%] px-1.5 py-3 text-right sm:px-2">Egg Count</th>
-                        <th className="w-[16%] px-1.5 py-3 text-right sm:px-2">Revenue</th>
-                        <th className="w-[13%] px-1.5 py-3 text-right sm:px-2">Damages</th>
-                        <th className="w-[15%] px-1.5 py-3 text-right sm:px-2">Avg NECC</th>
-                        <th className="w-[31%] px-1.5 py-3 text-left sm:px-2">Growth</th>
+                        <th className="w-[14%] px-1.5 py-3 text-left sm:px-2">Week</th>
+                        <th className="w-[20%] px-1.5 py-3 text-right sm:px-2">Egg Count</th>
+                        <th className="w-[25%] px-1.5 py-3 text-right sm:px-2">Revenue</th>
+                        <th className="w-[14%] px-1.5 py-3 text-right sm:px-2">Damages</th>
+                        <th className="w-[27%] px-1.5 py-3 text-right sm:px-2">Avg NECC</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -456,21 +455,29 @@ const Statistics = () => {
                             <div className="font-semibold text-gray-900">{item.weekName}</div>
                             <div className="text-xs text-gray-500">{item.label}</div>
                           </td>
-                          <td className="break-words px-1.5 py-3 text-right font-semibold sm:px-2">{number(item.salesQty)}</td>
-                          <td className="break-words px-1.5 py-3 text-right sm:px-2">{currency(item.revenue)}</td>
-                          <td className="break-words px-1.5 py-3 text-right sm:px-2">{number(item.damages)}</td>
-                          <td className="break-words px-1.5 py-3 text-right sm:px-2">Rs. {Number(item.averageNeccRate || 0).toFixed(3)}</td>
-                          <td className="px-1.5 py-3 text-left sm:px-2">
-                            <div className="flex flex-wrap justify-start gap-1">
+                          <td className="px-1.5 py-3 sm:px-2">
+                            <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                              <span className="font-semibold">{number(item.salesQty)}</span>
                               <GrowthPill label="Egg" comparison={item.eggGrowth} compact />
+                            </div>
+                          </td>
+                          <td className="px-1.5 py-3 sm:px-2">
+                            <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                              <span>{currency(item.revenue)}</span>
                               <GrowthPill label="Rev" comparison={item.revenueGrowth} compact />
+                            </div>
+                          </td>
+                          <td className="break-words px-1.5 py-3 text-right sm:px-2">{number(item.damages)}</td>
+                          <td className="px-1.5 py-3 sm:px-2">
+                            <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                              <span>Rs. {Number(item.averageNeccRate || 0).toFixed(3)}</span>
                               <GrowthPill label="NECC" comparison={item.neccGrowth} compact />
                             </div>
                           </td>
                         </tr>
                       )) : (
                         <tr>
-                          <td colSpan="6"><EmptyState /></td>
+                          <td colSpan="5"><EmptyState /></td>
                         </tr>
                       )}
                     </tbody>

@@ -259,6 +259,9 @@ const OutletPerformance = () => {
   const [dailySalaryRates, setDailySalaryRates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [todayRate, setTodayRate] = useState("");
+  const [profitRate, setProfitRate] = useState(null);
+  const [profitCalculatorError, setProfitCalculatorError] = useState("");
 
   useEffect(() => {
     const loadPerformance = async () => {
@@ -477,12 +480,32 @@ const OutletPerformance = () => {
 
   const handleQuickRange = (type) => {
     setRangeType(type);
+    setProfitRate(null);
     if (type !== "custom") setDateRange(getRange(type));
   };
 
   const handleDateChange = (field, value) => {
     setRangeType("custom");
+    setProfitRate(null);
     setDateRange((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleTodayRateChange = (value) => {
+    setTodayRate(value);
+    setProfitRate(null);
+    setProfitCalculatorError("");
+  };
+
+  const handleCalculateProfit = () => {
+    const rate = Number(todayRate);
+    if (todayRate === "" || !Number.isFinite(rate) || rate < 0) {
+      setProfitRate(null);
+      setProfitCalculatorError("Enter a valid Today’s Rate to calculate profit scores.");
+      return;
+    }
+
+    setProfitCalculatorError("");
+    setProfitRate(rate);
   };
 
   const handleExport = () => {
@@ -572,7 +595,27 @@ const OutletPerformance = () => {
           </div>
 
           <section className="mb-6 rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
-            <SectionHeader title="Performance Breakdown" subtitle="Outlet-wise totals for the selected period" />
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <SectionHeader title="Performance Breakdown" subtitle="Outlet-wise totals for the selected period" />
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="sr-only" htmlFor="today-rate">Enter Today’s Rate</label>
+                <input
+                  id="today-rate"
+                  type="number"
+                  min="0"
+                  step="0.001"
+                  inputMode="decimal"
+                  value={todayRate}
+                  onChange={(event) => handleTodayRateChange(event.target.value)}
+                  placeholder="Enter Today’s Rate"
+                  className="h-10 w-44 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 shadow-sm focus:border-orange-400 focus:outline-none focus:ring-1 focus:ring-orange-400"
+                />
+                <button type="button" onClick={handleCalculateProfit} className="h-10 rounded-lg bg-orange-500 px-4 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-600">
+                  Calculate
+                </button>
+              </div>
+            </div>
+            {profitCalculatorError && <p className="mt-2 text-xs font-medium text-red-600">{profitCalculatorError}</p>}
             <div className="mt-3 rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-xs font-medium text-amber-800">
               Damage Cost is sourced from the backend reports aggregate for the selected range. Total Cost = Salary + Damage Cost + Incentive + Food Allowance. Cost per Egg = Total Cost / Total Eggs.
             </div>
@@ -590,6 +633,7 @@ const OutletPerformance = () => {
                     <th className="px-4 py-3 text-right">Total Cost</th>
                     <th className="px-4 py-3 text-right">Cost/Egg</th>
                     <th className="px-4 py-3 text-right">Avg NECC</th>
+                    <th className="px-4 py-3 text-right">Profit Score</th>
                     <th className="px-4 py-3 text-right">Status</th>
                   </tr>
                 </thead>
@@ -608,13 +652,16 @@ const OutletPerformance = () => {
                         <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{currency(item.totalCost)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.costPerEgg)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.averageNeccRate)}</td>
+                        <td className={`whitespace-nowrap px-4 py-3 text-right font-semibold ${profitRate === null ? "text-gray-400" : "text-gray-900"}`}>
+                          {profitRate === null ? "—" : currency(toNumber(item.averageNeccRate) - profitRate - toNumber(item.costPerEgg))}
+                        </td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">
                           <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-bold ${status.className}`}>{status.label}</span>
                         </td>
                       </tr>
                     );
                   }) : (
-                    <tr><td colSpan="11"><EmptyState /></td></tr>
+                    <tr><td colSpan="12"><EmptyState /></td></tr>
                   )}
                 </tbody>
               </table>
