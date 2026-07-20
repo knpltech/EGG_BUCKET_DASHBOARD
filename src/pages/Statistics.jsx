@@ -28,13 +28,6 @@ import { getThisWeekRange, toLocalIsoDate } from "../utils/dateRange";
 const currency = (value) => `Rs. ${Math.round(Number(value) || 0).toLocaleString("en-IN")}`;
 const number = (value) => Math.round(Number(value) || 0).toLocaleString("en-IN");
 
-const formatDate = (iso) => {
-  if (!iso) return "-";
-  const date = new Date(`${iso}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
-};
-
 const formatLongDate = (iso) => {
   if (!iso) return "-";
   const date = new Date(`${iso}T00:00:00`);
@@ -67,6 +60,29 @@ const getRange = (type) => {
   }
 
   return getThisWeekRange(today);
+};
+
+const getLastWeekRange = () => {
+  const thisWeek = getThisWeekRange(new Date());
+  const thisWeekStart = new Date(`${thisWeek.from}T00:00:00`);
+  const lastWeekEnd = new Date(thisWeekStart);
+  lastWeekEnd.setDate(lastWeekEnd.getDate() - 1);
+  const lastWeekStart = new Date(lastWeekEnd);
+  lastWeekStart.setDate(lastWeekStart.getDate() - 6);
+  return { from: toLocalIsoDate(lastWeekStart), to: toLocalIsoDate(lastWeekEnd) };
+};
+
+const buildDailyTimeline = (items, range) => {
+  const byDate = new Map((items || []).map((item) => [item.key, item]));
+  const start = new Date(`${range.from}T00:00:00`);
+  const end = new Date(`${range.to}T00:00:00`);
+  const rows = [];
+
+  for (const day = new Date(start); day <= end; day.setDate(day.getDate() + 1)) {
+    const key = toLocalIsoDate(day);
+    rows.push(byDate.get(key) || { key, salesQty: 0, damages: 0, revenue: 0 });
+  }
+  return rows;
 };
 
 const getAprilToTodayRange = () => {
@@ -162,6 +178,8 @@ const Statistics = () => {
   const [dateRange, setDateRange] = useState(() => getRange("week"));
   const [dailyStats, setDailyStats] = useState(null);
   const [comparisonStats, setComparisonStats] = useState(null);
+  const [thisWeekStats, setThisWeekStats] = useState(null);
+  const [lastWeekStats, setLastWeekStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -173,7 +191,9 @@ const Statistics = () => {
       try {
         const zoneFilter = isSupervisor ? zone : "";
         const comparisonRangeRequest = getAprilToTodayRange();
-        const [dailyData, comparisonData] = await Promise.all([
+        const thisWeekRange = getRange("week");
+        const lastWeekRange = getLastWeekRange();
+        const [dailyData, comparisonData, thisWeekData, lastWeekData] = await Promise.all([
           fetchStatisticsData({
             dateFrom: dateRange.from,
             dateTo: dateRange.to,
@@ -184,14 +204,20 @@ const Statistics = () => {
             dateTo: comparisonRangeRequest.to,
             zone: zoneFilter,
           }),
+          fetchStatisticsData({ ...thisWeekRange, zone: zoneFilter }),
+          fetchStatisticsData({ ...lastWeekRange, zone: zoneFilter }),
         ]);
 
         setDailyStats(dailyData);
         setComparisonStats(comparisonData);
+        setThisWeekStats(thisWeekData);
+        setLastWeekStats(lastWeekData);
       } catch {
         setError("Failed to load statistics data");
         setDailyStats(null);
         setComparisonStats(null);
+        setThisWeekStats(null);
+        setLastWeekStats(null);
       } finally {
         setLoading(false);
       }
@@ -217,10 +243,19 @@ const Statistics = () => {
 
   const dailyRows = useMemo(() => daily.map((item) => ({
     ...item,
-    chartLabel: formatDate(item.key),
     weekday: formatWeekday(item.key),
     displayDate: formatLongDate(item.key),
   })), [daily]);
+  const thisWeekRows = useMemo(() => buildDailyTimeline(thisWeekStats?.daily, getRange("week")).map((item) => ({
+    ...item,
+    weekday: formatWeekday(item.key),
+    displayDate: formatLongDate(item.key),
+  })), [thisWeekStats]);
+  const lastWeekRows = useMemo(() => buildDailyTimeline(lastWeekStats?.daily, getLastWeekRange()).map((item) => ({
+    ...item,
+    weekday: formatWeekday(item.key),
+    displayDate: formatLongDate(item.key),
+  })), [lastWeekStats]);
 
   const weeklyRows = useMemo(() => weekly.map((item, index, rows) => {
     const previous = rows[index - 1] || {};
@@ -385,49 +420,11 @@ const Statistics = () => {
           <section className="mb-6 rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
             <SectionHeader
               title="Daily Data"
-              subtitle={`${formatLongDate(dateRange.from)} to ${formatLongDate(dateRange.to)}`}
+              subtitle="This week to date alongside the previous week"
             />
-            <div className="mt-4 grid grid-cols-1 gap-5 xl:grid-cols-12">
-              <div className="xl:col-span-5">
-                <div className="max-h-[360px] overflow-auto rounded-lg border border-gray-100">
-                  <table className="min-w-full text-sm">
-                    <thead className="sticky top-0 bg-gray-50 text-xs font-semibold uppercase text-gray-500">
-                      <tr>
-                        <th className="px-4 py-3 text-left">Weekday</th>
-                        <th className="px-4 py-3 text-left">Date</th>
-                        <th className="px-4 py-3 text-right">Egg Count</th>
-                        <th className="px-4 py-3 text-right">Revenue</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dailyRows.length ? dailyRows.map((item) => (
-                        <tr key={item.key} className="border-t border-gray-100 text-gray-700">
-                          <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">{item.weekday}</td>
-                          <td className="whitespace-nowrap px-4 py-3">{item.displayDate}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{number(item.salesQty)}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.revenue)}</td>
-                        </tr>
-                      )) : (
-                        <tr>
-                          <td colSpan="4"><EmptyState /></td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <div className="xl:col-span-7">
-                <ChartTitle title="Daily Egg Count" />
-                <ResponsiveContainer width="100%" height={330}>
-                  <BarChart data={dailyRows} margin={{ top: 12, right: 12, left: 0, bottom: 0 }}>
-                    <CartesianGrid stroke="#f1f5f9" vertical={false} />
-                    <XAxis dataKey="chartLabel" tick={{ fontSize: 11, fill: "#64748b" }} tickLine={false} axisLine={{ stroke: "#e5e7eb" }} />
-                    <YAxis tick={{ fontSize: 11, fill: "#64748b" }} tickLine={false} axisLine={false} width={50} />
-                    <Tooltip formatter={(value) => `${number(value)} eggs`} labelFormatter={(label) => `Date: ${label}`} />
-                    <Bar dataKey="salesQty" name="Egg Count" fill="#f97316" radius={[5, 5, 0, 0]} maxBarSize={48} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+            <div className="mt-4 grid grid-cols-1 gap-5 xl:grid-cols-2">
+              <DailyDataTable title="This Week" range={getRange("week")} rows={thisWeekRows} />
+              <DailyDataTable title="Last Week" range={getLastWeekRange()} rows={lastWeekRows} />
             </div>
           </section>
 
@@ -577,6 +574,39 @@ const MetricRow = ({ label, value, comparison }) => (
     <div className="flex items-center gap-2 text-right">
       <span className="font-bold text-gray-900">{value}</span>
       <GrowthPill label="" comparison={comparison} />
+    </div>
+  </div>
+);
+
+const DailyDataTable = ({ title, range, rows }) => (
+  <div className="overflow-hidden rounded-lg border border-gray-100">
+    <div className="border-b border-gray-100 bg-gray-50 px-4 py-3">
+      <h3 className="text-sm font-bold text-gray-900">{title}</h3>
+      <p className="mt-0.5 text-xs text-gray-500">{formatLongDate(range.from)} to {formatLongDate(range.to)}</p>
+    </div>
+    <div className="max-h-[360px] overflow-auto">
+      <table className="min-w-full text-sm">
+        <thead className="sticky top-0 bg-white text-xs font-semibold uppercase text-gray-500 shadow-sm">
+          <tr>
+            <th className="px-4 py-3 text-left">Weekday</th>
+            <th className="px-4 py-3 text-left">Date</th>
+            <th className="px-4 py-3 text-right">Egg Count</th>
+            <th className="px-4 py-3 text-right">Damage Count</th>
+            <th className="px-4 py-3 text-right">Revenue</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length ? rows.map((item) => (
+            <tr key={item.key} className="border-t border-gray-100 text-gray-700">
+              <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">{item.weekday}</td>
+              <td className="whitespace-nowrap px-4 py-3">{item.displayDate}</td>
+              <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{number(item.salesQty)}</td>
+              <td className="whitespace-nowrap px-4 py-3 text-right">{number(item.damages)}</td>
+              <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.revenue)}</td>
+            </tr>
+          )) : <tr><td colSpan="5"><EmptyState /></td></tr>}
+        </tbody>
+      </table>
     </div>
   </div>
 );
