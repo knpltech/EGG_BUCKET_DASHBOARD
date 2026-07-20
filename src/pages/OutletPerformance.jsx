@@ -1,6 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import {
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import {
   faChartLine,
   faCircleExclamation,
@@ -98,6 +109,20 @@ const getMonthKeysInRange = (from, to) => {
   }
 
   return keys;
+};
+
+const getDateKeysInRange = (from, to) => {
+  if (!from || !to) return [];
+
+  const start = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) return [];
+
+  const dates = [];
+  for (const day = new Date(start); day <= end; day.setDate(day.getDate() + 1)) {
+    dates.push(toLocalIsoDate(day));
+  }
+  return dates;
 };
 
 const getDailyRateForDate = (rates, outletId, isoDate) => rates
@@ -439,6 +464,36 @@ const OutletPerformance = () => {
     { name: "Incentive", value: derivedTotals.incentive, color: "#22c55e" },
     { name: "Food Allowance", value: derivedTotals.foodAllowance, color: "#0ea5e9" },
   ]), [derivedTotals]);
+
+  const dailyCostTrend = useMemo(() => {
+    const salaryEntryByMonth = new Map(
+      salaryEntries.map((entry) => [getSalaryEntryMonthKey(entry), entry]),
+    );
+    const dailyStatsByDate = new Map((stats?.daily || []).map((item) => [item.key, item]));
+
+    return getDateKeysInRange(dateRange.from, dateRange.to).map((isoDate) => {
+      const item = dailyStatsByDate.get(isoDate);
+      if (!item) return { date: formatLongDate(isoDate), perEggCost: null };
+
+      const monthKey = String(isoDate || "").slice(0, 7);
+      const savedSalaryEntry = salaryEntryByMonth.get(monthKey);
+      const driverSalary = outletRows.reduce((total, outlet) => {
+        const dailyRate = getDailyRateForDate(dailySalaryRates, outlet.key, isoDate);
+        if (dailyRate) return total + toNumber(dailyRate.dailyRate);
+        return total + getFinalizedSalaryForRange(savedSalaryEntry, outlet.key, isoDate, isoDate);
+      }, 0);
+      const totalCost = driverSalary
+        + toNumber(item.damageCost)
+        + toNumber(item.incentive)
+        + toNumber(item.foodAllowance);
+      const eggsDelivered = toNumber(item.salesQty);
+
+      return {
+        date: formatLongDate(isoDate),
+        perEggCost: eggsDelivered > 0 ? Number((totalCost / eggsDelivered).toFixed(3)) : null,
+      };
+    });
+  }, [dailySalaryRates, dateRange.from, dateRange.to, outletRows, salaryEntries, stats]);
 
   const monthlyComparisonRows = useMemo(() => buildMonthlyTimeline(comparisonStats?.monthly || [], comparisonRange.from, comparisonRange.to).map((item) => {
     const driverSalary = monthlySalaryByKey.get(item.key) || 0;
@@ -792,6 +847,54 @@ const OutletPerformance = () => {
                   </div>
                 </div>
               </div>
+            </div>
+          </section>
+
+          <section className="mt-6 rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
+            <SectionHeader
+              title="Daily Egg Delivery Cost"
+              subtitle="Per egg cost by day — use the trend to see whether daily delivery costs are improving."
+            />
+            <div className="mt-5 h-[320px]">
+              {dailyCostTrend.some((item) => item.perEggCost !== null) ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={dailyCostTrend} margin={{ top: 12, right: 24, left: 8, bottom: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 12, fill: "#6b7280" }}
+                      tickLine={false}
+                      axisLine={false}
+                      minTickGap={28}
+                    />
+                    <YAxis
+                      tickFormatter={(value) => `Rs. ${Number(value).toFixed(2)}`}
+                      tick={{ fontSize: 12, fill: "#6b7280" }}
+                      tickLine={false}
+                      axisLine={false}
+                      width={70}
+                    />
+                    <Tooltip
+                      formatter={(value) => [currency(value), "Per Egg Cost"]}
+                      contentStyle={{ borderRadius: "8px", borderColor: "#fed7aa" }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="perEggCost"
+                      name="Per Egg Cost"
+                      stroke="#f97316"
+                      strokeWidth={3}
+                      dot={{ r: 4, fill: "#f97316", strokeWidth: 0 }}
+                      activeDot={{ r: 6 }}
+                      connectNulls={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center rounded-lg border border-dashed border-gray-200 bg-gray-50 text-sm text-gray-500">
+                  No daily egg delivery cost data found for the selected range.
+                </div>
+              )}
             </div>
           </section>
 
