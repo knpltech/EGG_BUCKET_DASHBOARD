@@ -203,14 +203,6 @@ const getNeccRateNumber = (doc) => {
   return 0;
 };
 
-const getAverageNeccRate = (docs = []) => {
-  const numeric = docs
-    .map((doc) => getNeccRateNumber(doc))
-    .filter((value) => Number.isFinite(value) && value > 0);
-  if (!numeric.length) return 0;
-  return numeric.reduce((sum, value) => sum + value, 0) / numeric.length;
-};
-
 const getSalesValueForOutlet = (doc, outlet) => {
   const outletId = outlet?.id || outlet;
   const area = outlet?.area || outlet?.name || outletId;
@@ -259,27 +251,21 @@ const normalizeTextKey = (value) => {
   return String(value).trim().toLowerCase();
 };
 
-const buildOutletIdentitySet = (outlets = []) => {
-  const keys = new Set();
-  outlets.forEach((outlet) => {
-    const idKey = normalizeTextKey(outlet?.id);
-    const nameKey = normalizeTextKey(outlet?.name);
-    const areaKey = normalizeTextKey(outlet?.area);
-    if (idKey) keys.add(idKey);
-    if (nameKey) keys.add(nameKey);
-    if (areaKey) keys.add(areaKey);
-  });
-  return keys;
+const isNeccDocForOutlet = (doc, outlet) => {
+  const outletKeys = new Set(
+    [outlet?.id, outlet?.name, outlet?.area]
+      .map(normalizeTextKey)
+      .filter(Boolean)
+  );
+  return outletKeys.has(normalizeTextKey(doc?.outletId)) || outletKeys.has(normalizeTextKey(doc?.outlet));
 };
 
-const isNeccDocForOutlets = (doc, outletIdentitySet) => {
-  if (!outletIdentitySet || outletIdentitySet.size === 0) return false;
-  const outletIdKey = normalizeTextKey(doc?.outletId);
-  const outletKey = normalizeTextKey(doc?.outlet);
-  return Boolean(
-    (outletIdKey && outletIdentitySet.has(outletIdKey)) ||
-    (outletKey && outletIdentitySet.has(outletKey))
-  );
+const getNeccRateForOutlet = (rows, outlet, selectedDate) => {
+  if (!Array.isArray(rows)) return 0;
+  const latestRate = rows
+    .filter((doc) => normalizeDate(doc?.date || doc?.createdAt) === selectedDate && isNeccDocForOutlet(doc, outlet))
+    .sort((a, b) => getDocTimestamp(b) - getDocTimestamp(a))[0];
+  return getNeccRateNumber(latestRate);
 };
 
 const createEmptyZoneRevenue = () => ({
@@ -477,6 +463,7 @@ export default function AdminDashboard() {
   const loadDashboard = useCallback(async () => {
     const computeZoneStats = (outlets, salesRows, damageRows, neccRates) => {
       const stats = createEmptyZoneStats();
+      const latestSalesDoc = getLatestDayDoc(Array.isArray(salesRows) ? salesRows : [], selectedDate);
 
       ZONE_NUMBERS.forEach((zoneNum) => {
         const zoneLabel = `Zone ${zoneNum}`;
@@ -484,24 +471,23 @@ export default function AdminDashboard() {
           ? outlets.filter((outlet) => outlet.status === "Active" && normalizeZone(outlet.zoneId || outlet.zone || outlet.zoneNumber) === zoneNum)
           : [];
 
-        const outletIdentitySet = buildOutletIdentitySet(zoneOutlets);
         stats[zoneLabel].outlets = zoneOutlets.length;
         stats[zoneLabel].eggs = zoneOutlets.length === 0 ? 0 : getSalesTotal(Array.isArray(salesRows) ? salesRows : [], zoneOutlets, selectedDate);
         stats[zoneLabel].damage = zoneOutlets.length === 0 ? 0 : getDamageTotal(Array.isArray(damageRows) ? damageRows : [], zoneOutlets, selectedDate);
 
-        if (Array.isArray(neccRates) && neccRates.length > 0) {
-          const selectedZoneRates = neccRates.filter((rate) => {
-            const isSelectedDate = normalizeDate(rate.date || rate.createdAt) === selectedDate;
-            return isSelectedDate && isNeccDocForOutlets(rate, outletIdentitySet);
-          });
-
-          if (selectedZoneRates.length > 0) {
-            const averageRate = getAverageNeccRate(selectedZoneRates);
-            if (Number.isFinite(averageRate) && averageRate > 0) {
+        // Same formula as Cost Breakdown: sum(eggs × NECC rate) / total eggs.
+        if (stats[zoneLabel].eggs > 0 && latestSalesDoc) {
+          const neccRevenue = zoneOutlets.reduce((sum, outlet) => {
+            const eggs = getSalesValueForOutlet(latestSalesDoc, outlet);
+            const rate = getNeccRateForOutlet(neccRates, outlet, selectedDate);
+            return sum + (eggs * rate);
+          }, 0);
+          const weightedRate = neccRevenue / stats[zoneLabel].eggs;
+          const averageRate = weightedRate;
+          if (Number.isFinite(weightedRate)) {
               stats[zoneLabel].necc = `₹${averageRate.toFixed(2)}`;
             }
           }
-        }
       });
 
       return stats;
@@ -857,14 +843,12 @@ export default function AdminDashboard() {
 
       <h2 className="text-xl font-bold mb-4">NECC Rate by Supervisor Zone</h2>
       <div className="bg-white rounded-xl shadow-md p-6 mb-10">
-        {zoneStatsLoading || revenueLoading ? (
+        {zoneStatsLoading ? (
           <p className="text-gray-500 text-center py-10">Loading zone data...</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             {ZONES.map((zoneName) => {
-              const eggsDistributed = Number(zoneStats[zoneName]?.eggs) || 0;
-              const totalRevenue = Number(zoneRevenue[zoneName]?.total) || 0;
-              const computedRate = eggsDistributed > 0 ? totalRevenue / eggsDistributed : 0;
+              const computedRate = Number(String(zoneStats[zoneName]?.necc ?? 0).replace(/[^\d.]/g, "")) || 0;
 
               return (
                 <div key={zoneName} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center">
