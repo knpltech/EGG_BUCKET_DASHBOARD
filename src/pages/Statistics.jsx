@@ -72,6 +72,20 @@ const getLastWeekRange = () => {
   return { from: toLocalIsoDate(lastWeekStart), to: toLocalIsoDate(lastWeekEnd) };
 };
 
+const getWeekBeforeRange = (range) => {
+  const end = new Date(`${range.from}T00:00:00`);
+  end.setDate(end.getDate() - 1);
+  const start = new Date(end);
+  start.setDate(start.getDate() - 6);
+  return { from: toLocalIsoDate(start), to: toLocalIsoDate(end) };
+};
+
+const getPreviousWeekDate = (isoDate) => {
+  const date = new Date(`${isoDate}T00:00:00`);
+  date.setDate(date.getDate() - 7);
+  return toLocalIsoDate(date);
+};
+
 const buildDailyTimeline = (items, range) => {
   const byDate = new Map((items || []).map((item) => [item.key, item]));
   const start = new Date(`${range.from}T00:00:00`);
@@ -83,6 +97,22 @@ const buildDailyTimeline = (items, range) => {
     rows.push(byDate.get(key) || { key, salesQty: 0, damages: 0, revenue: 0 });
   }
   return rows;
+};
+
+const buildComparableDailyRows = (currentItems, previousItems, range) => {
+  const previousByDate = new Map((previousItems || []).map((item) => [item.key, item]));
+
+  return buildDailyTimeline(currentItems, range).map((item) => {
+    const previous = previousByDate.get(getPreviousWeekDate(item.key)) || {};
+    return {
+      ...item,
+      weekday: formatWeekday(item.key),
+      displayDate: formatLongDate(item.key),
+      eggGrowth: getComparison(item.salesQty, previous.salesQty),
+      damageGrowth: getComparison(item.damages, previous.damages, true),
+      revenueGrowth: getComparison(item.revenue, previous.revenue),
+    };
+  });
 };
 
 const getAprilToTodayRange = () => {
@@ -180,6 +210,7 @@ const Statistics = () => {
   const [comparisonStats, setComparisonStats] = useState(null);
   const [thisWeekStats, setThisWeekStats] = useState(null);
   const [lastWeekStats, setLastWeekStats] = useState(null);
+  const [previousWeekStats, setPreviousWeekStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -193,7 +224,8 @@ const Statistics = () => {
         const comparisonRangeRequest = getAprilToTodayRange();
         const thisWeekRange = getRange("week");
         const lastWeekRange = getLastWeekRange();
-        const [dailyData, comparisonData, thisWeekData, lastWeekData] = await Promise.all([
+        const previousWeekRange = getWeekBeforeRange(lastWeekRange);
+        const [dailyData, comparisonData, thisWeekData, lastWeekData, previousWeekData] = await Promise.all([
           fetchStatisticsData({
             dateFrom: dateRange.from,
             dateTo: dateRange.to,
@@ -206,18 +238,21 @@ const Statistics = () => {
           }),
           fetchStatisticsData({ ...thisWeekRange, zone: zoneFilter }),
           fetchStatisticsData({ ...lastWeekRange, zone: zoneFilter }),
+          fetchStatisticsData({ ...previousWeekRange, zone: zoneFilter }),
         ]);
 
         setDailyStats(dailyData);
         setComparisonStats(comparisonData);
         setThisWeekStats(thisWeekData);
         setLastWeekStats(lastWeekData);
+        setPreviousWeekStats(previousWeekData);
       } catch {
         setError("Failed to load statistics data");
         setDailyStats(null);
         setComparisonStats(null);
         setThisWeekStats(null);
         setLastWeekStats(null);
+        setPreviousWeekStats(null);
       } finally {
         setLoading(false);
       }
@@ -246,16 +281,14 @@ const Statistics = () => {
     weekday: formatWeekday(item.key),
     displayDate: formatLongDate(item.key),
   })), [daily]);
-  const thisWeekRows = useMemo(() => buildDailyTimeline(thisWeekStats?.daily, getRange("week")).map((item) => ({
-    ...item,
-    weekday: formatWeekday(item.key),
-    displayDate: formatLongDate(item.key),
-  })), [thisWeekStats]);
-  const lastWeekRows = useMemo(() => buildDailyTimeline(lastWeekStats?.daily, getLastWeekRange()).map((item) => ({
-    ...item,
-    weekday: formatWeekday(item.key),
-    displayDate: formatLongDate(item.key),
-  })), [lastWeekStats]);
+  const thisWeekRows = useMemo(
+    () => buildComparableDailyRows(thisWeekStats?.daily, lastWeekStats?.daily, getRange("week")),
+    [thisWeekStats, lastWeekStats],
+  );
+  const lastWeekRows = useMemo(
+    () => buildComparableDailyRows(lastWeekStats?.daily, previousWeekStats?.daily, getLastWeekRange()),
+    [lastWeekStats, previousWeekStats],
+  );
 
   const weeklyRows = useMemo(() => weekly.map((item, index, rows) => {
     const previous = rows[index - 1] || {};
@@ -423,8 +456,8 @@ const Statistics = () => {
               subtitle="This week to date alongside the previous week"
             />
             <div className="mt-4 grid grid-cols-1 gap-5 xl:grid-cols-2">
-              <DailyDataTable title="This Week" range={getRange("week")} rows={thisWeekRows} />
               <DailyDataTable title="Last Week" range={getLastWeekRange()} rows={lastWeekRows} />
+              <DailyDataTable title="This Week" range={getRange("week")} rows={thisWeekRows} />
             </div>
           </section>
 
@@ -600,9 +633,24 @@ const DailyDataTable = ({ title, range, rows }) => (
             <tr key={item.key} className="border-t border-gray-100 text-gray-700">
               <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">{item.weekday}</td>
               <td className="whitespace-nowrap px-4 py-3">{item.displayDate}</td>
-              <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{number(item.salesQty)}</td>
-              <td className="whitespace-nowrap px-4 py-3 text-right">{number(item.damages)}</td>
-              <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.revenue)}</td>
+              <td className="px-4 py-3">
+                <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                  <span className="font-semibold">{number(item.salesQty)}</span>
+                  <GrowthPill label="" comparison={item.eggGrowth} compact />
+                </div>
+              </td>
+              <td className="px-4 py-3">
+                <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                  <span>{number(item.damages)}</span>
+                  <GrowthPill label="" comparison={item.damageGrowth} compact />
+                </div>
+              </td>
+              <td className="px-4 py-3">
+                <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                  <span>{currency(item.revenue)}</span>
+                  <GrowthPill label="" comparison={item.revenueGrowth} compact />
+                </div>
+              </td>
             </tr>
           )) : <tr><td colSpan="5"><EmptyState /></td></tr>}
         </tbody>
