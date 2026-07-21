@@ -132,13 +132,15 @@ const getDailyRateForDate = (rates, outletId, isoDate) => rates
   .sort((a, b) => String(a.effectiveFrom).localeCompare(String(b.effectiveFrom)))
   .pop();
 
+const salesDayKey = (outletId, isoDate) => `${String(outletId)}::${isoDate}`;
+
 const hasDailyRateInRange = (rates, outletId, from, to) => rates.some((rate) => (
   String(rate.outletId) === String(outletId)
   && String(rate.effectiveFrom) <= to
   && (!rate.effectiveTo || String(rate.effectiveTo) >= from)
 ));
 
-const getProvisionalSalaryForRange = (rates, outletId, from, to, finalizedMonths) => {
+const getProvisionalSalaryForRange = (rates, salesDayKeys, outletId, from, to, finalizedMonths) => {
   if (!from || !to) return 0;
   const start = new Date(`${from}T00:00:00`);
   const end = new Date(`${to}T00:00:00`);
@@ -149,6 +151,7 @@ const getProvisionalSalaryForRange = (rates, outletId, from, to, finalizedMonths
   for (const day = new Date(start); day <= lastDay; day.setDate(day.getDate() + 1)) {
     const iso = toLocalIsoDate(day);
     if (finalizedMonths.has(iso.slice(0, 7))) continue;
+    if (!salesDayKeys.has(salesDayKey(outletId, iso))) continue;
     total += toNumber(getDailyRateForDate(rates, outletId, iso)?.dailyRate);
   }
   return total;
@@ -267,6 +270,17 @@ const fetchDailySalaryRates = async () => {
   }
 };
 
+const fetchOutletSalesDays = async (from, to) => {
+  try {
+    const response = await fetch(`${API_URL}/outlet-salary/sales-days?from=${from}&to=${to}`);
+    if (!response.ok) return new Set();
+    const data = await response.json();
+    return new Set((Array.isArray(data) ? data : []).map((item) => salesDayKey(item.outletId, item.date)));
+  } catch {
+    return new Set();
+  }
+};
+
 const getOutletStatus = (item) => {
   const damageRate = item.salesQty ? (Number(item.damages || 0) / Number(item.salesQty || 1)) * 100 : 0;
   if (Number(item.salesQty || 0) <= 0) return { label: "No Sales", className: "bg-gray-100 text-gray-600" };
@@ -282,6 +296,7 @@ const OutletPerformance = () => {
   const [stats, setStats] = useState(null);
   const [salaryEntries, setSalaryEntries] = useState([]);
   const [dailySalaryRates, setDailySalaryRates] = useState([]);
+  const [salesDayKeys, setSalesDayKeys] = useState(() => new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [todayRate, setTodayRate] = useState("");
@@ -297,13 +312,15 @@ const OutletPerformance = () => {
         const zoneFilter = isSupervisor ? zone : "";
         const monthKeys = getMonthKeysInRange(dateRange.from, dateRange.to);
         const comparisonRange = getAprilToTodayRange();
+        const salesDaysFrom = [dateRange.from, comparisonRange.from].sort()[0];
+        const salesDaysTo = [dateRange.to, comparisonRange.to].sort().at(-1);
         const comparisonMonthKeys = getMonthKeysInRange(comparisonRange.from, comparisonRange.to);
         const yearList = Array.from(new Set([
           ...monthKeys,
           ...comparisonMonthKeys,
         ].map((key) => Number(key.slice(0, 4))).filter((year) => Number.isFinite(year))));
 
-        const [rangeData, comparisonData, dailyRates, ...salaryData] = await Promise.all([
+        const [rangeData, comparisonData, dailyRates, salesDays, ...salaryData] = await Promise.all([
           fetchStatisticsData({
             dateFrom: dateRange.from,
             dateTo: dateRange.to,
@@ -315,6 +332,7 @@ const OutletPerformance = () => {
             zone: zoneFilter,
           }),
           fetchDailySalaryRates(),
+          fetchOutletSalesDays(salesDaysFrom, salesDaysTo),
           ...yearList.map((year) => fetchOutletSalaryEntries(year)),
         ]);
 
@@ -322,12 +340,14 @@ const OutletPerformance = () => {
         setComparisonStats(comparisonData);
         setSalaryEntries(salaryData.flat());
         setDailySalaryRates(dailyRates);
+        setSalesDayKeys(salesDays);
       } catch {
         setError("Failed to load outlet performance data");
         setStats(null);
         setComparisonStats(null);
         setSalaryEntries([]);
         setDailySalaryRates([]);
+        setSalesDayKeys(new Set());
       } finally {
         setLoading(false);
       }
@@ -363,6 +383,7 @@ const OutletPerformance = () => {
       if (!hasDailyRateInRange(dailySalaryRates, outlet.key, dateRange.from, dateRange.to)) return;
       const provisional = getProvisionalSalaryForRange(
         dailySalaryRates,
+        salesDayKeys,
         outlet.key,
         dateRange.from,
         dateRange.to,
@@ -372,7 +393,7 @@ const OutletPerformance = () => {
     });
 
     return map;
-  }, [dailySalaryRates, dateRange.from, dateRange.to, outletRows, salaryEntries, selectedMonthKeys]);
+  }, [dailySalaryRates, dateRange.from, dateRange.to, outletRows, salaryEntries, salesDayKeys, selectedMonthKeys]);
 
   const monthlySalaryByKey = useMemo(() => {
     const map = new Map();
@@ -395,6 +416,7 @@ const OutletPerformance = () => {
         if (hasDailyRateInRange(dailySalaryRates, outlet.key, `${monthKey}-01`, monthEnd)) {
           return sum + getProvisionalSalaryForRange(
             dailySalaryRates,
+            salesDayKeys,
             outlet.key,
             `${monthKey}-01`,
             monthEnd,
@@ -407,7 +429,7 @@ const OutletPerformance = () => {
     });
 
     return map;
-  }, [comparisonMonthKeys, comparisonStats, dailySalaryRates, salaryEntries]);
+  }, [comparisonMonthKeys, comparisonStats, dailySalaryRates, salaryEntries, salesDayKeys]);
 
   const performanceRows = useMemo(() => outletRows.map((item) => {
     const salary = salaryByOutlet.get(item.key) || 0;
@@ -479,7 +501,7 @@ const OutletPerformance = () => {
       const savedSalaryEntry = salaryEntryByMonth.get(monthKey);
       const driverSalary = outletRows.reduce((total, outlet) => {
         const dailyRate = getDailyRateForDate(dailySalaryRates, outlet.key, isoDate);
-        if (dailyRate) return total + toNumber(dailyRate.dailyRate);
+        if (dailyRate) return total + (salesDayKeys.has(salesDayKey(outlet.key, isoDate)) ? toNumber(dailyRate.dailyRate) : 0);
         return total + getFinalizedSalaryForRange(savedSalaryEntry, outlet.key, isoDate, isoDate);
       }, 0);
       const totalCost = driverSalary
@@ -493,7 +515,7 @@ const OutletPerformance = () => {
         perEggCost: eggsDelivered > 0 ? Number((totalCost / eggsDelivered).toFixed(3)) : null,
       };
     });
-  }, [dailySalaryRates, dateRange.from, dateRange.to, outletRows, salaryEntries, stats]);
+  }, [dailySalaryRates, dateRange.from, dateRange.to, outletRows, salaryEntries, salesDayKeys, stats]);
 
   const monthlyComparisonRows = useMemo(() => buildMonthlyTimeline(comparisonStats?.monthly || [], comparisonRange.from, comparisonRange.to).map((item) => {
     const driverSalary = monthlySalaryByKey.get(item.key) || 0;

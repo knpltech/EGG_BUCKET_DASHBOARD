@@ -453,7 +453,7 @@ const Statistics = () => {
           <section className="mb-6 rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
             <SectionHeader
               title="Daily Data"
-              subtitle="This week to date alongside the previous week"
+              subtitle={<span className="font-bold text-gray-700">Weekday-to-Weekday Comparison (e.g., Monday vs Last Monday, Tuesday vs Last Tuesday)</span>}
             />
             <div className="mt-4 grid grid-cols-1 gap-5 xl:grid-cols-2">
               <DailyDataTable title="Last Week" range={getLastWeekRange()} rows={lastWeekRows} />

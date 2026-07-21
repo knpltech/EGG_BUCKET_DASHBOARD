@@ -33,8 +33,9 @@ const formatCurrency = (value) => `Rs ${toNumber(value).toLocaleString("en-IN")}
 const formatNumber = (value) => toNumber(value).toLocaleString("en-IN");
 
 const toIsoDate = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+const salesDayKey = (outletId, isoDate) => `${String(outletId)}::${isoDate}`;
 
-const getProvisionalSalary = (dailyRates, outletId, year, month) => {
+const getProvisionalSalary = (dailyRates, salesDayKeys, outletId, year, month) => {
   const start = new Date(year, month - 1, 1);
   const monthEnd = new Date(year, month, 0);
   const today = new Date();
@@ -45,6 +46,7 @@ const getProvisionalSalary = (dailyRates, outletId, year, month) => {
   let total = 0;
   for (const day = new Date(start); day <= end; day.setDate(day.getDate() + 1)) {
     const iso = toIsoDate(day);
+    if (!salesDayKeys.has(salesDayKey(outletId, iso))) continue;
     const rate = dailyRates
       .filter((item) => String(item.outletId) === String(outletId)
         && String(item.effectiveFrom) <= iso
@@ -81,6 +83,7 @@ export default function OutletSalary() {
   const [outlets, setOutlets] = useState([]);
   const [entries, setEntries] = useState([]);
   const [dailyRates, setDailyRates] = useState([]);
+  const [salesDayKeys, setSalesDayKeys] = useState(() => new Set());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -114,7 +117,7 @@ export default function OutletSalary() {
       const finalEntry = finalByMonth.get(month);
       const provisionalOutlets = Object.fromEntries(sortedOutlets.map((outlet) => [
         outlet.id,
-        getProvisionalSalary(dailyRates, outlet.id, selectedYear, month),
+        getProvisionalSalary(dailyRates, salesDayKeys, outlet.id, selectedYear, month),
       ]));
       const provisionalTotal = Object.values(provisionalOutlets).reduce((sum, amount) => sum + toNumber(amount), 0);
       if (!finalEntry && !provisionalTotal) return null;
@@ -137,7 +140,7 @@ export default function OutletSalary() {
         isProvisional: !finalEntry || sortedOutlets.some((outlet) => hasDailyRateInMonth(dailyRates, outlet.id, selectedYear, month)),
       };
     }).filter(Boolean);
-  }, [dailyRates, entries, selectedYear, sortedOutlets]);
+  }, [dailyRates, entries, salesDayKeys, selectedYear, sortedOutlets]);
 
   const ytdTotal = useMemo(() => {
     return tableRows.reduce((sum, row) => sum + toNumber(row.total), 0);
@@ -170,31 +173,35 @@ export default function OutletSalary() {
     setError("");
 
     try {
-      const [outletResponse, salaryResponse, dailyRateResponse] = await Promise.all([
+      const [outletResponse, salaryResponse, dailyRateResponse, salesDaysResponse] = await Promise.all([
         fetch(`${API_URL}/outlets/all`),
         fetch(`${API_URL}/outlet-salary/all?year=${selectedYear}`),
         fetch(`${API_URL}/outlet-salary/daily-rates`),
+        fetch(`${API_URL}/outlet-salary/sales-days?from=${selectedYear}-01-01&to=${selectedYear}-12-31`),
       ]);
 
       if (!outletResponse.ok) {
         throw new Error("Failed to load outlets");
       }
-      if (!salaryResponse.ok || !dailyRateResponse.ok) {
+      if (!salaryResponse.ok || !dailyRateResponse.ok || !salesDaysResponse?.ok) {
         throw new Error("Failed to load outlet salary entries");
       }
 
       const outletData = await outletResponse.json();
       const salaryData = await salaryResponse.json();
       const dailyRateData = await dailyRateResponse.json();
+      const salesDayData = await salesDaysResponse.json();
 
       setOutlets(Array.isArray(outletData) ? outletData : []);
       setEntries(Array.isArray(salaryData) ? salaryData : []);
       setDailyRates(Array.isArray(dailyRateData) ? dailyRateData : []);
+      setSalesDayKeys(new Set((Array.isArray(salesDayData) ? salesDayData : []).map((item) => salesDayKey(item.outletId, item.date))));
     } catch (loadError) {
       setError(loadError?.message || "Failed to load page data");
       setOutlets([]);
       setEntries([]);
       setDailyRates([]);
+      setSalesDayKeys(new Set());
     } finally {
       setLoading(false);
     }
@@ -226,7 +233,7 @@ export default function OutletSalary() {
     const nextInputs = {};
 
     sortedOutlets.forEach((outlet) => {
-      const amount = toNumber(existing?.outlets?.[outlet.id] ?? getProvisionalSalary(dailyRates, outlet.id, selectedYear, monthValue));
+      const amount = toNumber(existing?.outlets?.[outlet.id] ?? getProvisionalSalary(dailyRates, salesDayKeys, outlet.id, selectedYear, monthValue));
       nextInputs[outlet.id] = amount ? String(amount) : "";
     });
 
@@ -248,7 +255,7 @@ export default function OutletSalary() {
     const nextInputs = {};
 
     sortedOutlets.forEach((outlet) => {
-      const amount = toNumber(existing?.outlets?.[outlet.id] ?? getProvisionalSalary(dailyRates, outlet.id, selectedYear, monthValue));
+      const amount = toNumber(existing?.outlets?.[outlet.id] ?? getProvisionalSalary(dailyRates, salesDayKeys, outlet.id, selectedYear, monthValue));
       nextInputs[outlet.id] = amount ? String(amount) : "";
     });
 

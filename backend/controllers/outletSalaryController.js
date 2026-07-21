@@ -163,6 +163,51 @@ export const getDailySalaryRates = async (_req, res) => {
   }
 };
 
+export const getOutletSalesDays = async (req, res) => {
+  try {
+    const from = normalizeIsoDate(req.query?.from);
+    const to = normalizeIsoDate(req.query?.to);
+
+    if (!from || !to || from > to) {
+      return res.status(400).json({ message: "Valid from and to dates are required" });
+    }
+
+    const [salesSnapshot, outletSnapshot] = await Promise.all([
+      db.collection("dailySales")
+        .where("date", ">=", from)
+        .where("date", "<=", to)
+        .get(),
+      db.collection("outlets").get(),
+    ]);
+
+    const normalizeOutletKey = (value) => String(value || "").trim().toLowerCase();
+    const outletIdsByAlias = new Map();
+    outletSnapshot.docs.forEach((doc) => {
+      const outlet = doc.data() || {};
+      [doc.id, outlet.id, outlet.area, outlet.name].forEach((alias) => {
+        const key = normalizeOutletKey(alias);
+        if (key) outletIdsByAlias.set(key, doc.id);
+      });
+    });
+
+    const days = [];
+    salesSnapshot.docs.forEach((doc) => {
+      const entry = doc.data() || {};
+      const date = String(entry.date || "").slice(0, 10);
+      Object.entries(entry.outlets || {}).forEach(([outletKey, salesQty]) => {
+        const outletId = outletIdsByAlias.get(normalizeOutletKey(outletKey));
+        if (!outletId || !date || toNumber(salesQty) <= 0) return;
+        days.push({ outletId, date, salesQty: toNumber(salesQty) });
+      });
+    });
+
+    return res.json(days);
+  } catch (error) {
+    console.error("Failed to fetch outlet sales days:", error.message);
+    return res.status(500).json({ message: "Failed to fetch outlet sales days", error: error.message });
+  }
+};
+
 export const saveDailySalaryRate = async (req, res) => {
   try {
     const outletId = String(req.body?.outletId || "").trim();
