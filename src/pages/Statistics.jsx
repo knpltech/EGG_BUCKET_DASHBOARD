@@ -455,9 +455,9 @@ const Statistics = () => {
               title="Daily Data"
               subtitle={<span className="font-bold text-gray-700">Weekday-to-Weekday Comparison (e.g., Monday vs Last Monday, Tuesday vs Last Tuesday)</span>}
             />
-            <div className="mt-4 grid grid-cols-1 gap-5 xl:grid-cols-2">
-              <DailyDataTable title="Last Week" range={getLastWeekRange()} rows={lastWeekRows} />
+            <div className="mt-4 space-y-5">
               <DailyDataTable title="This Week" range={getRange("week")} rows={thisWeekRows} />
+              <DailyDataTable title="Last Week" range={getLastWeekRange()} rows={lastWeekRows} />
             </div>
           </section>
 
@@ -617,9 +617,9 @@ const DailyDataTable = ({ title, range, rows }) => (
       <h3 className="text-sm font-bold text-gray-900">{title}</h3>
       <p className="mt-0.5 text-xs text-gray-500">{formatLongDate(range.from)} to {formatLongDate(range.to)}</p>
     </div>
-    <div className="max-h-[360px] overflow-auto">
+    <div>
       <table className="min-w-full text-sm">
-        <thead className="sticky top-0 bg-white text-xs font-semibold uppercase text-gray-500 shadow-sm">
+        <thead className="bg-white text-xs font-semibold uppercase text-gray-500 shadow-sm">
           <tr>
             <th className="px-4 py-3 text-left">Weekday</th>
             <th className="px-4 py-3 text-left">Date</th>

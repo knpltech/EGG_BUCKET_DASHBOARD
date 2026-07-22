@@ -91,6 +91,40 @@ const getPaymentStatusClasses = (status) => {
     : "bg-red-600 text-white";
 };
 
+const getDateFilterRange = (filter, today = new Date()) => {
+  const currentDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const iso = (date) => getLocalIsoDate(date);
+
+  if (filter === "today") return { from: iso(currentDay), to: iso(currentDay) };
+  if (filter === "yesterday") {
+    const yesterday = new Date(currentDay);
+    yesterday.setDate(yesterday.getDate() - 1);
+    return { from: iso(yesterday), to: iso(yesterday) };
+  }
+  if (filter === "thisWeek") {
+    const start = new Date(currentDay);
+    start.setDate(start.getDate() - start.getDay());
+    return { from: iso(start), to: iso(currentDay) };
+  }
+  if (filter === "lastWeek") {
+    const end = new Date(currentDay);
+    end.setDate(end.getDate() - end.getDay() - 1);
+    const start = new Date(end);
+    start.setDate(start.getDate() - 6);
+    return { from: iso(start), to: iso(end) };
+  }
+  if (filter === "thisMonth") {
+    return { from: iso(new Date(currentDay.getFullYear(), currentDay.getMonth(), 1)), to: iso(currentDay) };
+  }
+  if (filter === "lastMonth") {
+    return {
+      from: iso(new Date(currentDay.getFullYear(), currentDay.getMonth() - 1, 1)),
+      to: iso(new Date(currentDay.getFullYear(), currentDay.getMonth(), 0)),
+    };
+  }
+  return null;
+};
+
 export default function StockOptionsPage() {
   const { isAdmin } = getRoleFlags();
   const [selectedDate, setSelectedDate] = useState(getLocalIsoDate());
@@ -117,6 +151,8 @@ export default function StockOptionsPage() {
   const [collectionReturnTotal, setCollectionReturnTotal] = useState(0);
   const [collectionError, setCollectionError] = useState("");
   const [isCollectionLoading, setIsCollectionLoading] = useState(false);
+  const [tableDateFilter, setTableDateFilter] = useState("all");
+  const [tableDate, setTableDate] = useState("");
 
   const user = useMemo(() => {
     try {
@@ -184,18 +220,33 @@ export default function StockOptionsPage() {
   }, [loadCollectionRows]);
 
   const filteredRows = useMemo(() => {
+    const range = getDateFilterRange(tableDateFilter);
     return (Array.isArray(rows) ? rows : [])
       .filter((row) => row?.zone === selectedZone)
+      .filter((row) => {
+        const rowDate = normalizeDate(row.date || row.createdAt);
+        if (tableDateFilter === "date") return !tableDate || rowDate === tableDate;
+        return !range || (rowDate >= range.from && rowDate <= range.to);
+      })
       .sort(sortRowsByDateDesc);
-  }, [rows, selectedZone]);
+  }, [rows, selectedZone, tableDateFilter, tableDate]);
 
   const selectedDateRows = useMemo(() => {
-    return filteredRows.filter((row) => normalizeDate(row.date || row.createdAt) === selectedDate);
-  }, [filteredRows, selectedDate]);
+    return (Array.isArray(rows) ? rows : []).filter((row) => (
+      row?.zone === selectedZone && normalizeDate(row.date || row.createdAt) === selectedDate
+    ));
+  }, [rows, selectedZone, selectedDate]);
 
   const totalSelectedQuantity = useMemo(() => {
     return selectedDateRows.reduce((sum, row) => sum + toNumber(row.stockQuantity), 0);
   }, [selectedDateRows]);
+
+  const filteredRowTotals = useMemo(() => {
+    return filteredRows.reduce((totals, row) => ({
+      quantity: totals.quantity + toNumber(row.stockQuantity),
+      invoiceAmount: totals.invoiceAmount + toNumber(row.invoiceAmount ?? toNumber(row.stockQuantity) * toNumber(row.price)),
+    }), { quantity: 0, invoiceAmount: 0 });
+  }, [filteredRows]);
 
   const invoiceAmount = useMemo(() => {
     return toNumber(stockQuantity) * toNumber(price);
@@ -666,7 +717,7 @@ export default function StockOptionsPage() {
               <div>
                 <h2 className="text-xl font-semibold text-gray-900">Entered Stock Data</h2>
                 <p className="mt-1 text-sm text-gray-500">
-                  {selectedZone} · {selectedDate} · Total quantity: {totalSelectedQuantity.toLocaleString("en-IN")}
+                  {selectedZone} · {filteredRows.length.toLocaleString("en-IN")} entries shown
                 </p>
               </div>
               {lastRefreshedAt ? (
@@ -674,6 +725,51 @@ export default function StockOptionsPage() {
                   Last refreshed {lastRefreshedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                 </p>
               ) : null}
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <input
+                type="date"
+                value={tableDate}
+                onChange={(event) => {
+                  setTableDate(event.target.value);
+                  setTableDateFilter("date");
+                }}
+                aria-label="Filter stock entries by date"
+                className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+              />
+              {[
+                ["today", "Today"],
+                ["yesterday", "Yesterday"],
+                ["thisWeek", "This Week"],
+                ["lastWeek", "Last Week"],
+                ["thisMonth", "This Month"],
+                ["lastMonth", "Last Month"],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setTableDateFilter(value)}
+                  className={`h-9 rounded-lg border px-3 text-xs font-semibold transition ${
+                    tableDateFilter === value
+                      ? "border-orange-500 bg-orange-500 text-white"
+                      : "border-gray-200 bg-white text-gray-700 hover:border-orange-300 hover:text-orange-600"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => { setTableDateFilter("all"); setTableDate(""); }}
+                className={`h-9 rounded-lg border px-3 text-xs font-semibold transition ${
+                  tableDateFilter === "all"
+                    ? "border-orange-500 bg-orange-500 text-white"
+                    : "border-gray-200 bg-white text-gray-700 hover:border-orange-300 hover:text-orange-600"
+                }`}
+              >
+                All Dates
+              </button>
             </div>
 
             <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200">
@@ -728,12 +824,23 @@ export default function StockOptionsPage() {
                     ))
                   ) : (
                     <tr>
-                      <td className="px-4 py-6 text-center text-gray-500" colSpan={isAdmin ? 8 : 7}>
-                        No stock entries found for {selectedZone}.
+                      <td className="px-4 py-6 text-center text-gray-500" colSpan={isAdmin ? 9 : 8}>
+                        No stock entries found for this filter.
                       </td>
                     </tr>
                   )}
                 </tbody>
+                {filteredRows.length ? (
+                  <tfoot className="border-t-2 border-orange-200 bg-orange-50 text-sm font-bold text-gray-900">
+                    <tr>
+                      <td className="px-4 py-3 text-orange-800" colSpan="2">Total</td>
+                      <td className="px-4 py-3">{filteredRowTotals.quantity.toLocaleString("en-IN")}</td>
+                      <td className="px-4 py-3">-</td>
+                      <td className="px-4 py-3">₹{filteredRowTotals.invoiceAmount.toLocaleString("en-IN")}</td>
+                      <td className="px-4 py-3 text-gray-500" colSpan={isAdmin ? 4 : 3}>Filtered entries total</td>
+                    </tr>
+                  </tfoot>
+                ) : null}
               </table>
             </div>
           </div>
