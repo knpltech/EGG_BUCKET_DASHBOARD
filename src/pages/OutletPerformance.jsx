@@ -34,6 +34,7 @@ const number = (value) => Math.round(Number(value) || 0).toLocaleString("en-IN")
 const percent = (value) => `${(Number(value) || 0).toFixed(2)}%`;
 
 const toNumber = (value) => Number(value) || 0;
+const roundToTwoDecimals = (value) => Math.round((Number(value) || 0) * 100) / 100;
 
 const formatLongDate = (iso) => {
   if (!iso) return "-";
@@ -478,7 +479,7 @@ const OutletPerformance = () => {
 
   const averageNeccRate = derivedTotals.salesQty ? derivedTotals.revenue / derivedTotals.salesQty : 0;
   const perEggCost = derivedTotals.salesQty ? derivedTotals.totalCost / derivedTotals.salesQty : 0;
-  const profitScore = profitRate === null ? null : averageNeccRate - profitRate - perEggCost;
+  const profitScore = profitRate === null ? null : roundToTwoDecimals(averageNeccRate - profitRate - perEggCost);
   const profit = profitScore === null ? null : profitScore * derivedTotals.salesQty;
 
   const costBreakdown = useMemo(() => ([
@@ -593,21 +594,25 @@ const OutletPerformance = () => {
   const handleExport = () => {
     const rows = [
       ["Outlet", "Salary", "Total Eggs", "Damage", "Damage Cost", "Incentive", "Food Allowance", "Total Cost", "Cost/Egg", "Avg NECC", "Profit Score", "Profit", "Status"],
-      ...performanceRows.map((item) => [
-        item.label,
-        item.salary,
-        item.salesQty,
-        item.damages,
-        item.damageCost,
-        item.incentive,
-        item.foodAllowance,
-        item.totalCost,
-        item.costPerEgg,
-        item.averageNeccRate,
-        profitRate === null ? "" : toNumber(item.averageNeccRate) - profitRate - toNumber(item.costPerEgg),
-        profitRate === null ? "" : (toNumber(item.averageNeccRate) - profitRate - toNumber(item.costPerEgg)) * toNumber(item.salesQty),
-        getOutletStatus(item).label,
-      ]),
+      ...performanceRows.map((item) => {
+        const itemProfitScore = profitRate === null ? null : roundToTwoDecimals(toNumber(item.averageNeccRate) - profitRate - toNumber(item.costPerEgg));
+        const itemProfit = itemProfitScore === null ? null : itemProfitScore * toNumber(item.salesQty);
+        return [
+          item.label,
+          item.salary,
+          item.salesQty,
+          item.damages,
+          item.damageCost,
+          item.incentive,
+          item.foodAllowance,
+          item.totalCost,
+          item.costPerEgg,
+          item.averageNeccRate,
+          itemProfitScore ?? "",
+          itemProfit ?? "",
+          getOutletStatus(item).label,
+        ];
+      }),
     ];
     const csv = rows.map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -725,6 +730,8 @@ const OutletPerformance = () => {
                 <tbody>
                   {performanceRows.length ? performanceRows.map((item) => {
                     const status = getOutletStatus(item);
+                    const itemProfitScore = profitRate === null ? null : roundToTwoDecimals(toNumber(item.averageNeccRate) - profitRate - toNumber(item.costPerEgg));
+                    const itemProfit = itemProfitScore === null ? null : itemProfitScore * toNumber(item.salesQty);
                     return (
                       <tr key={item.key} className="border-t border-gray-100 text-gray-700">
                         <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">{item.label}</td>
@@ -738,10 +745,10 @@ const OutletPerformance = () => {
                         <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.costPerEgg)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.averageNeccRate)}</td>
                         <td className={`whitespace-nowrap px-4 py-3 text-right font-semibold ${profitRate === null ? "text-gray-400" : "text-gray-900"}`}>
-                          {profitRate === null ? "—" : currency(toNumber(item.averageNeccRate) - profitRate - toNumber(item.costPerEgg))}
+                          {itemProfitScore === null ? "—" : currency(itemProfitScore)}
                         </td>
                         <td className={`whitespace-nowrap px-4 py-3 text-right font-semibold ${profitRate === null ? "text-gray-400" : "text-gray-900"}`}>
-                          {profitRate === null ? "—" : currency((toNumber(item.averageNeccRate) - profitRate - toNumber(item.costPerEgg)) * toNumber(item.salesQty))}
+                          {itemProfit === null ? "—" : currency(itemProfit)}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">
                           <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-bold ${status.className}`}>{status.label}</span>
