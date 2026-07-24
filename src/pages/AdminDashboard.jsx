@@ -285,6 +285,29 @@ const createEmptyZoneClosing = () =>
 const createEmptyZoneAmounts = () =>
   Object.fromEntries(ZONES.map((zoneName) => [zoneName, 0]));
 
+const createEmptyZonePurchasePrices = () =>
+  Object.fromEntries(ZONES.map((zoneName) => [zoneName, 0]));
+
+const getZoneWisePurchasePrices = (rows = [], selectedDate) => {
+  const totals = Object.fromEntries(ZONES.map((zoneName) => [zoneName, { quantity: 0, invoiceAmount: 0 }]));
+
+  for (const row of Array.isArray(rows) ? rows : []) {
+    if (normalizeDate(row?.date || row?.createdAt) !== selectedDate) continue;
+    const normalizedZone = normalizeZone(row?.zone);
+    const zoneLabel = `Zone ${normalizedZone}`;
+    if (!ZONES.includes(zoneLabel)) continue;
+
+    const quantity = toNumber(row?.stockQuantity);
+    totals[zoneLabel].quantity += quantity;
+    totals[zoneLabel].invoiceAmount += toNumber(row?.invoiceAmount ?? quantity * toNumber(row?.price));
+  }
+
+  return Object.fromEntries(ZONES.map((zoneName) => [
+    zoneName,
+    totals[zoneName].quantity > 0 ? totals[zoneName].invoiceAmount / totals[zoneName].quantity : 0,
+  ]));
+};
+
 const getAmountValueForOutlet = (doc, outlet) => {
   const values = doc?.outlets;
   if (!values || typeof values !== "object" || Array.isArray(values)) return 0;
@@ -430,6 +453,7 @@ export default function AdminDashboard() {
   const [zoneIncentive, setZoneIncentive] = useState(createEmptyZoneAmounts);
   const [zoneAdvance, setZoneAdvance] = useState(createEmptyZoneAmounts);
   const [zoneFoodAllowance, setZoneFoodAllowance] = useState(createEmptyZoneAmounts);
+  const [zonePurchasePrice, setZonePurchasePrice] = useState(createEmptyZonePurchasePrices);
   const [amountLoading, setAmountLoading] = useState(true);
   const [earliestAllowedDate, setEarliestAllowedDate] = useState(initialEarliestDate || historyBaseDate);
   const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
@@ -518,7 +542,7 @@ export default function AdminDashboard() {
 
     try {
       const outlets = await updateOutlets();
-      const [salesRes, damageRes, neccRes, zoneStockRes, incentiveRes, advanceRes, foodAllowanceRes] = await Promise.all([
+      const [salesRes, damageRes, neccRes, zoneStockRes, incentiveRes, advanceRes, foodAllowanceRes, stockOptionsRes] = await Promise.all([
         fetch(`${API_URL}/dailysales/date/${selectedDate}`),
         fetch(`${API_URL}/daily-damage/date/${selectedDate}`),
         fetch(`${API_URL}/neccrate/date/${selectedDate}`),
@@ -526,9 +550,10 @@ export default function AdminDashboard() {
         fetch(`${API_URL}/incentive/date/${selectedDate}`),
         fetch(`${API_URL}/advance/date/${selectedDate}`),
         fetch(`${API_URL}/food-allowance/date/${selectedDate}`),
+        fetch(`${API_URL}/stock-options/date/${selectedDate}`),
       ]);
 
-      const [salesRows, damageRows, neccRates, zoneStockRows, incentiveRows, advanceRows, foodAllowanceRows] = await Promise.all([
+      const [salesRows, damageRows, neccRates, zoneStockRows, incentiveRows, advanceRows, foodAllowanceRows, stockOptionsRows] = await Promise.all([
         salesRes.json(),
         damageRes.json(),
         neccRes.json(),
@@ -536,6 +561,7 @@ export default function AdminDashboard() {
         incentiveRes.json(),
         advanceRes.json(),
         foodAllowanceRes.json(),
+        stockOptionsRes.json(),
       ].map(async (promiseValue) => normalizeRows(await promiseValue)));
 
       setEggsToday(getSalesTotal(salesRows, outlets, selectedDate));
@@ -557,6 +583,7 @@ export default function AdminDashboard() {
       setZoneIncentive(getZoneWiseAmountTotals(incentiveRows, outlets, selectedDate));
       setZoneAdvance(getZoneWiseAmountTotals(advanceRows, outlets, selectedDate));
       setZoneFoodAllowance(getZoneWiseAmountTotals(foodAllowanceRows, outlets, selectedDate));
+      setZonePurchasePrice(getZoneWisePurchasePrices(stockOptionsRows, selectedDate));
     } catch (err) {
       console.error("Dashboard load error:", err);
       setEggsToday(0);
@@ -567,6 +594,7 @@ export default function AdminDashboard() {
       setZoneIncentive(createEmptyZoneAmounts());
       setZoneAdvance(createEmptyZoneAmounts());
       setZoneFoodAllowance(createEmptyZoneAmounts());
+      setZonePurchasePrice(createEmptyZonePurchasePrices());
     } finally {
       setRevenueLoading(false);
       setZoneStatsLoading(false);
@@ -721,6 +749,22 @@ export default function AdminDashboard() {
               <div key={zoneName} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center">
                 <h3 className="font-semibold text-orange-600 mb-4">{zoneName}</h3>
                 <div className="text-3xl font-bold text-orange-600">{formatCurrency(zoneData.total)}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <h2 className="text-xl font-bold mb-4">Purchase Price by Zone</h2>
+      <div className="bg-white rounded-xl shadow-md p-6 mb-10">
+        {zoneStatsLoading ? (
+          <p className="text-gray-500 text-center py-10">Loading purchase prices...</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            {ZONES.map((zoneName) => (
+              <div key={zoneName} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition text-center">
+                <h3 className="font-semibold text-orange-600 mb-4">{zoneName}</h3>
+                <div className="text-3xl font-bold text-orange-600">₹{toNumber(zonePurchasePrice[zoneName]).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
               </div>
             ))}
           </div>

@@ -152,7 +152,8 @@ export default function StockOptionsPage() {
   const [collectionError, setCollectionError] = useState("");
   const [isCollectionLoading, setIsCollectionLoading] = useState(false);
   const [tableDateFilter, setTableDateFilter] = useState("thisWeek");
-  const [tableDate, setTableDate] = useState("");
+  const [tableDateFrom, setTableDateFrom] = useState("");
+  const [tableDateTo, setTableDateTo] = useState("");
 
   const user = useMemo(() => {
     try {
@@ -225,11 +226,13 @@ export default function StockOptionsPage() {
       .filter((row) => row?.zone === selectedZone)
       .filter((row) => {
         const rowDate = normalizeDate(row.date || row.createdAt);
-        if (tableDateFilter === "date") return !tableDate || rowDate === tableDate;
+        if (tableDateFilter === "custom") {
+          return (!tableDateFrom || rowDate >= tableDateFrom) && (!tableDateTo || rowDate <= tableDateTo);
+        }
         return !range || (rowDate >= range.from && rowDate <= range.to);
       })
       .sort(sortRowsByDateDesc);
-  }, [rows, selectedZone, tableDateFilter, tableDate]);
+  }, [rows, selectedZone, tableDateFilter, tableDateFrom, tableDateTo]);
 
   const selectedDateRows = useMemo(() => {
     return (Array.isArray(rows) ? rows : []).filter((row) => (
@@ -247,6 +250,10 @@ export default function StockOptionsPage() {
       invoiceAmount: totals.invoiceAmount + toNumber(row.invoiceAmount ?? toNumber(row.stockQuantity) * toNumber(row.price)),
     }), { quantity: 0, invoiceAmount: 0 });
   }, [filteredRows]);
+
+  const purchasePrice = filteredRowTotals.quantity > 0
+    ? filteredRowTotals.invoiceAmount / filteredRowTotals.quantity
+    : 0;
 
   const invoiceAmount = useMemo(() => {
     return toNumber(stockQuantity) * toNumber(price);
@@ -720,22 +727,40 @@ export default function StockOptionsPage() {
                   {selectedZone} · {filteredRows.length.toLocaleString("en-IN")} entries shown
                 </p>
               </div>
-              {lastRefreshedAt ? (
-                <p className="text-xs text-gray-400">
-                  Last refreshed {lastRefreshedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                </p>
-              ) : null}
+              <div className="flex items-center gap-4">
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-right shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Purchase Price</p>
+                  <p className="mt-1 text-lg font-bold text-emerald-900">₹{purchasePrice.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                </div>
+                {lastRefreshedAt ? (
+                  <p className="text-xs text-gray-400">
+                    Last refreshed {lastRefreshedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                ) : null}
+              </div>
             </div>
 
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <input
                 type="date"
-                value={tableDate}
+                value={tableDateFrom}
                 onChange={(event) => {
-                  setTableDate(event.target.value);
-                  setTableDateFilter("date");
+                  setTableDateFrom(event.target.value);
+                  setTableDateFilter("custom");
                 }}
-                aria-label="Filter stock entries by date"
+                aria-label="Filter stock entries from date"
+                className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
+              />
+              <span className="text-xs font-medium text-gray-500">to</span>
+              <input
+                type="date"
+                value={tableDateTo}
+                min={tableDateFrom || undefined}
+                onChange={(event) => {
+                  setTableDateTo(event.target.value);
+                  setTableDateFilter("custom");
+                }}
+                aria-label="Filter stock entries to date"
                 className="h-9 rounded-lg border border-gray-200 bg-white px-3 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-orange-400"
               />
               {[
@@ -749,7 +774,11 @@ export default function StockOptionsPage() {
                 <button
                   key={value}
                   type="button"
-                  onClick={() => setTableDateFilter(value)}
+                onClick={() => {
+                  setTableDateFilter(value);
+                  setTableDateFrom("");
+                  setTableDateTo("");
+                }}
                   className={`h-9 rounded-lg border px-3 text-xs font-semibold transition ${
                     tableDateFilter === value
                       ? "border-orange-500 bg-orange-500 text-white"
@@ -761,7 +790,7 @@ export default function StockOptionsPage() {
               ))}
               <button
                 type="button"
-                onClick={() => { setTableDateFilter("all"); setTableDate(""); }}
+                onClick={() => { setTableDateFilter("all"); setTableDateFrom(""); setTableDateTo(""); }}
                 className={`h-9 rounded-lg border px-3 text-xs font-semibold transition ${
                   tableDateFilter === "all"
                     ? "border-orange-500 bg-orange-500 text-white"
