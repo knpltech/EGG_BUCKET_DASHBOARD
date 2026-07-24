@@ -151,7 +151,7 @@ export default function StockOptionsPage() {
   const [collectionReturnTotal, setCollectionReturnTotal] = useState(0);
   const [collectionError, setCollectionError] = useState("");
   const [isCollectionLoading, setIsCollectionLoading] = useState(false);
-  const [tableDateFilter, setTableDateFilter] = useState("all");
+  const [tableDateFilter, setTableDateFilter] = useState("thisWeek");
   const [tableDate, setTableDate] = useState("");
 
   const user = useMemo(() => {

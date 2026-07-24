@@ -479,6 +479,7 @@ const OutletPerformance = () => {
   const averageNeccRate = derivedTotals.salesQty ? derivedTotals.revenue / derivedTotals.salesQty : 0;
   const perEggCost = derivedTotals.salesQty ? derivedTotals.totalCost / derivedTotals.salesQty : 0;
   const profitScore = profitRate === null ? null : averageNeccRate - profitRate - perEggCost;
+  const profit = profitScore === null ? null : profitScore * derivedTotals.salesQty;
 
   const costBreakdown = useMemo(() => ([
     { name: "Salary", value: derivedTotals.salary, color: "#f97316" },
@@ -591,7 +592,7 @@ const OutletPerformance = () => {
 
   const handleExport = () => {
     const rows = [
-      ["Outlet", "Salary", "Total Eggs", "Damage", "Damage Cost", "Incentive", "Food Allowance", "Total Cost", "Cost/Egg", "Avg NECC", "Status"],
+      ["Outlet", "Salary", "Total Eggs", "Damage", "Damage Cost", "Incentive", "Food Allowance", "Total Cost", "Cost/Egg", "Avg NECC", "Profit Score", "Profit", "Status"],
       ...performanceRows.map((item) => [
         item.label,
         item.salary,
@@ -603,6 +604,8 @@ const OutletPerformance = () => {
         item.totalCost,
         item.costPerEgg,
         item.averageNeccRate,
+        profitRate === null ? "" : toNumber(item.averageNeccRate) - profitRate - toNumber(item.costPerEgg),
+        profitRate === null ? "" : (toNumber(item.averageNeccRate) - profitRate - toNumber(item.costPerEgg)) * toNumber(item.salesQty),
         getOutletStatus(item).label,
       ]),
     ];
@@ -715,6 +718,7 @@ const OutletPerformance = () => {
                     <th className="px-4 py-3 text-right">Cost/Egg</th>
                     <th className="px-4 py-3 text-right">Avg NECC</th>
                     <th className="px-4 py-3 text-right">Profit Score</th>
+                    <th className="px-4 py-3 text-right">Profit</th>
                     <th className="px-4 py-3 text-right">Status</th>
                   </tr>
                 </thead>
@@ -736,13 +740,16 @@ const OutletPerformance = () => {
                         <td className={`whitespace-nowrap px-4 py-3 text-right font-semibold ${profitRate === null ? "text-gray-400" : "text-gray-900"}`}>
                           {profitRate === null ? "—" : currency(toNumber(item.averageNeccRate) - profitRate - toNumber(item.costPerEgg))}
                         </td>
+                        <td className={`whitespace-nowrap px-4 py-3 text-right font-semibold ${profitRate === null ? "text-gray-400" : "text-gray-900"}`}>
+                          {profitRate === null ? "—" : currency((toNumber(item.averageNeccRate) - profitRate - toNumber(item.costPerEgg)) * toNumber(item.salesQty))}
+                        </td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">
                           <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-bold ${status.className}`}>{status.label}</span>
                         </td>
                       </tr>
                     );
                   }) : (
-                    <tr><td colSpan="12"><EmptyState /></td></tr>
+                    <tr><td colSpan="13"><EmptyState /></td></tr>
                   )}
                 </tbody>
               </table>
@@ -805,7 +812,14 @@ const OutletPerformance = () => {
                         {profitScore === null ? "—" : currency(profitScore)}
                       </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-3">
+                      <div>
+                        <div className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Profit</div>
+                        <div className="mt-1 text-2xl font-extrabold text-emerald-800">
+                          {profit === null ? "-" : currency(profit)}
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
                       <label className="sr-only" htmlFor="cost-today-rate">Today&apos;s Price</label>
                       <input
                         id="cost-today-rate"
@@ -821,11 +835,13 @@ const OutletPerformance = () => {
                       <button type="button" onClick={handleCalculateProfit} className="h-9 rounded-lg bg-emerald-600 px-3 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700">
                         Calculate
                       </button>
+                      </div>
                     </div>
                   </div>
                   <p className="mt-1 text-xs text-emerald-700">
                     Average NECC Rate − Today&apos;s Price − Per Egg Cost
                   </p>
+                  <p className="mt-1 text-xs text-emerald-700">Profit = Profit Score × Total Eggs</p>
                   {profitScore === null && <p className="mt-1 text-xs text-gray-500">Enter Today&apos;s Price to calculate.</p>}
                 </div>
               </div>
