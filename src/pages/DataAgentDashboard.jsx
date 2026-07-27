@@ -64,9 +64,9 @@ export default function DataAgentDashboard() {
     // Eggs distributed today
     const fetchEggsToday = async () => {
       try {
-        const res = await fetch(`${API_URL}/dailysales/all`);
-        const sales = await res.json();
         const today = toLocalIsoDate();
+        const res = await fetch(`${API_URL}/dailysales/date/${today}`);
+        const sales = await res.json();
         const todayRow = Array.isArray(sales) ? sales.find(r => r.date === today) : null;
         setEggsToday(todayRow && !isNaN(Number(todayRow.total)) ? Number(todayRow.total) : 0);
       } catch {
@@ -77,12 +77,8 @@ export default function DataAgentDashboard() {
     // NECC Rate (latest)
     const fetchNeccRate = async () => {
       try {
-        const res = await fetch(`${API_URL}/neccrate/all`);
-        const rates = await res.json();
-        let latest = null;
-        if (Array.isArray(rates) && rates.length > 0) {
-          latest = rates.reduce((a, b) => new Date(a.date) > new Date(b.date) ? a : b);
-        }
+        const res = await fetch(`${API_URL}/neccrate/latest`);
+        const latest = await res.json();
         let rateNum = 0;
         if (latest && latest.rate) {
           const match = String(latest.rate).replace(/,/g, '').match(/([\d.]+)/);
@@ -100,9 +96,9 @@ export default function DataAgentDashboard() {
     // Digital Payments today
     const fetchDigitalPayments = async () => {
       try {
-        const res = await fetch(`${API_URL}/digital-payments/all`);
-        const payments = await res.json();
         const today = toLocalIsoDate();
+        const res = await fetch(`${API_URL}/digital-payments/date/${today}`);
+        const payments = await res.json();
         const todayRow = Array.isArray(payments) ? payments.find(r => r.date === today) : null;
         setDigitalPaymentsToday(todayRow && !isNaN(Number(todayRow.total)) ? Number(todayRow.total) : 0);
       } catch {
@@ -113,9 +109,9 @@ export default function DataAgentDashboard() {
     // Cash Payments today
     const fetchCashPayments = async () => {
       try {
-        const res = await fetch(`${API_URL}/cash-payments/all`);
-        const payments = await res.json();
         const today = toLocalIsoDate();
+        const res = await fetch(`${API_URL}/cash-payments/date/${today}`);
+        const payments = await res.json();
         const todayRow = Array.isArray(payments) ? payments.find(r => r.date === today) : null;
         setCashPaymentsToday(todayRow && !isNaN(Number(todayRow.total)) ? Number(todayRow.total) : 0);
       } catch {

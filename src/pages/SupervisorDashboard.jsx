@@ -76,6 +76,8 @@ const getLatestDayDoc = (rows, today) => {
   return dayRows[0] || null;
 };
 
+const asRows = (value) => (Array.isArray(value) ? value : value ? [value] : []);
+
 const getSalesValueForOutlet = (doc, outlet) => {
   const outletId = outlet?.id || outlet;
   const area = outlet?.area || outlet?.name || outletId;
@@ -235,14 +237,14 @@ export default function SupervisorDashboard() {
     try {
       const [outletsRes, salesRes, damagesRes, cashRes, digitalRes, incentiveRes, advanceRes, stockOptionsRes, foodAllowanceRes] = await Promise.all([
         fetch(`${API_URL}/outlets/all`),
-        fetch(`${API_URL}/dailysales/all`),
-        fetch(`${API_URL}/daily-damage/all`),
-        fetch(`${API_URL}/cash-payments/all`),
-        fetch(`${API_URL}/digital-payments/all`),
-        fetch(`${API_URL}/incentive/all`),
-        fetch(`${API_URL}/advance/all`),
+        fetch(`${API_URL}/dailysales/date/${today}`),
+        fetch(`${API_URL}/daily-damage/date/${today}`),
+        fetch(`${API_URL}/cash-payments/date/${today}`),
+        fetch(`${API_URL}/digital-payments/date/${today}`),
+        fetch(`${API_URL}/incentive/date/${today}`),
+        fetch(`${API_URL}/advance/date/${today}`),
         fetch(`${API_URL}/stock-options/date/${today}`),
-        fetch(`${API_URL}/food-allowance/all`),
+        fetch(`${API_URL}/food-allowance/date/${today}`),
       ]);
 
       const outletsRaw = await outletsRes.json();
@@ -250,11 +252,11 @@ export default function SupervisorDashboard() {
       const damagesRaw = await damagesRes.json();
       const cashRaw = await cashRes.json();
       const digitalRaw = await digitalRes.json();
-      const incentiveRaw = await incentiveRes.json();
-      const advanceRaw = await advanceRes.json();
+      const incentiveRaw = asRows(await incentiveRes.json());
+      const advanceRaw = asRows(await advanceRes.json());
       let stockOptionsRaw = await stockOptionsRes.json();
       if (!Array.isArray(stockOptionsRaw) && stockOptionsRaw) stockOptionsRaw = [stockOptionsRaw];
-      const foodAllowanceRaw = await foodAllowanceRes.json();
+      const foodAllowanceRaw = asRows(await foodAllowanceRes.json());
 
       const zoneOutlets = Array.isArray(outletsRaw)
         ? outletsRaw.filter((outlet) => isOutletInSupervisorZones(outlet, normalizedUserZones))
@@ -297,7 +299,7 @@ export default function SupervisorDashboard() {
 
     refresh();
 
-    const intervalId = window.setInterval(refresh, 30000);
+    const intervalId = window.setInterval(refresh, 120000);
     const handleFocus = () => refresh();
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") refresh();

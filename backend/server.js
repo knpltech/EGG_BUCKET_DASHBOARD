@@ -4,7 +4,7 @@ import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
 import { db } from "./config/firebase.js";
-import { cacheJsonResponse } from "./middleware/responseCache.js";
+import { cacheJsonResponse, clearResponseCache } from "./middleware/responseCache.js";
 import { requireAuthentication } from "./middleware/authMiddleware.js";
 
 import authRoutes from "./routes/authRoutes.js";
@@ -34,7 +34,8 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const env = globalThis.process?.env || {};
-const HEAVY_GET_CACHE_TTL_MS = Number(env.HEAVY_GET_CACHE_TTL_MS || 30_000);
+const API_METRICS_ENABLED = String(env.API_METRICS_ENABLED || "false").toLowerCase() === "true";
+const HEAVY_GET_CACHE_TTL_MS = Number(env.HEAVY_GET_CACHE_TTL_MS || 60_000);
 const HEAVY_GET_CACHE_PATHS = new Set([
   "/api/dailysales/all",
   "/api/daily-damage/all",
@@ -58,6 +59,36 @@ app.use(cacheJsonResponse({
   namespace: "heavy-get",
   shouldCache: (req) => HEAVY_GET_CACHE_PATHS.has(req.path),
 }));
+
+app.use("/api", (req, res, next) => {
+  const startedAt = Date.now();
+
+  res.once("finish", () => {
+    const durationMs = Date.now() - startedAt;
+
+    if (API_METRICS_ENABLED) {
+      console.info(JSON.stringify({
+        event: "api_request",
+        method: req.method,
+        path: req.originalUrl,
+        status: res.statusCode,
+        durationMs,
+        cache: res.getHeader("X-Cache") || "BYPASS",
+        contentLength: res.getHeader("Content-Length") || null,
+      }));
+    }
+  });
+
+  if (req.method === "GET") return next();
+
+  res.once("finish", () => {
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      clearResponseCache();
+    }
+  });
+
+  return next();
+});
 
 // Optional Firestore warmup. Keep disabled by default to avoid an extra read on startup.
 if (String(env.ENABLE_FIRESTORE_WARMUP || "").toLowerCase() === "true") {

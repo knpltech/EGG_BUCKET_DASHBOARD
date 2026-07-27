@@ -85,6 +85,16 @@ export const getAllNeccRates = async (req, res) => {
   }
 };
 
+export const getLatestNeccRate = async (_req, res) => {
+  try {
+    const snapshot = await db.collection("neccRates").orderBy("date", "desc").limit(1).get();
+    const latest = snapshot.empty ? null : normalizeNeccDoc(snapshot.docs[0].id, snapshot.docs[0].data());
+    res.status(200).json(latest);
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching latest NECC rate", error: error.message });
+  }
+};
+
 export const getNeccRatesByDate = async (req, res) => {
   try {
     const { date } = req.params;

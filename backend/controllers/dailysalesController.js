@@ -1,5 +1,6 @@
 import { db } from "../config/firebase.js";
 import { validateSupervisorSameDayEntry } from "../utils/entryCutoff.js";
+import { applyDateQuery } from "../utils/dateQuery.js";
 
 // Add a new daily sales entry to Firestore
 // If an entry already exists for the date, merge the outlet data instead of creating a new one
@@ -88,7 +89,7 @@ export const addDailySales = async (req, res) => {
 // Get all daily sales entries from Firestore
 export const getAllDailySales = async (req, res) => {
   try {
-    const snapshot = await db.collection("dailySales").orderBy("date", "desc").get();
+    const snapshot = await applyDateQuery(db.collection("dailySales"), req.query).get();
     const sales = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     res.status(200).json(sales);
   } catch (error) {

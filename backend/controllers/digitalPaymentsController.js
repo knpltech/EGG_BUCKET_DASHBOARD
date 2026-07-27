@@ -1,6 +1,7 @@
 import { db } from "../config/firebase.js";
 import { FieldPath } from "firebase-admin/firestore";
 import { validateSupervisorSameDayEntry } from "../utils/entryCutoff.js";
+import { applyDateQuery } from "../utils/dateQuery.js";
 
 const AUDIT_STATUSES = new Set(["verified", "pending", "mismatch"]);
 
@@ -104,7 +105,7 @@ export const addDigitalPayment = async (req, res) => {
 // Get all digital payment entries from Firestore
 export const getAllDigitalPayments = async (req, res) => {
   try {
-    const snapshot = await db.collection("digitalPayments").orderBy("date", "desc").get();
+    const snapshot = await applyDateQuery(db.collection("digitalPayments"), req.query).get();
     const payments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     res.status(200).json(payments);
   } catch (error) {

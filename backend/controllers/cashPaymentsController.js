@@ -1,5 +1,6 @@
 import { db } from "../config/firebase.js";
 import { validateSupervisorSameDayEntry } from "../utils/entryCutoff.js";
+import { applyDateQuery } from "../utils/dateQuery.js";
 
 // Add a new cash payment entry to Firestore
 // If an entry already exists for the date, merge the outlets instead of creating a new one
@@ -91,7 +92,7 @@ export const addCashPayment = async (req, res) => {
 // Get all cash payment entries from Firestore
 export const getAllCashPayments = async (req, res) => {
   try {
-    const snapshot = await db.collection("cashPayments").orderBy("date", "desc").get();
+    const snapshot = await applyDateQuery(db.collection("cashPayments"), req.query).get();
     const payments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     res.status(200).json(payments);
   } catch (error) {

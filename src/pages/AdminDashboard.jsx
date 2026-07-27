@@ -633,7 +633,7 @@ export default function AdminDashboard() {
 
     refresh();
 
-    const intervalId = window.setInterval(refresh, 30000);
+    const intervalId = window.setInterval(refresh, 120000);
     const handleFocus = () => refresh();
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") refresh();
