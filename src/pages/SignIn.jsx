@@ -63,8 +63,6 @@ export default function SignIn() {
     const timeoutId = setTimeout(() => controller.abort(), SIGNIN_TIMEOUT_MS);
 
     try {
-      await Promise.resolve(warmupPromiseRef.current).catch(() => null);
-
       const response = await fetch(`${API_URL}/auth/signin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

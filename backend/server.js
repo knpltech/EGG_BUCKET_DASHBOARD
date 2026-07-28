@@ -6,6 +6,7 @@ import { fileURLToPath } from "url";
 import { db } from "./config/firebase.js";
 import { cacheJsonResponse, clearResponseCache } from "./middleware/responseCache.js";
 import { requireAuthentication } from "./middleware/authMiddleware.js";
+import { startMidnightDefaultsScheduler } from "./services/midnightDefaults.js";
 
 import authRoutes from "./routes/authRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
@@ -132,6 +133,8 @@ app.use("/api/cash-closure", cashClosureRoutes);
 app.use("/api/remarks", remarksRoutes);
 app.use("/api/outlet-summary", outletSummaryRoutes);
 app.use("/api/outlet-salary", outletSalaryRoutes);
+
+startMidnightDefaultsScheduler(() => clearResponseCache());
 
 const PORT = env.PORT || 5000;
 app.listen(PORT, () =>
