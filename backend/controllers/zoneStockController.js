@@ -136,18 +136,25 @@ const getZoneOutletMap = (outlets) => {
 
 const getValueForOutletRef = (values, outletRef, normalizedValueMap) => {
   const directKeys = [outletRef?.id, outletRef?.area, outletRef?.name].filter(Boolean);
+  let fallbackValue = 0;
+
   for (const key of directKeys) {
-    if (values[key] !== undefined) return toNumber(values[key]);
+    if (values[key] === undefined) continue;
+    const value = toNumber(values[key]);
+    if (value !== 0) return value;
+    fallbackValue = value;
   }
 
   for (const key of directKeys) {
     const normalizedKey = normalizeTextKey(key);
     if (normalizedKey && normalizedValueMap.has(normalizedKey)) {
-      return toNumber(normalizedValueMap.get(normalizedKey));
+      const value = toNumber(normalizedValueMap.get(normalizedKey));
+      if (value !== 0) return value;
+      fallbackValue = value;
     }
   }
 
-  return 0;
+  return fallbackValue;
 };
 
 const sumValuesByOutletRefs = (values, outletRefs) => {
@@ -170,12 +177,15 @@ const getLatestRowsByDate = (rows, valueKey) => {
   for (const row of rows || []) {
     const date = normalizeDate(row?.date || row?.createdAt);
     if (!date) continue;
-    const existing = byDate.get(date);
-    const currentTs = toMillis(row?.updatedAt || row?.createdAt || row?.date);
-    const existingTs = existing ? toMillis(existing?.updatedAt || existing?.createdAt || existing?.date) : -1;
-    if (!existing || currentTs >= existingTs) {
-      byDate.set(date, row?.[valueKey]);
-    }
+    const mergedValues = { ...(byDate.get(date) || {}) };
+    Object.entries(row?.[valueKey] || {}).forEach(([key, rawValue]) => {
+      const currentValue = toNumber(mergedValues[key]);
+      const nextValue = toNumber(rawValue);
+      if (mergedValues[key] === undefined || nextValue !== 0 || currentValue === 0) {
+        mergedValues[key] = rawValue;
+      }
+    });
+    byDate.set(date, mergedValues);
   }
   return byDate;
 };
@@ -194,12 +204,12 @@ const computeZoneDayTotals = async (zone, dateIso) => {
   const salesRows = salesSnap.docs.map(mapDoc);
   const damageRows = damagesSnap.docs.map(mapDoc);
 
-  const salesDoc = getLatestDocByDate(salesRows, dateIso);
-  const damagesDoc = getLatestDocByDate(damageRows, dateIso);
+  const salesByDate = getLatestRowsByDate(salesRows, "outlets");
+  const damagesByDate = getLatestRowsByDate(damageRows, "damages");
 
   return {
-    salesQty: sumValuesByOutletRefs(salesDoc?.outlets, outletKeys),
-    damagesQty: sumValuesByOutletRefs(damagesDoc?.damages, outletKeys),
+    salesQty: sumValuesByOutletRefs(salesByDate.get(dateIso), outletKeys),
+    damagesQty: sumValuesByOutletRefs(damagesByDate.get(dateIso), outletKeys),
   };
 };
 

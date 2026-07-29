@@ -91,10 +91,14 @@ const extractUserZones = (user, fallbackZone) => {
 const getValueForOutlet = (values, outlet) => {
   if (!values || typeof values !== "object" || Array.isArray(values)) return 0;
   const keys = [outlet?.id, outlet?.area, outlet?.name].filter(Boolean);
+  let fallbackValue = 0;
   for (const key of keys) {
-    if (values[key] !== undefined) return toNumber(values[key]);
+    if (values[key] === undefined) continue;
+    const value = toNumber(values[key]);
+    if (value !== 0) return value;
+    fallbackValue = value;
   }
-  return 0;
+  return fallbackValue;
 };
 
 const hasValueForOutlet = (values, outlet) => {
@@ -103,12 +107,19 @@ const hasValueForOutlet = (values, outlet) => {
   return keys.some((key) => values[key] !== undefined);
 };
 
-const getLatestDayDoc = (rows, selectedDate) => {
-  if (!Array.isArray(rows)) return null;
-  const dayRows = rows
-    .filter((doc) => normalizeDate(doc?.date || doc?.createdAt) === selectedDate)
-    .sort((a, b) => getDocTimestamp(b) - getDocTimestamp(a));
-  return dayRows[0] || null;
+const getMergedDayValues = (rows, selectedDate, field) => {
+  const values = {};
+  (rows || []).forEach((row) => {
+    if (normalizeDate(row?.date || row?.createdAt) !== selectedDate) return;
+    Object.entries(row?.[field] || {}).forEach(([key, rawValue]) => {
+      const currentValue = toNumber(values[key]);
+      const nextValue = toNumber(rawValue);
+      if (values[key] === undefined || nextValue !== 0 || currentValue === 0) {
+        values[key] = rawValue;
+      }
+    });
+  });
+  return values;
 };
 
 const getResponseErrorMessage = async (response, fallbackMessage) => {
@@ -328,19 +339,23 @@ export default function ZoneStockEntry() {
     });
   }, [outlets, selectedZone]);
 
-  const selectedDateSalesDoc = useMemo(() => getLatestDayDoc(salesRows, selectedDate), [salesRows, selectedDate]);
+  const selectedDateSalesValues = useMemo(
+    () => getMergedDayValues(salesRows, selectedDate, "outlets"),
+    [salesRows, selectedDate],
+  );
+
+  const selectedDateDamageValues = useMemo(
+    () => getMergedDayValues(damageRows, selectedDate, "damages"),
+    [damageRows, selectedDate],
+  );
 
   const selectedDateSales = useMemo(() => {
-    const doc = selectedDateSalesDoc;
-    if (!doc) return 0;
-    return zoneOutlets.reduce((sum, outlet) => sum + getValueForOutlet(doc.outlets, outlet), 0);
-  }, [selectedDateSalesDoc, zoneOutlets]);
+    return zoneOutlets.reduce((sum, outlet) => sum + getValueForOutlet(selectedDateSalesValues, outlet), 0);
+  }, [selectedDateSalesValues, zoneOutlets]);
 
   const selectedDateDamages = useMemo(() => {
-    const doc = getLatestDayDoc(damageRows, selectedDate);
-    if (!doc) return 0;
-    return zoneOutlets.reduce((sum, outlet) => sum + getValueForOutlet(doc.damages, outlet), 0);
-  }, [damageRows, selectedDate, zoneOutlets]);
+    return zoneOutlets.reduce((sum, outlet) => sum + getValueForOutlet(selectedDateDamageValues, outlet), 0);
+  }, [selectedDateDamageValues, zoneOutlets]);
 
   const selectedDateStockOptionTotal = useMemo(() => {
     return stockOptionRows.reduce((sum, row) => sum + toNumber(row?.stockQuantity), 0);
@@ -381,9 +396,9 @@ export default function ZoneStockEntry() {
 
   const missingSalesOutlets = useMemo(() => {
     if (!zoneOutlets.length) return [];
-    const salesValues = selectedDateSalesDoc?.outlets || {};
+    const salesValues = selectedDateSalesValues;
     return zoneOutlets.filter((outlet) => !hasValueForOutlet(salesValues, outlet));
-  }, [zoneOutlets, selectedDateSalesDoc]);
+  }, [zoneOutlets, selectedDateSalesValues]);
 
   useEffect(() => {
     setStockIn(String(selectedDateStockOptionTotal));
