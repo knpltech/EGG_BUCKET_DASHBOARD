@@ -36,7 +36,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const env = globalThis.process?.env || {};
 const API_METRICS_ENABLED = String(env.API_METRICS_ENABLED || "false").toLowerCase() === "true";
-const HEAVY_GET_CACHE_TTL_MS = Number(env.HEAVY_GET_CACHE_TTL_MS || 60_000);
+const HEAVY_GET_CACHE_TTL_MS = Number(env.HEAVY_GET_CACHE_TTL_MS || 300_000);
 const HEAVY_GET_CACHE_PATHS = new Set([
   "/api/dailysales/all",
   "/api/daily-damage/all",
@@ -50,6 +50,9 @@ const HEAVY_GET_CACHE_PATHS = new Set([
   "/api/cash-closure/all",
   "/api/zone-stock/all",
   "/api/stock-options/all",
+  "/api/outlet-summary",
+  "/api/reports",
+  "/api/reports/statistics",
 ]);
 
 app.use(cors());

@@ -205,8 +205,9 @@ export const getReports = async (req, res) => {
         const entry = ensureDateEntry(dateKey);
         if (!entry) return;
         const eventTime = getEntryTimeMs(data);
-        if (!neccRateMeta[dateKey] || eventTime >= neccRateMeta[dateKey]) {
-          entry.neccRate = Number(rateValue) || 0;
+        const normalizedRate = Number(rateValue) || 0;
+        if (normalizedRate > 0 || (!entry.neccRate && (!neccRateMeta[dateKey] || eventTime >= neccRateMeta[dateKey]))) {
+          entry.neccRate = normalizedRate;
           neccRateMeta[dateKey] = eventTime;
         }
       }
@@ -424,8 +425,9 @@ export const getStatistics = async (req, res) => {
         Object.entries(data.outlets).forEach(([key, value]) => {
           const outlet = getOutletForKey(key);
           const entry = ensureOutletDate(outlet, dateKey);
-          if (entry && eventTime >= entry.neccRateTime) {
-            entry.neccRate = Number(value) || 0;
+          const normalizedRate = Number(value) || 0;
+          if (entry && (normalizedRate > 0 || (!entry.neccRate && eventTime >= entry.neccRateTime))) {
+            entry.neccRate = normalizedRate;
             entry.neccRateTime = eventTime;
           }
         });
@@ -434,8 +436,9 @@ export const getStatistics = async (req, res) => {
 
       const outlet = getOutletForKey(data.outletId || data.outlet);
       const entry = ensureOutletDate(outlet, dateKey);
-      if (entry && eventTime >= entry.neccRateTime) {
-        entry.neccRate = parseNeccRateValue(data);
+      const normalizedRate = parseNeccRateValue(data);
+      if (entry && (normalizedRate > 0 || (!entry.neccRate && eventTime >= entry.neccRateTime))) {
+        entry.neccRate = normalizedRate;
         entry.neccRateTime = eventTime;
       }
     });

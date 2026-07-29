@@ -26,15 +26,15 @@ export default function DailyTable({ rows, outlets = [], onEdit, showRupee = fal
   // This handles both storage formats (keyed by id OR by area)
   const getOutletValue = (row, outletId) => {
     const outletsObj = row.outlets || {};
-    // Direct match by id
-    if (outletsObj[outletId] !== undefined) return Number(outletsObj[outletId]) || 0;
-    // Fallback: match by area name (area === outletId in some data sets)
+    const directValue = outletsObj[outletId];
     const outletMeta = (allOutlets || []).find(o => (typeof o === 'string' ? o : o.id) === outletId);
     if (outletMeta) {
       const area = outletMeta.area || outletMeta.name;
-      if (area && outletsObj[area] !== undefined) return Number(outletsObj[area]) || 0;
+      const areaValue = area ? outletsObj[area] : undefined;
+      if ((Number(directValue) || 0) !== 0 || areaValue === undefined) return Number(directValue) || 0;
+      return Number(areaValue) || 0;
     }
-    return 0;
+    return Number(directValue) || 0;
   };
 
   // Row total: always recompute from outlets so edits reflect immediately

@@ -21,6 +21,7 @@ import Dailyheader from "../components/Dailyheader";
 import DailyTable from "../components/DailyTable";
 import Weeklytrend from "../components/Weeklytrend";
 import { getThisWeekRange } from "../utils/dateRange";
+import { mergeDailyRecords } from "../utils/mergeDailyRecords";
 
 const OUTLETS_KEY = "egg_outlets_v1";
 
@@ -225,9 +226,9 @@ const Dailysales = () => {
       const res = await fetch(`${API_URL}/dailysales/all`);
       const data = await res.json();
       if (Array.isArray(data)) {
-        setRows(data.map((d) => ({ id: d.id || d._id, ...d })));
+        setRows(mergeDailyRecords(data.map((d) => ({ id: d.id || d._id, ...d }))));
       } else if (data.success && Array.isArray(data.data)) {
-        setRows(data.data.map((d) => ({ id: d.id || d._id, ...d })));
+        setRows(mergeDailyRecords(data.data.map((d) => ({ id: d.id || d._id, ...d }))));
       } else {
         setRows([]);
       }
@@ -329,9 +330,10 @@ const Dailysales = () => {
     const outletId = outletObj?.id || outletRef;
     const outletArea = outletObj?.area || outletObj?.name;
     const values = row?.outlets || {};
-    if (values[outletId] !== undefined) return Number(values[outletId]) || 0;
-    if (outletArea && values[outletArea] !== undefined) return Number(values[outletArea]) || 0;
-    return 0;
+    const directValue = Number(values[outletId]) || 0;
+    const areaValue = outletArea ? values[outletArea] : undefined;
+    if (directValue !== 0 || areaValue === undefined) return directValue;
+    return Number(areaValue) || 0;
   }, []);
 
   const getOutletEditKey = useCallback((row, outletRef) => {

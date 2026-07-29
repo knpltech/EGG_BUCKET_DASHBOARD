@@ -1,5 +1,4 @@
 import { db } from "../config/firebase.js";
-import { ensureZeroCashClosure } from "../controllers/cashClosureController.js";
 import { ensureZeroStockOptionEntry } from "../controllers/stockOptionsController.js";
 
 const ZONES = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"];
@@ -123,10 +122,7 @@ let lastProcessedDate = "";
 export const runMidnightDefaults = async (date = getIndiaDate(-1)) => {
   if (lastProcessedDate === date) return false;
 
-  await Promise.all(ZONES.flatMap((zone) => [
-    ensureZeroStockOptionEntry(zone, date),
-    ensureZeroCashClosure(zone, date),
-  ]));
+  await Promise.all(ZONES.map((zone) => ensureZeroStockOptionEntry(zone, date)));
   await ensureDailyEntryDefaults(date);
   lastProcessedDate = date;
   return true;

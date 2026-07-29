@@ -5,6 +5,36 @@ import * as XLSX from "xlsx";
 import DailyTable from "../components/DailyTable";
 
 const API_URL = import.meta.env.VITE_API_URL;
+
+const mergePaymentRowsByDate = (records) => {
+  const byDate = new Map();
+
+  (Array.isArray(records) ? records : []).forEach((record) => {
+    const date = record?.date;
+    if (!date) return;
+
+    const existing = byDate.get(date) || { ...record, outlets: {}, total: 0 };
+    const values = record?.outlets || {};
+    const mergedOutlets = { ...(existing.outlets || {}) };
+
+    Object.entries(values).forEach(([outlet, value]) => {
+      const current = Number(mergedOutlets[outlet]) || 0;
+      const next = Number(value) || 0;
+      if (mergedOutlets[outlet] === undefined || next !== 0 || current === 0) {
+        mergedOutlets[outlet] = value;
+      }
+    });
+
+    byDate.set(date, {
+      ...existing,
+      ...record,
+      outlets: mergedOutlets,
+      total: Object.values(mergedOutlets).reduce((sum, value) => sum + (Number(value) || 0), 0),
+    });
+  });
+
+  return Array.from(byDate.values());
+};
 const STORAGE_KEY = "egg_outlets_v1";
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -313,7 +343,7 @@ export default function CashPayments() {
     try {
       const res = await fetch(`${API_URL}/cash-payments/all`);
       const data = await res.json();
-      setRows(Array.isArray(data) ? data.map(d => ({ id: d.id || d._id, ...d })) : []);
+      setRows(mergePaymentRowsByDate((Array.isArray(data) ? data : []).map(d => ({ id: d.id || d._id, ...d }))));
     } catch (err) {
       console.error("Error fetching payments:", err);
       setRows([]);
@@ -493,7 +523,7 @@ export default function CashPayments() {
 
       const res = await fetch(`${API_URL}/cash-payments/all`);
       const data = await res.json();
-      setRows(Array.isArray(data) ? data.map(d => ({ id: d.id || d._id, ...d })) : []);
+      setRows(mergePaymentRowsByDate((Array.isArray(data) ? data : []).map(d => ({ id: d.id || d._id, ...d }))));
 
       // Show saved message and lock the form (like DailyDamages)
       alert(`Saved entry for ${entryDate}`);

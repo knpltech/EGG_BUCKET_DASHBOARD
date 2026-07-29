@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 const API_URL = import.meta.env.VITE_API_URL;
 import { getRoleFlags, zonesMatch } from "../utils/role";
 import { getThisWeekRange } from "../utils/dateRange";
+import { mergeDailyRecords } from "../utils/mergeDailyRecords";
 
 const STORAGE_KEY = "egg_outlets_v1";
 
@@ -248,7 +249,7 @@ export default function DigitalPayments() {
       try {
         const res = await fetch(`${API_URL}/digital-payments/all`);
         const data = await res.json();
-        setRows(Array.isArray(data) ? data.map(normalizePaymentRow) : []);
+        setRows(mergeDailyRecords(Array.isArray(data) ? data.map(normalizePaymentRow) : []));
       } catch { setRows([]); }
     };
     fetchPayments();

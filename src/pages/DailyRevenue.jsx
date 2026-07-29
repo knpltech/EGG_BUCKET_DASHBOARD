@@ -19,6 +19,22 @@ import { getThisWeekRange } from "../utils/dateRange";
 
 const getOutletLabel = (outlet) => outlet?.area || outlet?.name || outlet?.id || "";
 
+const runWithConcurrency = async (tasks, limit = 4) => {
+  const results = new Array(tasks.length);
+  let nextIndex = 0;
+
+  const worker = async () => {
+    while (nextIndex < tasks.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await tasks[currentIndex]();
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
+  return results;
+};
+
 const formatDateDMY = (iso) => {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
@@ -80,8 +96,8 @@ export default function DailyRevenue() {
       // than adding cash and digital payments together.
       const [outletsRes, cashRes, digitalRes] = await Promise.all([
         fetch(`${API_URL}/outlets/all`),
-        fetch(`${API_URL}/cash-payments/all`),
-        fetch(`${API_URL}/digital-payments/all`),
+        fetch(`${API_URL}/cash-payments/all?from=${encodeURIComponent(fromDate)}&to=${encodeURIComponent(toDate)}`),
+        fetch(`${API_URL}/digital-payments/all?from=${encodeURIComponent(fromDate)}&to=${encodeURIComponent(toDate)}`),
       ]);
 
       const [outletsData, cashData, digitalData] = await Promise.all([
@@ -98,7 +114,7 @@ export default function DailyRevenue() {
         .map((entry) => String(entry?.date || "").slice(0, 10))
         .filter(Boolean))];
 
-      const summaryEntries = await Promise.all(dates.flatMap((date) => outletList.map(async (outlet) => {
+      const summaryTasks = dates.flatMap((date) => outletList.map((outlet) => async () => {
         const outletId = outlet?.id;
         const outletLabel = getOutletLabel(outlet);
         if (!outletId || !outletLabel) return { date, outletId, totalAmount: 0 };
@@ -114,7 +130,8 @@ export default function DailyRevenue() {
         } catch {
           return { date, outletId, totalAmount: 0 };
         }
-      })));
+      }));
+      const summaryEntries = await runWithConcurrency(summaryTasks);
 
       const dateMap = new Map(dates.map((date) => [date, { date, outlets: {} }]));
       summaryEntries.forEach(({ date, outletId, totalAmount }) => {
@@ -138,7 +155,7 @@ export default function DailyRevenue() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fromDate, toDate]);
 
   useEffect(() => {
     fetchRevenueData();
