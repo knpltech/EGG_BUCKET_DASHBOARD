@@ -248,7 +248,6 @@ export const ensureZeroStockOptionEntry = async (zone, date) => {
   };
 
   await db.collection(COLLECTION).doc(`auto_${normalizedZone.replace(/\s+/g, "_")}_${normalizedDate}`).set(payload);
-  await syncInventoryStockIn(normalizedZone, normalizedDate, 0, null);
   return true;
 };
 

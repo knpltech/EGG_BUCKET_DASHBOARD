@@ -1,5 +1,7 @@
 import { db } from "../config/firebase.js";
 import { ensureZeroStockOptionEntry } from "../controllers/stockOptionsController.js";
+import { ensureMissingZoneStockEntry } from "../controllers/zoneStockController.js";
+import { ensureCashClosureEntry } from "../controllers/cashClosureController.js";
 
 const ZONES = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"];
 
@@ -124,6 +126,8 @@ export const runMidnightDefaults = async (date = getIndiaDate(-1)) => {
 
   await Promise.all(ZONES.map((zone) => ensureZeroStockOptionEntry(zone, date)));
   await ensureDailyEntryDefaults(date);
+  await Promise.all(ZONES.map((zone) => ensureMissingZoneStockEntry(zone, date)));
+  await Promise.all(ZONES.map((zone) => ensureCashClosureEntry(zone, date)));
   lastProcessedDate = date;
   return true;
 };
