@@ -8,7 +8,7 @@ import { cacheJsonResponse } from '../middleware/responseCache.js';
 const router = express.Router();
 const env = globalThis.process?.env || {};
 const REPORTS_OUTLETS_CACHE_TTL_MS = Number(env.REPORTS_OUTLETS_CACHE_TTL_MS || 300_000);
-const STATISTICS_CACHE_TTL_MS = Number(env.STATISTICS_CACHE_TTL_MS || 60_000);
+const STATISTICS_CACHE_TTL_MS = Number(env.STATISTICS_CACHE_TTL_MS || 300_000);
 
 /**
  * @route   GET /api/reports/outlets

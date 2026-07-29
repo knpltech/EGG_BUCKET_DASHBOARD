@@ -14,10 +14,13 @@ import {
 } from "recharts";
 import {
   faChartLine,
+  faArrowDown,
+  faArrowUp,
   faCircleExclamation,
   faEgg,
   faFileExport,
   faMoneyBillWave,
+  faMinus,
   faRotateRight,
   faStore,
   faUtensils,
@@ -32,6 +35,21 @@ const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/$/, "");
 const currency = (value) => `Rs. ${(Number(value) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const number = (value) => Math.round(Number(value) || 0).toLocaleString("en-IN");
 const percent = (value) => `${(Number(value) || 0).toFixed(2)}%`;
+
+const getGrowthComparison = (current, previous, inverse = false) => {
+  const currentValue = Number(current) || 0;
+  const previousValue = Number(previous) || 0;
+  if (!currentValue && !previousValue) return { type: "flat", text: "0%" };
+  if (!previousValue) return { type: inverse ? "down" : "up", text: "New" };
+
+  const percentChange = ((currentValue - previousValue) / Math.abs(previousValue)) * 100;
+  if (Math.abs(percentChange) < 0.01) return { type: "flat", text: "0%" };
+  const increased = percentChange > 0;
+  return {
+    type: inverse ? (increased ? "down" : "up") : (increased ? "up" : "down"),
+    text: `${Math.abs(percentChange).toFixed(1)}%`,
+  };
+};
 
 const toNumber = (value) => Number(value) || 0;
 const roundToTwoDecimals = (value) => Math.round((Number(value) || 0) * 100) / 100;
@@ -535,6 +553,19 @@ const OutletPerformance = () => {
       costPerEgg,
       damagePercent,
     };
+  }).map((item, index, rows) => {
+    const previous = rows[index - 1] || {};
+    return {
+      ...item,
+      eggGrowth: getGrowthComparison(item.salesQty, previous.salesQty),
+      costPerEggGrowth: getGrowthComparison(item.costPerEgg, previous.costPerEgg, true),
+      damageGrowth: getGrowthComparison(item.damagePercent, previous.damagePercent, true),
+      salaryGrowth: getGrowthComparison(item.driverSalary, previous.driverSalary, true),
+      damageCostGrowth: getGrowthComparison(item.damageCost, previous.damageCost, true),
+      incentiveGrowth: getGrowthComparison(item.incentive, previous.incentive, true),
+      foodAllowanceGrowth: getGrowthComparison(item.foodAllowance, previous.foodAllowance, true),
+      totalCostGrowth: getGrowthComparison(item.totalCost, previous.totalCost, true),
+    };
   }), [comparisonRange.from, comparisonRange.to, comparisonStats, monthlySalaryByKey]);
 
   const monthlyComparisonTotals = useMemo(() => monthlyComparisonRows.reduce((acc, item) => ({
@@ -964,14 +995,14 @@ const OutletPerformance = () => {
                   {monthlyComparisonRows.length ? monthlyComparisonRows.map((item, index) => (
                     <tr key={item.key} className={`border-t border-gray-100 ${index === 0 ? "bg-amber-50" : "bg-white"}`}>
                       <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">{item.label || formatMonthLabel(item.key)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right">{number(item.salesQty)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.costPerEgg)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right">{percent(item.damagePercent)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.driverSalary)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.damageCost)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.incentive)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.foodAllowance)}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{currency(item.totalCost)}</td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right"><MetricWithGrowth value={number(item.salesQty)} comparison={item.eggGrowth} /></td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right"><MetricWithGrowth value={currency(item.costPerEgg)} comparison={item.costPerEggGrowth} /></td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right"><MetricWithGrowth value={percent(item.damagePercent)} comparison={item.damageGrowth} /></td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right"><MetricWithGrowth value={currency(item.driverSalary)} comparison={item.salaryGrowth} /></td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right"><MetricWithGrowth value={currency(item.damageCost)} comparison={item.damageCostGrowth} /></td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right"><MetricWithGrowth value={currency(item.incentive)} comparison={item.incentiveGrowth} /></td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right"><MetricWithGrowth value={currency(item.foodAllowance)} comparison={item.foodAllowanceGrowth} /></td>
+                      <td className="whitespace-nowrap px-4 py-3 text-right font-semibold"><MetricWithGrowth value={currency(item.totalCost)} comparison={item.totalCostGrowth} /></td>
                     </tr>
                   )) : (
                     <tr><td colSpan="9"><EmptyState /></td></tr>
@@ -1036,6 +1067,24 @@ const MetricTile = ({ label, value, accent }) => (
     <div className={`mt-2 text-lg font-bold ${accent}`}>{value}</div>
   </div>
 );
+
+const MetricWithGrowth = ({ value, comparison }) => {
+  const styles = {
+    up: "bg-emerald-50 text-emerald-700",
+    down: "bg-red-50 text-red-600",
+    flat: "bg-orange-50 text-orange-600",
+  };
+  const icons = { up: faArrowUp, down: faArrowDown, flat: faMinus };
+  return (
+    <div className="flex items-center justify-end gap-1.5">
+      <span>{value}</span>
+      <span className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold ${styles[comparison.type]}`}>
+        <FontAwesomeIcon icon={icons[comparison.type]} />
+        {comparison.text}
+      </span>
+    </div>
+  );
+};
 
 const EmptyState = () => <div className="px-5 py-8 text-center text-sm text-gray-500">No data found.</div>;
 

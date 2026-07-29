@@ -5,6 +5,13 @@ let outletsCache = null;
 let outletsCacheTime = 0;
 const CACHE_DURATION = 5 * 60 * 1000;
 
+const getCollectionForDateRange = (collectionName, startDate, endDate) => {
+  let query = db.collection(collectionName);
+  if (startDate) query = query.where('date', '>=', startDate);
+  if (endDate) query = query.where('date', '<=', endDate);
+  return query.get();
+};
+
 /**
  * Get list of available outlets from nested structure
  */
@@ -310,13 +317,13 @@ export const getStatistics = async (req, res) => {
       foodAllowanceSnapshot,
       outletsSnapshot,
     ] = await Promise.all([
-      db.collection('dailySales').get(),
-      db.collection('digitalPayments').get(),
-      db.collection('cashPayments').get(),
-      db.collection('neccRates').get(),
-      db.collection('dailyDamages').get(),
-      db.collection('incentive').get(),
-      db.collection('foodAllowance').get(),
+      getCollectionForDateRange('dailySales', startDate, endDate),
+      getCollectionForDateRange('digitalPayments', startDate, endDate),
+      getCollectionForDateRange('cashPayments', startDate, endDate),
+      getCollectionForDateRange('neccRates', startDate, endDate),
+      getCollectionForDateRange('dailyDamages', startDate, endDate),
+      getCollectionForDateRange('incentive', startDate, endDate),
+      getCollectionForDateRange('foodAllowance', startDate, endDate),
       db.collection('outlets').get(),
     ]);
 

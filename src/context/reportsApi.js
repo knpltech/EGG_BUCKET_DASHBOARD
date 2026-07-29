@@ -7,6 +7,8 @@ const config = {
 };
 
 const API_BASE_URL = config.apiBaseUrl;
+const statisticsCache = new Map();
+const STATISTICS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 const getLocalIsoDate = (value = new Date()) => {
   const date = value instanceof Date ? value : new Date(value);
@@ -240,6 +242,12 @@ export const fetchStatisticsData = async (filters = {}) => {
       )
     ).toString();
 
+    const cacheKey = queryParams || 'all';
+    const cached = statisticsCache.get(cacheKey);
+    if (cached && Date.now() - cached.createdAt < STATISTICS_CACHE_TTL_MS) {
+      return cached.data;
+    }
+
     const response = await fetch(`${API_BASE_URL}/reports/statistics${queryParams ? `?${queryParams}` : ''}`, {
       method: 'GET',
       headers: {
@@ -251,7 +259,9 @@ export const fetchStatisticsData = async (filters = {}) => {
       throw new Error(`Failed to fetch statistics: ${response.statusText}`);
     }
 
-    return response.json();
+    const data = await response.json();
+    statisticsCache.set(cacheKey, { data, createdAt: Date.now() });
+    return data;
   } catch (error) {
     console.error('Error fetching statistics data:', error);
     throw error;

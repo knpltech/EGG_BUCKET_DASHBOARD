@@ -27,6 +27,11 @@ import { getThisWeekRange, toLocalIsoDate } from "../utils/dateRange";
 
 const currency = (value) => `Rs. ${Math.round(Number(value) || 0).toLocaleString("en-IN")}`;
 const number = (value) => Math.round(Number(value) || 0).toLocaleString("en-IN");
+const damagePercent = (damages, eggCount) => {
+  const eggs = Number(eggCount) || 0;
+  return eggs > 0 ? ((Number(damages) || 0) / eggs) * 100 : 0;
+};
+const damageDisplay = (damages, eggCount) => `${number(damages)} (${damagePercent(damages, eggCount).toFixed(2)}%)`;
 
 const formatLongDate = (iso) => {
   if (!iso) return "-";
@@ -70,14 +75,6 @@ const getLastWeekRange = () => {
   const lastWeekStart = new Date(lastWeekEnd);
   lastWeekStart.setDate(lastWeekStart.getDate() - 6);
   return { from: toLocalIsoDate(lastWeekStart), to: toLocalIsoDate(lastWeekEnd) };
-};
-
-const getWeekBeforeRange = (range) => {
-  const end = new Date(`${range.from}T00:00:00`);
-  end.setDate(end.getDate() - 1);
-  const start = new Date(end);
-  start.setDate(start.getDate() - 6);
-  return { from: toLocalIsoDate(start), to: toLocalIsoDate(end) };
 };
 
 const getPreviousWeekDate = (isoDate) => {
@@ -208,9 +205,6 @@ const Statistics = () => {
   const [dateRange, setDateRange] = useState(() => getRange("week"));
   const [dailyStats, setDailyStats] = useState(null);
   const [comparisonStats, setComparisonStats] = useState(null);
-  const [thisWeekStats, setThisWeekStats] = useState(null);
-  const [lastWeekStats, setLastWeekStats] = useState(null);
-  const [previousWeekStats, setPreviousWeekStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -222,10 +216,7 @@ const Statistics = () => {
       try {
         const zoneFilter = isSupervisor ? zone : "";
         const comparisonRangeRequest = getAprilToTodayRange();
-        const thisWeekRange = getRange("week");
-        const lastWeekRange = getLastWeekRange();
-        const previousWeekRange = getWeekBeforeRange(lastWeekRange);
-        const [dailyData, comparisonData, thisWeekData, lastWeekData, previousWeekData] = await Promise.all([
+        const [dailyData, comparisonData] = await Promise.all([
           fetchStatisticsData({
             dateFrom: dateRange.from,
             dateTo: dateRange.to,
@@ -236,23 +227,14 @@ const Statistics = () => {
             dateTo: comparisonRangeRequest.to,
             zone: zoneFilter,
           }),
-          fetchStatisticsData({ ...thisWeekRange, zone: zoneFilter }),
-          fetchStatisticsData({ ...lastWeekRange, zone: zoneFilter }),
-          fetchStatisticsData({ ...previousWeekRange, zone: zoneFilter }),
         ]);
 
         setDailyStats(dailyData);
         setComparisonStats(comparisonData);
-        setThisWeekStats(thisWeekData);
-        setLastWeekStats(lastWeekData);
-        setPreviousWeekStats(previousWeekData);
       } catch {
         setError("Failed to load statistics data");
         setDailyStats(null);
         setComparisonStats(null);
-        setThisWeekStats(null);
-        setLastWeekStats(null);
-        setPreviousWeekStats(null);
       } finally {
         setLoading(false);
       }
@@ -282,12 +264,12 @@ const Statistics = () => {
     displayDate: formatLongDate(item.key),
   })), [daily]);
   const thisWeekRows = useMemo(
-    () => buildComparableDailyRows(thisWeekStats?.daily, lastWeekStats?.daily, getRange("week")),
-    [thisWeekStats, lastWeekStats],
+    () => buildComparableDailyRows(comparisonStats?.daily, comparisonStats?.daily, getRange("week")),
+    [comparisonStats],
   );
   const lastWeekRows = useMemo(
-    () => buildComparableDailyRows(lastWeekStats?.daily, previousWeekStats?.daily, getLastWeekRange()),
-    [lastWeekStats, previousWeekStats],
+    () => buildComparableDailyRows(comparisonStats?.daily, comparisonStats?.daily, getLastWeekRange()),
+    [comparisonStats],
   );
 
   const weeklyRows = useMemo(() => weekly.map((item, index, rows) => {
@@ -474,7 +456,7 @@ const Statistics = () => {
                         <th className="w-[14%] px-1.5 py-3 text-left sm:px-2">Week</th>
                         <th className="w-[20%] px-1.5 py-3 text-right sm:px-2">Egg Count</th>
                         <th className="w-[25%] px-1.5 py-3 text-right sm:px-2">Revenue</th>
-                        <th className="w-[14%] px-1.5 py-3 text-right sm:px-2">Damages</th>
+                        <th className="w-[18%] px-1.5 py-3 text-right sm:px-2">Damage Count</th>
                         <th className="w-[27%] px-1.5 py-3 text-right sm:px-2">Avg NECC</th>
                       </tr>
                     </thead>
@@ -497,7 +479,12 @@ const Statistics = () => {
                               <GrowthPill label="Rev" comparison={item.revenueGrowth} compact />
                             </div>
                           </td>
-                          <td className="break-words px-1.5 py-3 text-right sm:px-2">{number(item.damages)}</td>
+                          <td className="px-1.5 py-3 sm:px-2">
+                            <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                              <span>{damageDisplay(item.damages, item.salesQty)}</span>
+                              <GrowthPill label="" comparison={item.damageGrowth} compact />
+                            </div>
+                          </td>
                           <td className="px-1.5 py-3 sm:px-2">
                             <div className="flex items-center justify-end gap-1 whitespace-nowrap">
                               <span>Rs. {Number(item.averageNeccRate || 0).toFixed(3)}</span>
@@ -556,7 +543,7 @@ const Statistics = () => {
                   </div>
                   <MetricRow label="Egg Count" value={number(item.salesQty)} comparison={item.eggGrowth} />
                   <MetricRow label="Revenue" value={currency(item.revenue)} comparison={item.revenueGrowth} />
-                  <MetricRow label="Damages" value={number(item.damages)} comparison={item.damageGrowth} />
+                  <MetricRow label="Damage Count" value={damageDisplay(item.damages, item.salesQty)} comparison={item.damageGrowth} />
                   <MetricRow label="Average NECC" value={`Rs. ${Number(item.averageNeccRate || 0).toFixed(3)}`} comparison={item.neccGrowth} />
                 </div>
               )) : <EmptyState />}
@@ -641,7 +628,7 @@ const DailyDataTable = ({ title, range, rows }) => (
               </td>
               <td className="px-4 py-3">
                 <div className="flex items-center justify-end gap-1 whitespace-nowrap">
-                  <span>{number(item.damages)}</span>
+                  <span>{damageDisplay(item.damages, item.salesQty)}</span>
                   <GrowthPill label="" comparison={item.damageGrowth} compact />
                 </div>
               </td>
