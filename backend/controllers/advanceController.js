@@ -25,21 +25,24 @@ export const addAdvance = async (req, res) => {
     if (doc.exists) {
       const data = doc.data();
       const outlets = data.outlets || {};
+      const manuallyEnteredOutlets = data.manuallyEnteredOutlets || {};
+      const addedByPerOutlet = data.addedByPerOutlet || {};
+      const hasManualEntry = Boolean(manuallyEnteredOutlets[outlet] || addedByPerOutlet[outlet]);
 
-      if (outlets[outlet] !== undefined) {
+      if (outlets[outlet] !== undefined && hasManualEntry) {
         return res.status(400).json({
           error: "Advance already entered for this outlet on this date",
         });
       }
 
-      const newTotal = (data.total || 0) + Number(value);
+      const newTotal = (data.total || 0) - Number(outlets[outlet] || 0) + Number(value);
       const updatedData = {
         [`outlets.${outlet}`]: Number(value),
         total: newTotal,
+        [`manuallyEnteredOutlets.${outlet}`]: true,
       };
 
       if (addedBy) {
-        const addedByPerOutlet = data.addedByPerOutlet || {};
         addedByPerOutlet[outlet] = {
           username: addedBy.username,
           zone: addedBy.zone,
@@ -55,6 +58,7 @@ export const addAdvance = async (req, res) => {
         date,
         outlets: { [outlet]: Number(value) },
         total: Number(value),
+        manuallyEnteredOutlets: { [outlet]: true },
       };
 
       if (addedBy) {

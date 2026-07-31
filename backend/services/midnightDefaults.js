@@ -119,26 +119,54 @@ const ensureDailyEntryDefaults = async (date) => {
   ]);
 };
 
-let lastProcessedDate = "";
+let lastDailyEntryDate = "";
+let lastInventoryDate = "";
 
-export const runMidnightDefaults = async (date = getIndiaDate(-1)) => {
-  if (lastProcessedDate === date) return false;
+const getIndiaNow = () => new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
 
-  await Promise.all(ZONES.map((zone) => ensureZeroStockOptionEntry(zone, date)));
+const runDailyEntryDefaults = async (date) => {
+  if (lastDailyEntryDate === date) return false;
   await ensureDailyEntryDefaults(date);
+  lastDailyEntryDate = date;
+  return true;
+};
+
+const runInventoryDefaults = async (date) => {
+  if (lastInventoryDate === date) return false;
+  await Promise.all(ZONES.map((zone) => ensureZeroStockOptionEntry(zone, date)));
   await Promise.all(ZONES.map((zone) => ensureMissingZoneStockEntry(zone, date)));
   await Promise.all(ZONES.map((zone) => ensureCashClosureEntry(zone, date)));
-  lastProcessedDate = date;
+  lastInventoryDate = date;
   return true;
+};
+
+export const runMidnightDefaults = async (date = getIndiaDate(-1)) => {
+  const [dailyProcessed, inventoryProcessed] = await Promise.all([
+    runDailyEntryDefaults(date),
+    runInventoryDefaults(date),
+  ]);
+  return dailyProcessed || inventoryProcessed;
 };
 
 export const startMidnightDefaultsScheduler = (onComplete = null) => {
   const run = async () => {
     try {
-      const processed = await runMidnightDefaults();
+      const now = getIndiaNow();
+      const minutes = now.getHours() * 60 + now.getMinutes();
+      const today = getIndiaDate();
+      const yesterday = getIndiaDate(-1);
+      let processed = false;
+
+      if (minutes < (23 * 60 + 30)) {
+        processed = await runMidnightDefaults(yesterday);
+      } else {
+        if (await runDailyEntryDefaults(today)) processed = true;
+        if (minutes >= (23 * 60 + 45) && await runInventoryDefaults(today)) processed = true;
+      }
+
       if (processed && typeof onComplete === "function") onComplete();
     } catch (error) {
-      console.error("Midnight defaults failed:", error.message);
+      console.error("Scheduled defaults failed:", error.message);
     }
   };
 

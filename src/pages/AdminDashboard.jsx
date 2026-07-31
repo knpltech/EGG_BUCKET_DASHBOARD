@@ -208,17 +208,51 @@ const getSalesValueForOutlet = (doc, outlet) => {
   const area = outlet?.area || outlet?.name || outletId;
   const values = doc?.outlets;
   if (!values || typeof values !== "object" || Array.isArray(values)) return 0;
-  if (values[outletId] !== undefined) return Number(values[outletId]) || 0;
-  if (area && values[area] !== undefined) return Number(values[area]) || 0;
-  return 0;
+  let fallbackValue = 0;
+  for (const key of [outletId, area].filter(Boolean)) {
+    if (values[key] === undefined) continue;
+    const value = Number(values[key]) || 0;
+    if (value !== 0) return value;
+    fallbackValue = value;
+  }
+  return fallbackValue;
 };
 
 const getDamageValueForOutlet = (doc, outlet) => {
   const area = outlet?.area || outlet?.name || outlet?.id || outlet;
   const values = doc?.damages;
   if (!values || typeof values !== "object" || Array.isArray(values)) return 0;
-  if (area && values[area] !== undefined) return Number(values[area]) || 0;
-  return 0;
+  const outletId = outlet?.id || outlet;
+  let fallbackValue = 0;
+  for (const key of [outletId, area, outlet?.name].filter(Boolean)) {
+    if (values[key] === undefined) continue;
+    const value = Number(values[key]) || 0;
+    if (value !== 0) return value;
+    fallbackValue = value;
+  }
+  return fallbackValue;
+};
+
+const getMergedDayDoc = (rows, selectedDate, valuesField) => {
+  const mergedValues = {};
+  let total = 0;
+  const dayRows = (Array.isArray(rows) ? rows : [])
+    .filter((doc) => normalizeDate(doc.date || doc.createdAt) === selectedDate)
+    .sort((left, right) => getDocTimestamp(left) - getDocTimestamp(right));
+
+  dayRows.forEach((row) => {
+    const rowTotal = Number(row?.total) || 0;
+    if (rowTotal !== 0) total = rowTotal;
+    Object.entries(row?.[valuesField] || {}).forEach(([key, rawValue]) => {
+      const currentValue = Number(mergedValues[key]) || 0;
+      const nextValue = Number(rawValue) || 0;
+      if (mergedValues[key] === undefined || nextValue !== 0 || currentValue === 0) {
+        mergedValues[key] = rawValue;
+      }
+    });
+  });
+
+  return dayRows.length ? { [valuesField]: mergedValues, total } : null;
 };
 
 const getLatestDayDoc = (rows, selectedDate) => {
@@ -230,14 +264,15 @@ const getLatestDayDoc = (rows, selectedDate) => {
 };
 
 const getSalesTotal = (rows, outlets, selectedDate) => {
-  const doc = getLatestDayDoc(rows, selectedDate);
+  const doc = getMergedDayDoc(rows, selectedDate, "outlets");
   if (!doc) return 0;
   if (!Array.isArray(outlets) || outlets.length === 0) return Number(doc.total) || 0;
-  return outlets.reduce((sum, outlet) => sum + getSalesValueForOutlet(doc, outlet), 0);
+  const outletTotal = outlets.reduce((sum, outlet) => sum + getSalesValueForOutlet(doc, outlet), 0);
+  return outletTotal || Number(doc.total) || 0;
 };
 
 const getDamageTotal = (rows, outlets, selectedDate) => {
-  const doc = getLatestDayDoc(rows, selectedDate);
+  const doc = getMergedDayDoc(rows, selectedDate, "damages");
   if (!doc) return 0;
   if (!Array.isArray(outlets) || outlets.length === 0) return Number(doc.total) || 0;
   return outlets.reduce((sum, outlet) => sum + getDamageValueForOutlet(doc, outlet), 0);
@@ -313,11 +348,14 @@ const getAmountValueForOutlet = (doc, outlet) => {
   if (!values || typeof values !== "object" || Array.isArray(values)) return 0;
 
   const keys = [outlet?.id, outlet?.area, outlet?.name].filter(Boolean);
+  let fallbackValue = 0;
   for (const key of keys) {
-    if (values[key] !== undefined) return Number(values[key]) || 0;
+    if (values[key] === undefined) continue;
+    const value = Number(values[key]) || 0;
+    if (value !== 0) return value;
+    fallbackValue = value;
   }
-
-  return 0;
+  return fallbackValue;
 };
 
 const getZoneWiseAmountTotals = (rows = [], outlets = [], selectedDate) => {
@@ -352,7 +390,11 @@ const getZoneWiseAmountTotals = (rows = [], outlets = [], selectedDate) => {
       zoneOutlets.forEach((outlet) => {
         const outletKey = outlet?.id || outlet?.area || outlet?.name;
         if (!outletKey) return;
-        latestValues.set(outletKey, getAmountValueForOutlet(doc, outlet));
+        const currentValue = Number(latestValues.get(outletKey)) || 0;
+        const nextValue = getAmountValueForOutlet(doc, outlet);
+        if (!latestValues.has(outletKey) || nextValue !== 0 || currentValue === 0) {
+          latestValues.set(outletKey, nextValue);
+        }
       });
     });
 
@@ -487,7 +529,7 @@ export default function AdminDashboard() {
   const loadDashboard = useCallback(async () => {
     const computeZoneStats = (outlets, salesRows, damageRows, neccRates) => {
       const stats = createEmptyZoneStats();
-      const latestSalesDoc = getLatestDayDoc(Array.isArray(salesRows) ? salesRows : [], selectedDate);
+      const latestSalesDoc = getMergedDayDoc(Array.isArray(salesRows) ? salesRows : [], selectedDate, "outlets");
 
       ZONE_NUMBERS.forEach((zoneNum) => {
         const zoneLabel = `Zone ${zoneNum}`;
