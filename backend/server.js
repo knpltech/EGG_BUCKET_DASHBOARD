@@ -51,7 +51,6 @@ const HEAVY_GET_CACHE_PATHS = new Set([
   "/api/cash-closure/all",
   "/api/zone-stock/all",
   "/api/stock-options/all",
-  "/api/outlet-summary",
   "/api/reports",
   "/api/reports/statistics",
 ]);

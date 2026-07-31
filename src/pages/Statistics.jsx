@@ -106,7 +106,7 @@ const buildComparableDailyRows = (currentItems, previousItems, range) => {
       weekday: formatWeekday(item.key),
       displayDate: formatLongDate(item.key),
       eggGrowth: getComparison(item.salesQty, previous.salesQty),
-      damageGrowth: getComparison(item.damages, previous.damages, true),
+      damageGrowth: getComparison(item.damages, previous.damages),
       revenueGrowth: getComparison(item.revenue, previous.revenue),
     };
   });
@@ -279,7 +279,7 @@ const Statistics = () => {
       weekName: `Week ${index + 1}`,
       eggGrowth: getComparison(item.salesQty, previous.salesQty),
       revenueGrowth: getComparison(item.revenue, previous.revenue),
-      damageGrowth: getComparison(item.damages, previous.damages, true),
+      damageGrowth: getComparison(item.damages, previous.damages),
       neccGrowth: getComparison(item.averageNeccRate, previous.averageNeccRate),
     };
   }), [weekly]);
@@ -290,7 +290,7 @@ const Statistics = () => {
       ...item,
       eggGrowth: getComparison(item.salesQty, previous.salesQty),
       revenueGrowth: getComparison(item.revenue, previous.revenue),
-      damageGrowth: getComparison(item.damages, previous.damages, true),
+      damageGrowth: getComparison(item.damages, previous.damages),
       neccGrowth: getComparison(item.averageNeccRate, previous.averageNeccRate),
     };
   }), [monthly]);

@@ -1,7 +1,19 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { getRoleFlags } from "../utils/role";
 
-const API = import.meta.env.VITE_API_URL;
+const API = import.meta.env.VITE_API_URL || "/api";
+
+const getDataWindow = (selectedDate) => {
+  const base = new Date(`${selectedDate || new Date().toISOString().slice(0, 10)}T00:00:00`);
+  const from = new Date(base);
+  const to = new Date(base);
+  from.setDate(from.getDate() - 62);
+  to.setDate(to.getDate() + 2);
+  return {
+    from: from.toISOString().slice(0, 10),
+    to: to.toISOString().slice(0, 10),
+  };
+};
 
 const formatNeccRate = (value) => {
   const rate = Number(value);
@@ -230,6 +242,7 @@ export default function DataEntry() {
   const [isSubmitting,    setIsSubmitting]    = useState(false);
   const [isDeleting,      setIsDeleting]      = useState(false);
   const [isFetchingSummary, setIsFetchingSummary] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(false);
   const [aiTotalAmount, setAiTotalAmount] = useState(0);
   const prevOutletDateRef = useRef({ outlet: "", date: "" });
 
@@ -265,28 +278,29 @@ export default function DataEntry() {
 
   /* ================= LOAD ALL COLLECTIONS ================= */
   const loadAllData = useCallback(async () => {
+    setIsLoadingData(true);
     try {
+      const token = localStorage.getItem("token");
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const { from, to } = getDataWindow(date || todayIso);
+      const query = `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
       const [sRes, cRes, dRes, dmRes, nRes, iRes, aRes, fRes, rRes] = await Promise.all([
-        fetch(`${API}/dailysales/all`),
-        fetch(`${API}/cash-payments/all`),
-        fetch(`${API}/digital-payments/all`),
-        fetch(`${API}/daily-damage/all`),
-        fetch(`${API}/neccrate/all`),
-        fetch(`${API}/incentive/all`),
-        fetch(`${API}/advance/all`),
-        fetch(`${API}/food-allowance/all`),
-        fetch(`${API}/remarks/all`),
+        fetch(`${API}/dailysales/all${query}`, { headers }),
+        fetch(`${API}/cash-payments/all${query}`, { headers }),
+        fetch(`${API}/digital-payments/all${query}`, { headers }),
+        fetch(`${API}/daily-damage/all${query}`, { headers }),
+        fetch(`${API}/neccrate/all${query}`, { headers }),
+        fetch(`${API}/incentive/all${query}`, { headers }),
+        fetch(`${API}/advance/all${query}`, { headers }),
+        fetch(`${API}/food-allowance/all${query}`, { headers }),
+        fetch(`${API}/remarks/all${query}`, { headers }),
       ]);
+      if (![sRes, cRes, dRes, dmRes, nRes, iRes, aRes, fRes, rRes].every((response) => response.ok)) {
+        throw new Error("Failed to load data entry records");
+      }
       const [sData, cData, dData, dmData, nData, iData, aData, fData, rData] = await Promise.all([
-        sRes.ok  ? sRes.json()  : [],
-        cRes.ok  ? cRes.json()  : [],
-        dRes.ok  ? dRes.json()  : [],
-        dmRes.ok ? dmRes.json() : [],
-        nRes.ok  ? nRes.json()  : [],
-        iRes.ok  ? iRes.json()  : [],
-        aRes.ok  ? aRes.json()  : [],
-        fRes.ok  ? fRes.json()  : [],
-        rRes.ok  ? rRes.json()  : [],
+        sRes.json(), cRes.json(), dRes.json(), dmRes.json(), nRes.json(),
+        iRes.json(), aRes.json(), fRes.json(), rRes.json(),
       ]);
       setAllSalesData(Array.isArray(sData)  ? sData  : []);
       setAllCashData(Array.isArray(cData)   ? cData  : []);
@@ -299,8 +313,10 @@ export default function DataEntry() {
       setAllRemarksData(Array.isArray(rData) ? rData : []);
     } catch (err) {
       console.error("Error loading all data:", err);
+    } finally {
+      setIsLoadingData(false);
     }
-  }, []);
+  }, [date, todayIso]);
 
   useEffect(() => { loadAllData(); }, [loadAllData]);
 
@@ -513,7 +529,7 @@ export default function DataEntry() {
 
   /* ================= FETCH OUTLET SUMMARY ================= */
   useEffect(() => {
-    if (!outlet || !date) {
+    if (!outlet || !date || isLoadingData) {
       prevOutletDateRef.current = { outlet: "", date: "" };
       setAiTotalAmount(0);
       return;
@@ -533,6 +549,17 @@ export default function DataEntry() {
     const hasNecc = allNeccData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outletId === outlet);
     const hasIncentive = allIncentiveData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
     const hasFoodAllowance = allFoodAllowanceData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
+
+    const savedSales = findPreferredRecord(allSalesData, doc =>
+      normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
+    const savedNecc = findPreferredRecord(allNeccData, doc =>
+      normalizeDate(doc.date || doc.createdAt) === date && doc.outletId === outlet);
+
+    if (savedSales && savedNecc) {
+      const savedRate = Number(savedNecc.rateValue ?? savedNecc.rate) || 0;
+      setAiTotalAmount((Number(savedSales.outlets[outlet]) || 0) * savedRate);
+      return;
+    }
 
     let isMounted = true;
     const fetchSummary = async () => {
@@ -592,7 +619,7 @@ export default function DataEntry() {
     fetchSummary();
     
     return () => { isMounted = false; };
-  }, [outlet, date, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allFoodAllowanceData]);
+  }, [outlet, date, isLoadingData, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allFoodAllowanceData]);
 
 
   /* ================= DELETE OUTLET DATA FOR DATE (admin only) ================= */

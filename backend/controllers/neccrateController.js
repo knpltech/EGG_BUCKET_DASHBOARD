@@ -1,5 +1,6 @@
 import { db } from "../config/firebase.js";
 import { validateSupervisorSameDayEntry } from "../utils/entryCutoff.js";
+import { applyDateQuery } from "../utils/dateQuery.js";
 
 const parseNumericRate = (value) => {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -77,7 +78,7 @@ export const addNeccRate = async (req, res) => {
 
 export const getAllNeccRates = async (req, res) => {
   try {
-    const snapshot = await db.collection("neccRates").orderBy("date", "desc").get();
+    const snapshot = await applyDateQuery(db.collection("neccRates"), req.query).get();
     const rates = snapshot.docs.map((doc) => normalizeNeccDoc(doc.id, doc.data()));
     res.status(200).json(rates);
   } catch (error) {

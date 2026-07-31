@@ -1,5 +1,6 @@
 import { db } from "../config/firebase.js";
 import { validateSupervisorSameDayEntry } from "../utils/entryCutoff.js";
+import { applyDateQuery } from "../utils/dateQuery.js";
 
 /* ADD REMARKS */
 export const addRemarks = async (req, res) => {
@@ -81,7 +82,7 @@ export const addRemarks = async (req, res) => {
 /* GET ALL REMARKS */
 export const getAllRemarks = async (req, res) => {
   try {
-    const snapshot = await db.collection("remarks").get();
+    const snapshot = await applyDateQuery(db.collection("remarks"), req.query).get();
     const data = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     res.json(data);
   } catch (err) {

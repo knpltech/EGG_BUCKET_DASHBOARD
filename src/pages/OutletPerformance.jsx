@@ -558,13 +558,13 @@ const OutletPerformance = () => {
     return {
       ...item,
       eggGrowth: getGrowthComparison(item.salesQty, previous.salesQty),
-      costPerEggGrowth: getGrowthComparison(item.costPerEgg, previous.costPerEgg, true),
-      damageGrowth: getGrowthComparison(item.damagePercent, previous.damagePercent, true),
-      salaryGrowth: getGrowthComparison(item.driverSalary, previous.driverSalary, true),
-      damageCostGrowth: getGrowthComparison(item.damageCost, previous.damageCost, true),
-      incentiveGrowth: getGrowthComparison(item.incentive, previous.incentive, true),
-      foodAllowanceGrowth: getGrowthComparison(item.foodAllowance, previous.foodAllowance, true),
-      totalCostGrowth: getGrowthComparison(item.totalCost, previous.totalCost, true),
+      costPerEggGrowth: getGrowthComparison(item.costPerEgg, previous.costPerEgg),
+      damageGrowth: getGrowthComparison(item.damagePercent, previous.damagePercent),
+      salaryGrowth: getGrowthComparison(item.driverSalary, previous.driverSalary),
+      damageCostGrowth: getGrowthComparison(item.damageCost, previous.damageCost),
+      incentiveGrowth: getGrowthComparison(item.incentive, previous.incentive),
+      foodAllowanceGrowth: getGrowthComparison(item.foodAllowance, previous.foodAllowance),
+      totalCostGrowth: getGrowthComparison(item.totalCost, previous.totalCost),
     };
   }), [comparisonRange.from, comparisonRange.to, comparisonStats, monthlySalaryByKey]);
 

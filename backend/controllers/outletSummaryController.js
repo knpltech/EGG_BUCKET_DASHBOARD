@@ -341,7 +341,12 @@ export const getOutletSummary = async (req, res) => {
     }
 
     if (!isCollectionConfigured) {
-      return res.status(200).json(await getRetailSummary(outlet, date));
+      try {
+        return res.status(200).json(await getRetailSummary(outlet, date));
+      } catch (error) {
+        console.error("Retail Admin outlet summary unavailable:", error.message);
+        return res.status(200).json(emptySummary());
+      }
     }
 
     if (!collectionDb) {
