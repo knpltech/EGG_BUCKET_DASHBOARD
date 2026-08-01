@@ -288,7 +288,7 @@ export default function ZoneStockEntry() {
   useEffect(() => {
     const refreshTimer = window.setInterval(() => {
       loadAll(true);
-    }, 30000);
+    }, 120000);
 
     const handleFocus = () => {
       loadAll(true);

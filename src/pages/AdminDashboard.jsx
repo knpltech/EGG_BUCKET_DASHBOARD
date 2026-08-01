@@ -297,10 +297,29 @@ const isNeccDocForOutlet = (doc, outlet) => {
 
 const getNeccRateForOutlet = (rows, outlet, selectedDate) => {
   if (!Array.isArray(rows)) return 0;
-  const latestRate = rows
-    .filter((doc) => normalizeDate(doc?.date || doc?.createdAt) === selectedDate && isNeccDocForOutlet(doc, outlet))
-    .sort((a, b) => getDocTimestamp(b) - getDocTimestamp(a))[0];
-  return getNeccRateNumber(latestRate);
+  const outletKeys = [outlet?.id, outlet?.area, outlet?.name]
+    .map(normalizeTextKey)
+    .filter(Boolean);
+  const dayRows = rows
+    .filter((doc) => normalizeDate(doc?.date || doc?.createdAt) === selectedDate)
+    .sort((a, b) => getDocTimestamp(b) - getDocTimestamp(a));
+
+  for (const doc of dayRows) {
+    if (isNeccDocForOutlet(doc, outlet)) {
+      const rate = getNeccRateNumber(doc);
+      if (rate !== 0) return rate;
+    }
+
+    const values = doc?.outlets;
+    if (!values || typeof values !== "object" || Array.isArray(values)) continue;
+    for (const [key, value] of Object.entries(values)) {
+      if (!outletKeys.includes(normalizeTextKey(key))) continue;
+      const rate = Number(value) || 0;
+      if (rate !== 0) return rate;
+    }
+  }
+
+  return 0;
 };
 
 const createEmptyZoneRevenue = () => ({
@@ -542,12 +561,16 @@ export default function AdminDashboard() {
         stats[zoneLabel].damage = zoneOutlets.length === 0 ? 0 : getDamageTotal(Array.isArray(damageRows) ? damageRows : [], zoneOutlets, selectedDate);
 
         // Same formula as Cost Breakdown: sum(eggs × NECC rate) / total eggs.
-        if (stats[zoneLabel].eggs > 0 && latestSalesDoc) {
-          const neccRevenue = zoneOutlets.reduce((sum, outlet) => {
+        const neccRevenue = latestSalesDoc
+          ? zoneOutlets.reduce((sum, outlet) => {
             const eggs = getSalesValueForOutlet(latestSalesDoc, outlet);
             const rate = getNeccRateForOutlet(neccRates, outlet, selectedDate);
             return sum + (eggs * rate);
-          }, 0);
+          }, 0)
+          : 0;
+        stats[zoneLabel].revenue = Number(neccRevenue.toFixed(2));
+
+        if (stats[zoneLabel].eggs > 0 && latestSalesDoc) {
           const weightedRate = neccRevenue / stats[zoneLabel].eggs;
           const averageRate = weightedRate;
           if (Number.isFinite(weightedRate)) {

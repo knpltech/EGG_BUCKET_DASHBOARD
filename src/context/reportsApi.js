@@ -73,16 +73,38 @@ const createEmptyZoneRevenue = () => ({
   'Zone 5': { cash: 0, digital: 0, total: 0 },
 });
 
+const getOutletLabel = (outlet) => outlet?.area || outlet?.name || outlet?.id || '';
+
+const runWithConcurrency = async (tasks, limit = 4) => {
+  const results = new Array(tasks.length);
+  let nextIndex = 0;
+
+  const worker = async () => {
+    while (nextIndex < tasks.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await tasks[currentIndex]();
+    }
+  };
+
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
+  return results;
+};
+
 const getPaymentValueForOutlet = (doc, outlet) => {
   const values = doc?.outlets;
   if (!values || typeof values !== 'object' || Array.isArray(values)) return 0;
 
   const keys = [outlet.id, outlet.area, outlet.name].filter(Boolean);
+  let fallbackValue = 0;
   for (const key of keys) {
-    if (values[key] !== undefined) return Number(values[key]) || 0;
+    if (values[key] === undefined) continue;
+    const value = Number(values[key]) || 0;
+    if (value !== 0) return value;
+    fallbackValue = value;
   }
 
-  return 0;
+  return fallbackValue;
 };
 
 const buildZoneTotalsFromPayments = (rows, outlets, paymentType, today, zoneRevenue) => {
@@ -110,7 +132,11 @@ const buildZoneTotalsFromPayments = (rows, outlets, paymentType, today, zoneReve
 
     dayRows.forEach((doc) => {
       zoneOutlets.forEach((outlet) => {
-        latestValues.set(outlet.id, getPaymentValueForOutlet(doc, outlet));
+        const currentValue = Number(latestValues.get(outlet.id)) || 0;
+        const nextValue = getPaymentValueForOutlet(doc, outlet);
+        if (!latestValues.has(outlet.id) || nextValue !== 0 || currentValue === 0) {
+          latestValues.set(outlet.id, nextValue);
+        }
       });
     });
 
@@ -361,9 +387,39 @@ export const fetchZoneWiseRevenue = async (selectedDate = getLocalIsoDate()) => 
     buildZoneTotalsFromPayments(cashPayments, outlets, 'cash', dateStr, zoneRevenue);
     buildZoneTotalsFromPayments(digitalPayments, outlets, 'digital', dateStr, zoneRevenue);
 
-    // Calculate totals
+    // Daily Revenue uses the saved outlet summary total, not cash + digital.
+    // Use that exact source here so both pages show the same amount per date.
+    const summaryTasks = outlets.map((outlet) => async () => {
+      const outletId = outlet?.id;
+      const outletLabel = getOutletLabel(outlet);
+      if (!outletId || !outletLabel) return { outletId, totalAmount: 0 };
+
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/outlet-summary?outlet=${encodeURIComponent(outletLabel)}&date=${encodeURIComponent(dateStr)}`,
+          { method: 'GET', headers: { 'Content-Type': 'application/json' } }
+        );
+        if (!response.ok) return { outletId, totalAmount: 0 };
+
+        const summary = await response.json();
+        return { outletId, totalAmount: Number(summary?.totalAmount) || 0 };
+      } catch {
+        return { outletId, totalAmount: 0 };
+      }
+    });
+
+    const summaryEntries = await runWithConcurrency(summaryTasks);
+    const outletsById = new Map(outlets.map((outlet) => [outlet?.id, outlet]));
+    summaryEntries.forEach(({ outletId, totalAmount }) => {
+      const outlet = outletsById.get(outletId);
+      const zoneKey = normalizeZoneLabel(outlet?.zoneId || outlet?.zone || outlet?.zoneNumber);
+      if (!zoneKey || !zoneRevenue[zoneKey]) return;
+      zoneRevenue[zoneKey].total += totalAmount;
+    });
+
+    // Cash and digital are payment collections. Keep them separate from revenue.
     Object.keys(zoneRevenue).forEach(zone => {
-      zoneRevenue[zone].total = zoneRevenue[zone].cash + zoneRevenue[zone].digital;
+      zoneRevenue[zone].total = Number(zoneRevenue[zone].total.toFixed(2));
     });
 
     return {

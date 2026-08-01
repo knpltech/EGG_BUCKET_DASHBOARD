@@ -113,25 +113,33 @@ const getResponseErrorMessage = async (response, fallbackMessage) => {
   }
 };
 
-const toZoneScopedTotal = (entry, zoneLabel, zoneOutletKeys) => {
-  if (!entry || typeof entry !== "object") return 0;
-
-  const outlets = entry.outlets && typeof entry.outlets === "object" && !Array.isArray(entry.outlets)
-    ? entry.outlets
-    : {};
-
-  const addedByPerOutlet = entry.addedByPerOutlet && typeof entry.addedByPerOutlet === "object"
-    ? entry.addedByPerOutlet
-    : {};
-
+const toZoneScopedTotal = (entries, zoneLabel, zoneOutletKeys) => {
   const normalizedZone = normalizeZone(zoneLabel);
+  const valuesByOutlet = new Map();
 
-  return Object.entries(outlets).reduce((sum, [outletKey, amount]) => {
-    const byUserZone = normalizeZone(addedByPerOutlet?.[outletKey]?.zone) === normalizedZone;
-    const byOutletZone = zoneOutletKeys.has(normalizeTextKey(outletKey));
-    if (!byUserZone && !byOutletZone) return sum;
-    return sum + toNumber(amount);
-  }, 0);
+  (Array.isArray(entries) ? entries : [entries]).forEach((entry) => {
+    if (!entry || typeof entry !== "object") return;
+    const outlets = entry.outlets && typeof entry.outlets === "object" && !Array.isArray(entry.outlets)
+      ? entry.outlets
+      : {};
+    const addedByPerOutlet = entry.addedByPerOutlet && typeof entry.addedByPerOutlet === "object"
+      ? entry.addedByPerOutlet
+      : {};
+
+    Object.entries(outlets).forEach(([outletKey, rawAmount]) => {
+      const byUserZone = normalizeZone(addedByPerOutlet?.[outletKey]?.zone) === normalizedZone;
+      const byOutletZone = zoneOutletKeys.has(normalizeTextKey(outletKey));
+      if (!byUserZone && !byOutletZone) return;
+
+      const currentAmount = Number(valuesByOutlet.get(outletKey)) || 0;
+      const nextAmount = toNumber(rawAmount);
+      if (!valuesByOutlet.has(outletKey) || nextAmount !== 0 || currentAmount === 0) {
+        valuesByOutlet.set(outletKey, nextAmount);
+      }
+    });
+  });
+
+  return Array.from(valuesByOutlet.values()).reduce((sum, amount) => sum + amount, 0);
 };
 
 export default function CashClosure() {
@@ -216,8 +224,7 @@ export default function CashClosure() {
 
       if (cashPaymentsRes.ok) {
         const cashPaymentsData = await cashPaymentsRes.json();
-        const cashEntry = Array.isArray(cashPaymentsData) ? cashPaymentsData[0] : cashPaymentsData;
-        totalCash = toZoneScopedTotal(cashEntry, zoneName, zoneOutletKeys);
+        totalCash = toZoneScopedTotal(cashPaymentsData, zoneName, zoneOutletKeys);
       }
 
       if (incentivesRes.ok) {
@@ -248,7 +255,7 @@ export default function CashClosure() {
 
   useEffect(() => {
     loadRows(selectedZone);
-    const interval = window.setInterval(() => loadRows(selectedZone), 30000);
+    const interval = window.setInterval(() => loadRows(selectedZone), 120000);
     return () => window.clearInterval(interval);
   }, [loadRows, selectedZone]);
 
