@@ -473,3 +473,27 @@ export const getOutletSummary = async (req, res) => {
     res.status(500).json({ message: "Internal server error", error: error.message });
   }
 };
+
+// Reuse the exact same source calculation outside HTTP handlers (the nightly
+// final-save job uses this instead of inventing zero-value defaults).
+export const getSourceOutletSummary = async (outlet, date) => {
+  let statusCode = 500;
+  let payload;
+  const response = {
+    status(code) {
+      statusCode = code;
+      return this;
+    },
+    json(data) {
+      payload = data;
+      return data;
+    },
+  };
+
+  await getOutletSummary({ query: { outlet, date } }, response);
+
+  if (statusCode < 200 || statusCode >= 300 || !payload || payload.message) {
+    throw new Error(payload?.message || `Source summary failed with status ${statusCode}`);
+  }
+  return payload;
+};

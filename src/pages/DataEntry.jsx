@@ -504,7 +504,11 @@ export default function DataEntry() {
       normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
     if (foundAdvance) {
       setAdvance(foundAdvance.outlets[outlet]);
-      setAdvanceLocked(Boolean(foundAdvance.manuallyEnteredOutlets?.[outlet] || foundAdvance.addedByPerOutlet?.[outlet]));
+      setAdvanceLocked(Boolean(
+        foundAdvance.finalSourceSync ||
+        foundAdvance.manuallyEnteredOutlets?.[outlet] ||
+        foundAdvance.addedByPerOutlet?.[outlet]
+      ));
     }
 
     const foundFoodAllowance = findPreferredRecord(allFoodAllowanceData, doc =>
@@ -512,8 +516,13 @@ export default function DataEntry() {
     if (foundFoodAllowance) { setFoodAllowance(foundFoodAllowance.outlets[outlet]); setFoodAllowanceLocked(true); }
 
     const foundRemarks = findPreferredRecord(allRemarksData, doc =>
-      normalizeDate(doc.date || doc.createdAt) === date && doc.remarks && doc.remarks[outlet] !== undefined);
-    if (foundRemarks) { setRemarks(foundRemarks.remarks[outlet]); setRemarksLocked(true); }
+      normalizeDate(doc.date || doc.createdAt) === date &&
+      ((doc.remarks && doc.remarks[outlet] !== undefined) ||
+       (doc.outlets && doc.outlets[outlet] !== undefined)));
+    if (foundRemarks) {
+      setRemarks(foundRemarks.remarks?.[outlet] ?? foundRemarks.outlets?.[outlet] ?? "");
+      setRemarksLocked(Boolean(foundRemarks.finalSourceSync || foundRemarks.addedByPerOutlet?.[outlet]));
+    }
 
   }, [date, outlet, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allAdvanceData, allFoodAllowanceData, allRemarksData]);
 
@@ -711,7 +720,7 @@ export default function DataEntry() {
     const allAlreadyLocked =
       neccrateLocked && salesLocked && damagesLocked &&
       cashLocked && digitalLocked && incentiveLocked && advanceLocked &&
-      foodAllowanceLocked;
+      foodAllowanceLocked && remarksLocked;
 
     if (allAlreadyLocked) {
       alert("All data for this outlet and date is already submitted. No changes to save.");
@@ -856,7 +865,7 @@ export default function DataEntry() {
   const allAlreadyLocked =
     neccrateLocked && salesLocked && damagesLocked &&
     cashLocked && digitalLocked && incentiveLocked && advanceLocked &&
-    foodAllowanceLocked;
+    foodAllowanceLocked && remarksLocked;
 
   const allUnlockedFilled =
     (neccrateLocked  || neccrate !== "")  &&
