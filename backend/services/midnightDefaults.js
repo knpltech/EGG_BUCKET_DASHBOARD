@@ -5,6 +5,8 @@ import { ensureCashClosureEntry } from "../controllers/cashClosureController.js"
 import { getSourceOutletSummary } from "../controllers/outletSummaryController.js";
 
 const ZONES = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"];
+const DAILY_ENTRY_FINAL_MINUTES = (23 * 60) + 30;
+const INVENTORY_FINAL_MINUTES = (23 * 60) + 45;
 
 const getIndiaDate = (offsetDays = 0) => {
   const indiaNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
@@ -271,11 +273,11 @@ export const startMidnightDefaultsScheduler = (onComplete = null) => {
       const yesterday = getIndiaDate(-1);
       let processed = false;
 
-      if (minutes < (23 * 60 + 30)) {
+      if (minutes < DAILY_ENTRY_FINAL_MINUTES) {
         processed = await runMidnightDefaults(yesterday);
       } else {
         if (await runDailyEntryDefaults(today)) processed = true;
-        if (minutes >= (23 * 60 + 45) && await runInventoryDefaults(today)) processed = true;
+        if (minutes >= INVENTORY_FINAL_MINUTES && await runInventoryDefaults(today)) processed = true;
       }
 
       if (processed && typeof onComplete === "function") onComplete();
