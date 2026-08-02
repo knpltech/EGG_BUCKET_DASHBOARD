@@ -17,6 +17,26 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
+const getAuthHeaders = (headers = {}) => {
+  const token = localStorage.getItem("token");
+  return token ? { ...headers, Authorization: `Bearer ${token}` } : headers;
+};
+
+// Older entries may be keyed by outlet id, while newer entries use the area.
+// Resolve both forms so historical records remain visible after outlet updates.
+const getOutletValue = (values, outlet) => {
+  if (!values || typeof values !== "object") return 0;
+  const candidates = (typeof outlet === "string" ? [outlet] : [outlet?.id, outlet?.area, outlet?.name])
+    .filter(Boolean)
+    .map((value) => String(value).trim());
+  const key = candidates.find((candidate) => Object.prototype.hasOwnProperty.call(values, candidate))
+    || Object.keys(values).find((valueKey) => candidates.includes(String(valueKey).trim()))
+    || Object.keys(values).find((valueKey) => candidates.some((candidate) =>
+      String(valueKey).trim().toLowerCase() === candidate.toLowerCase()
+    ));
+  return Number(key === undefined ? 0 : values[key]) || 0;
+};
+
 const toLocalIsoDate = (value) => {
   const date = value instanceof Date ? new Date(value) : new Date(value);
   if (Number.isNaN(date.getTime())) return "";
@@ -173,6 +193,7 @@ function DamageAnalytics({ filteredData, outlets }) {
     (() => {
       const metas = outlets.map((o, i) => ({
         key:   typeof o === "string" ? o : o.area,
+        outlet: o,
         name:  typeof o === "string" ? o : (o.area || o.id || o.name || String(o)),
         color: OUTLET_COLORS[i % OUTLET_COLORS.length],
       }));
@@ -205,9 +226,9 @@ function DamageAnalytics({ filteredData, outlets }) {
       const point = { date: formatDateShort(row.date) };
       // compute values for each outlet meta; compute total separately
       let runningTotal = 0;
-      outletMeta.forEach(({ key, name }) => {
+      outletMeta.forEach(({ key, name, outlet }) => {
         if (key === "__TOTAL") return;
-        const val = Number(row[key] ?? 0);
+        const val = getOutletValue(row, outlet || key);
         runningTotal += val;
         point[name] = val;
       });
@@ -343,7 +364,6 @@ export default function DailyDamages() {
     const handleClickOutside = (event) => {
       if (fromCalendarRef.current  && !fromCalendarRef.current.contains(event.target))  setIsFromCalendarOpen(false);
       if (toCalendarRef.current    && !toCalendarRef.current.contains(event.target))    setIsToCalendarOpen(false);
-      if (entryCalendarRef.current && !entryCalendarRef.current.contains(event.target)) setIsEntryCalendarOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -352,7 +372,8 @@ export default function DailyDamages() {
   useEffect(() => {
     const fetchDamages = async () => {
       try {
-        const res  = await fetch(`${API_URL}/daily-damage/all`);
+        const res  = await fetch(`${API_URL}/daily-damage/all`, { headers: getAuthHeaders() });
+        if (!res.ok) throw new Error(`Failed to load damages (${res.status})`);
         const data = await res.json();
         if (Array.isArray(data)) {
           setDamages(mergeDailyRecords(data.map(d => ({
@@ -376,12 +397,12 @@ export default function DailyDamages() {
     try {
       const url = `${API_URL}/outlets/all`;
       console.log('DailyDamages loadOutlets URL:', url);
-      const res = await fetch(url);
+      const res = await fetch(url, { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) { setOutlets(data); localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
         else setOutlets([]);
-      }
+      } else throw new Error(`Failed to load outlets (${res.status})`);
     } catch (err) {
       console.error("Error fetching outlets:", err);
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -409,11 +430,6 @@ export default function DailyDamages() {
 
   const displayedOutlets = (isSupervisor ? formOutlets : outlets).map(o => typeof o === 'string' ? o : o.id);
   const displayedOutletObjects = isSupervisor ? formOutlets : outlets;
-
-  const getAreaFromDisplayedOutlet = (outletId) => {
-    const outletObj = displayedOutletObjects.find(o => (typeof o === 'string' ? o : o.id) === outletId);
-    return outletObj ? (typeof outletObj === 'string' ? outletObj : outletObj.area) : outletId;
-  };
 
   useEffect(() => {
     const handleOutletsUpdated = (event) => {
@@ -461,9 +477,9 @@ export default function DailyDamages() {
       const obj = { Date: formatDateDMY(row.date) };
       displayedOutletObjects.forEach((o) => {
         const area = typeof o === 'string' ? o : o.area;
-        obj[area] = Number(row[area] ?? 0);
+        obj[area] = getOutletValue(row, o);
       });
-      obj.Total = displayedOutletObjects.reduce((s, o) => s + Number(row[(typeof o === 'string' ? o : o.area)] || 0), 0);
+      obj.Total = displayedOutletObjects.reduce((s, o) => s + getOutletValue(row, o), 0);
       return obj;
     });
     const ws = XLSX.utils.json_to_sheet(data);
@@ -573,17 +589,16 @@ export default function DailyDamages() {
                   {filteredData.map((d, i) => {
                     // Always recompute total from area keys so edits reflect immediately
                     const rowTotal = displayedOutletObjects.reduce((sum, outlet) => {
-                      const area = typeof outlet === 'string' ? outlet : outlet.area;
-                      return sum + Math.round(Number(d[area] || 0));
+                      return sum + Math.round(getOutletValue(d, outlet));
                     }, 0);
                     return (
                       <tr key={i} className="border-t text-sm hover:bg-gray-50 transition">
                         <td className="p-3 text-left sticky left-0 bg-white z-10">{formatDateDisplay(d.date)}</td>
                         {displayedOutlets.map((outletId) => {
                           // displayedOutlets contains IDs — resolve to area key for data lookup
-                          const area = getAreaFromDisplayedOutlet(outletId);
+                          const outlet = displayedOutletObjects.find((item) => (typeof item === 'string' ? item : item.id) === outletId);
                           return (
-                            <td key={outletId} className="p-3 text-center">{Math.round(Number(d[area] || 0))}</td>
+                            <td key={outletId} className="p-3 text-center">{Math.round(getOutletValue(d, outlet || outletId))}</td>
                           );
                         })}
                         <td className="p-3 text-center font-bold text-orange-600 sticky right-0 bg-white z-10">
@@ -596,15 +611,14 @@ export default function DailyDamages() {
                   <tr className="bg-orange-50 font-semibold text-orange-700">
                     <td className="p-3 text-left sticky left-0 bg-orange-50 z-10">Grand Total</td>
                     {displayedOutlets.map((outletId) => {
-                      const area = getAreaFromDisplayedOutlet(outletId);
-                      const total = filteredData.reduce((sum, d) => sum + Math.round(Number(d[area] || 0)), 0);
+                      const outlet = displayedOutletObjects.find((item) => (typeof item === 'string' ? item : item.id) === outletId);
+                      const total = filteredData.reduce((sum, d) => sum + Math.round(getOutletValue(d, outlet || outletId)), 0);
                       return <td key={outletId} className="p-3 text-center">{total}</td>;
                     })}
                     <td className="p-3 text-center sticky right-0 bg-orange-50 z-10">
                       {filteredData.reduce((sum, d) => {
                         return sum + displayedOutletObjects.reduce((s, outlet) => {
-                          const area = typeof outlet === 'string' ? outlet : outlet.area;
-                          return s + Math.round(Number(d[area] || 0));
+                          return s + Math.round(getOutletValue(d, outlet));
                         }, 0);
                       }, 0)}
                     </td>

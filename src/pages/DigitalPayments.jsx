@@ -7,6 +7,24 @@ import { mergeDailyRecords } from "../utils/mergeDailyRecords";
 
 const STORAGE_KEY = "egg_outlets_v1";
 
+const getAuthHeaders = (headers = {}) => {
+  const token = localStorage.getItem("token");
+  return token ? { ...headers, Authorization: `Bearer ${token}` } : headers;
+};
+
+const getOutletValue = (values, outlet) => {
+  if (!values || typeof values !== "object") return 0;
+  const candidates = (typeof outlet === "string" ? [outlet] : [outlet?.id, outlet?.area, outlet?.name])
+    .filter(Boolean)
+    .map((value) => String(value).trim());
+  const key = candidates.find((candidate) => Object.prototype.hasOwnProperty.call(values, candidate))
+    || Object.keys(values).find((valueKey) => candidates.includes(String(valueKey).trim()))
+    || Object.keys(values).find((valueKey) => candidates.some((candidate) =>
+      String(valueKey).trim().toLowerCase() === candidate.toLowerCase()
+    ));
+  return Number(key === undefined ? 0 : values[key]) || 0;
+};
+
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
@@ -213,14 +231,14 @@ export default function DigitalPayments() {
 
   const loadOutlets = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/outlets/all`);
+      const res = await fetch(`${API_URL}/outlets/all`, { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
           setOutlets(data);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
         } else setOutlets([]);
-      }
+      } else throw new Error(`Failed to load outlets (${res.status})`);
     } catch (err) {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) { try { const p = JSON.parse(saved); if (Array.isArray(p) && p.length > 0) setOutlets(p); } catch {} }
@@ -247,7 +265,8 @@ export default function DigitalPayments() {
   useEffect(() => {
     const fetchPayments = async () => {
       try {
-        const res = await fetch(`${API_URL}/digital-payments/all`);
+        const res = await fetch(`${API_URL}/digital-payments/all`, { headers: getAuthHeaders() });
+        if (!res.ok) throw new Error(`Failed to load digital payments (${res.status})`);
         const data = await res.json();
         setRows(mergeDailyRecords(Array.isArray(data) ? data.map(normalizePaymentRow) : []));
       } catch { setRows([]); }
@@ -261,7 +280,7 @@ export default function DigitalPayments() {
     if (!existing) return false;
     return formOutlets.some((outlet) => {
       const area = outlet.area || outlet;
-      return Number(existing.outlets?.[area] || 0) > 0;
+      return getOutletValue(existing.outlets, outlet) > 0;
     });
   }, [entryDate, rows, formOutlets]);
 
@@ -289,8 +308,7 @@ export default function DigitalPayments() {
 
   // Recompute totals from outlets object (area-keyed) so edits reflect immediately
   const getRowOutletValue = useCallback((row, outlet) => {
-    const area = outlet.area || outlet.name || outlet.id;
-    return Number(row.outlets?.[area] || 0);
+    return getOutletValue(row.outlets, outlet);
   }, []);
 
   const getRowTotal = useCallback((row) => {
@@ -301,7 +319,7 @@ export default function DigitalPayments() {
     const totals = {};
     displayedOutlets.forEach((outlet) => {
       const area = outlet.area || outlet.name || outlet.id;
-      totals[area] = filteredRows.reduce((sum, r) => sum + Number(r.outlets?.[area] || 0), 0);
+      totals[area] = filteredRows.reduce((sum, r) => sum + getOutletValue(r.outlets, outlet), 0);
     });
     totals.grandTotal = filteredRows.reduce((sum, r) => sum + getRowTotal(r), 0);
     return totals;
@@ -337,7 +355,7 @@ export default function DigitalPayments() {
 
     setIsSaving(true);
     try {
-      const response = await fetch(`${API_URL}/digital-payments/add`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ date: entryDate, outlets: outletAmounts, addedBy }) });
+      const response = await fetch(`${API_URL}/digital-payments/add`, { method: "POST", headers: getAuthHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ date: entryDate, outlets: outletAmounts, addedBy }) });
       if (!response.ok) { alert('Failed to add payment'); return; }
       const savedRow = normalizePaymentRow(await response.json());
       setRows((currentRows) => {
@@ -366,7 +384,7 @@ export default function DigitalPayments() {
     try {
       const response = await fetch(`${API_URL}/digital-payments/${row.id}/audit-status`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           outlet: outletKey,
           status,
@@ -392,7 +410,7 @@ export default function DigitalPayments() {
     if (!filteredRows?.length) { alert("No data available"); return; }
     const data = filteredRows.map((row) => {
       const obj = { Date: formatDateDMY(row.date) };
-      outlets.forEach((o) => { const area = o.area || o; obj[area] = Number(row.outlets?.[area] ?? 0); });
+      outlets.forEach((o) => { const area = o.area || o; obj[area] = getOutletValue(row.outlets, o); });
       obj.Total = getRowTotal(row);
       return obj;
     });
@@ -482,8 +500,7 @@ export default function DigitalPayments() {
                       {filteredRows.map((row, idx) => {
                         // Recompute total from outlets (area-keyed) so edits reflect immediately
                         const rowTotal = displayedOutlets.reduce((s, o) => {
-                          const area = o.area || o.name || o.id;
-                          return s + Number(row.outlets?.[area] || 0);
+                          return s + getOutletValue(row.outlets, o);
                         }, 0);
                         return (
                           <tr key={row.id} className={`text-xs text-gray-700 md:text-sm ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/60"}`}>
@@ -501,7 +518,7 @@ export default function DigitalPayments() {
                                       onClick={() => isPaymentAuditor && setOpenAuditCell((current) => current === auditCellKey ? null : auditCellKey)}
                                       className={`text-left ${isPaymentAuditor ? "rounded-lg px-2 py-1 hover:bg-orange-50 focus:outline-none focus:ring-1 focus:ring-orange-300" : ""}`}
                                     >
-                                      <span className="block font-medium text-gray-900">{formatSmart(row.outlets?.[area])}</span>
+                                      <span className="block font-medium text-gray-900">{formatSmart(getOutletValue(row.outlets, outlet))}</span>
                                       <AuditBadge status={status} />
                                     </button>
                                     {isPaymentAuditor && openAuditCell === auditCellKey && (

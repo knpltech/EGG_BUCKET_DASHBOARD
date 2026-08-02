@@ -752,7 +752,6 @@ const OutletPerformance = () => {
                     <th className="px-4 py-3 text-right">Salary</th>
                     <th className="px-4 py-3 text-right">Total Eggs</th>
                     <th className="px-4 py-3 text-right">Revenue</th>
-                    <th className="px-4 py-3 text-right">Avg Revenue/Egg</th>
                     <th className="px-4 py-3 text-right">Damage</th>
                     <th className="px-4 py-3 text-right">Damage Cost</th>
                     <th className="px-4 py-3 text-right">Incentive</th>
@@ -776,7 +775,6 @@ const OutletPerformance = () => {
                         <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.salary)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{number(item.salesQty)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{currency(item.totalReceived)}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.averageRevenuePerEgg)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{number(item.damages)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.damageCost)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.incentive)}</td>
@@ -796,7 +794,7 @@ const OutletPerformance = () => {
                       </tr>
                     );
                   }) : (
-                    <tr><td colSpan="15"><EmptyState /></td></tr>
+                    <tr><td colSpan="14"><EmptyState /></td></tr>
                   )}
                 </tbody>
               </table>
