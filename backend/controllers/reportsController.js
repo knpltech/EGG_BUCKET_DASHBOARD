@@ -385,16 +385,10 @@ export const getStatistics = async (req, res) => {
       if (!alias) return null;
       if (outletByAlias.has(alias)) return outletByAlias.get(alias);
 
-      const outlet = {
-        id: String(rawKey),
-        name: String(rawKey),
-        area: String(rawKey),
-        zoneId: null,
-        status: 'Active',
-      };
-      outlets.push(outlet);
-      addOutletAlias(outlet, rawKey);
-      return outlet;
+      // Only configured outlets belong in performance reporting. Historical
+      // documents can contain retired or misspelled keys; creating an outlet
+      // from those keys produced empty rows in the breakdown.
+      return null;
     };
 
     const getOutletForKey = (key) => outletByAlias.get(normalizeOutletKey(key)) || includeLooseOutlet(key);

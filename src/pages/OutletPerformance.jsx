@@ -22,7 +22,6 @@ import {
   faMoneyBillWave,
   faMinus,
   faRotateRight,
-  faStore,
   faUtensils,
   faWallet,
 } from "@fortawesome/free-solid-svg-icons";
@@ -375,7 +374,6 @@ const OutletPerformance = () => {
     loadPerformance();
   }, [dateRange, isSupervisor, zone]);
 
-  const totals = stats?.totals || {};
   const outletRows = useMemo(() => stats?.outletBreakdown || [], [stats]);
   const comparisonRange = useMemo(() => getAprilToTodayRange(), []);
   const selectedMonthKeys = useMemo(() => new Set(getMonthKeysInRange(dateRange.from, dateRange.to)), [dateRange.from, dateRange.to]);
@@ -459,6 +457,7 @@ const OutletPerformance = () => {
     const totalCost = salary + damageCost + incentive + foodAllowance;
     const costPerEgg = totalEggs > 0 ? totalCost / totalEggs : 0;
     const totalReceived = toNumber(item.totalReceived);
+    const averageRevenuePerEgg = totalEggs > 0 ? totalReceived / totalEggs : 0;
     const closingAmount = totalReceived - totalCost;
 
     return {
@@ -467,6 +466,7 @@ const OutletPerformance = () => {
       damageCost,
       totalCost,
       costPerEgg,
+      averageRevenuePerEgg,
       closingAmount,
     };
   }), [outletRows, salaryByOutlet]);
@@ -496,6 +496,7 @@ const OutletPerformance = () => {
   }), [performanceRows]);
 
   const averageNeccRate = derivedTotals.salesQty ? derivedTotals.revenue / derivedTotals.salesQty : 0;
+  const averageRevenuePerEgg = derivedTotals.salesQty ? derivedTotals.totalReceived / derivedTotals.salesQty : 0;
   const perEggCost = derivedTotals.salesQty ? derivedTotals.totalCost / derivedTotals.salesQty : 0;
   const profitScore = profitRate === null ? null : roundToTwoDecimals(averageNeccRate - profitRate - perEggCost);
   const profit = profitScore === null ? null : profitScore * derivedTotals.salesQty;
@@ -624,7 +625,7 @@ const OutletPerformance = () => {
 
   const handleExport = () => {
     const rows = [
-      ["Outlet", "Salary", "Total Eggs", "Damage", "Damage Cost", "Incentive", "Food Allowance", "Total Cost", "Cost/Egg", "Avg NECC", "Profit Score", "Profit", "Status"],
+      ["Outlet", "Salary", "Total Eggs", "Revenue", "Avg Revenue/Egg", "Damage", "Damage Cost", "Incentive", "Food Allowance", "Total Cost", "Cost/Egg", "Avg NECC", "Profit Score", "Profit", "Status"],
       ...performanceRows.map((item) => {
         const itemProfitScore = profitRate === null ? null : roundToTwoDecimals(toNumber(item.averageNeccRate) - profitRate - toNumber(item.costPerEgg));
         const itemProfit = itemProfitScore === null ? null : itemProfitScore * toNumber(item.salesQty);
@@ -632,6 +633,8 @@ const OutletPerformance = () => {
           item.label,
           item.salary,
           item.salesQty,
+          item.totalReceived,
+          item.averageRevenuePerEgg,
           item.damages,
           item.damageCost,
           item.incentive,
@@ -657,6 +660,8 @@ const OutletPerformance = () => {
 
   const kpis = [
     { label: "Egg Delivered", value: number(derivedTotals.salesQty), icon: faEgg, tone: "orange" },
+    { label: "Revenue", value: currency(derivedTotals.totalReceived), icon: faWallet, tone: "green" },
+    { label: "Revenue / Egg", value: currency(averageRevenuePerEgg), icon: faChartLine, tone: "green" },
     { label: "Egg Cost", value: currency(derivedTotals.salesQty ? derivedTotals.totalCost / derivedTotals.salesQty : 0), icon: faMoneyBillWave, tone: "green" },
     { label: "Damage", value: number(derivedTotals.damages), icon: faCircleExclamation, tone: "red" },
     { label: "Damage Cost", value: currency(derivedTotals.damageCost), icon: faCircleExclamation, tone: "red" },
@@ -746,6 +751,8 @@ const OutletPerformance = () => {
                     <th className="px-4 py-3 text-left">Outlet</th>
                     <th className="px-4 py-3 text-right">Salary</th>
                     <th className="px-4 py-3 text-right">Total Eggs</th>
+                    <th className="px-4 py-3 text-right">Revenue</th>
+                    <th className="px-4 py-3 text-right">Avg Revenue/Egg</th>
                     <th className="px-4 py-3 text-right">Damage</th>
                     <th className="px-4 py-3 text-right">Damage Cost</th>
                     <th className="px-4 py-3 text-right">Incentive</th>
@@ -768,6 +775,8 @@ const OutletPerformance = () => {
                         <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">{item.label}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.salary)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{number(item.salesQty)}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{currency(item.totalReceived)}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.averageRevenuePerEgg)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{number(item.damages)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.damageCost)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.incentive)}</td>
@@ -787,7 +796,7 @@ const OutletPerformance = () => {
                       </tr>
                     );
                   }) : (
-                    <tr><td colSpan="13"><EmptyState /></td></tr>
+                    <tr><td colSpan="15"><EmptyState /></td></tr>
                   )}
                 </tbody>
               </table>
@@ -814,6 +823,8 @@ const OutletPerformance = () => {
 
                     <div className="grid grid-cols-1 gap-px bg-gray-200 sm:grid-cols-2 lg:grid-cols-3">
                       <MetricTile label="Eggs Delivered" value={number(item.salesQty)} accent="text-black" />
+                      <MetricTile label="Revenue" value={currency(item.totalReceived)} accent="text-green-600" />
+                      <MetricTile label="Revenue / Egg" value={currency(item.averageRevenuePerEgg)} accent="text-green-600" />
                       <MetricTile label="Per Egg Cost" value={currency(item.costPerEgg)} accent="text-black" />
                       <MetricTile label="Damage %" value={percent(damagePercent)} accent="text-red-600" />
                       <MetricTile label="Outlet Cost" value={currency(item.totalCost)} accent="text-black" />
