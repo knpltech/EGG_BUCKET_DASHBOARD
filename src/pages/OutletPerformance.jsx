@@ -671,7 +671,7 @@ const OutletPerformance = () => {
   const kpis = [
     { label: "Egg Delivered", value: number(derivedTotals.salesQty), icon: faEgg, tone: "orange" },
     { label: "Total Received", value: currency(derivedTotals.totalReceived), icon: faWallet, tone: "green" },
-    { label: "Revenue / Egg", value: currency(averageRevenuePerEgg), icon: faChartLine, tone: "green" },
+    { label: "Avg NECC", value: currency(averageNeccRate), icon: faChartLine, tone: "green" },
     { label: "Egg Cost", value: currency(derivedTotals.salesQty ? derivedTotals.totalCost / derivedTotals.salesQty : 0), icon: faMoneyBillWave, tone: "green" },
     { label: "Damage", value: number(derivedTotals.damages), icon: faCircleExclamation, tone: "red" },
     { label: "Damage Cost", value: currency(derivedTotals.damageCost), icon: faCircleExclamation, tone: "red" },
