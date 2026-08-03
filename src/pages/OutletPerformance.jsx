@@ -72,10 +72,19 @@ const getRange = (type) => {
     return { from: yesterdayIso, to: yesterdayIso };
   }
   if (type === "week") return getThisWeekRange(today);
+  if (type === "lastWeek") {
+    const thisWeekStart = new Date(today);
+    thisWeekStart.setDate(today.getDate() - today.getDay());
+    const lastWeekStart = new Date(thisWeekStart);
+    lastWeekStart.setDate(thisWeekStart.getDate() - 7);
+    const lastWeekEnd = new Date(thisWeekStart);
+    lastWeekEnd.setDate(thisWeekStart.getDate() - 1);
+    return { from: toLocalIsoDate(lastWeekStart), to: toLocalIsoDate(lastWeekEnd) };
+  }
   if (type === "month") {
     return {
       from: toLocalIsoDate(new Date(today.getFullYear(), today.getMonth(), 1)),
-      to: toLocalIsoDate(new Date(today.getFullYear(), today.getMonth() + 1, 0)),
+      to,
     };
   }
   if (type === "lastMonth") {
@@ -625,7 +634,7 @@ const OutletPerformance = () => {
 
   const handleExport = () => {
     const rows = [
-      ["Outlet", "Salary", "Total Eggs", "Revenue", "Avg Revenue/Egg", "Damage", "Damage Cost", "Incentive", "Food Allowance", "Total Cost", "Cost/Egg", "Avg NECC", "Profit Score", "Profit", "Status"],
+      ["Outlet", "Salary", "Total Eggs", "Total Received", "Revenue", "Avg Revenue/Egg", "Damage", "Damage Cost", "Incentive", "Food Allowance", "Total Cost", "Cost/Egg", "Avg NECC", "Profit Score", "Profit", "Status"],
       ...performanceRows.map((item) => {
         const itemProfitScore = profitRate === null ? null : roundToTwoDecimals(toNumber(item.averageNeccRate) - profitRate - toNumber(item.costPerEgg));
         const itemProfit = itemProfitScore === null ? null : itemProfitScore * toNumber(item.salesQty);
@@ -634,6 +643,7 @@ const OutletPerformance = () => {
           item.salary,
           item.salesQty,
           item.totalReceived,
+          item.revenue,
           item.averageRevenuePerEgg,
           item.damages,
           item.damageCost,
@@ -660,7 +670,7 @@ const OutletPerformance = () => {
 
   const kpis = [
     { label: "Egg Delivered", value: number(derivedTotals.salesQty), icon: faEgg, tone: "orange" },
-    { label: "Revenue", value: currency(derivedTotals.totalReceived), icon: faWallet, tone: "green" },
+    { label: "Total Received", value: currency(derivedTotals.totalReceived), icon: faWallet, tone: "green" },
     { label: "Revenue / Egg", value: currency(averageRevenuePerEgg), icon: faChartLine, tone: "green" },
     { label: "Egg Cost", value: currency(derivedTotals.salesQty ? derivedTotals.totalCost / derivedTotals.salesQty : 0), icon: faMoneyBillWave, tone: "green" },
     { label: "Damage", value: number(derivedTotals.damages), icon: faCircleExclamation, tone: "red" },
@@ -685,6 +695,7 @@ const OutletPerformance = () => {
           {[
             ["today", "Today"],
             ["yesterday", "Yesterday"],
+            ["lastWeek", "Last Week"],
             ["week", "This Week"],
             ["month", "This Month"],
             ["lastMonth", "Last Month"],
@@ -774,7 +785,7 @@ const OutletPerformance = () => {
                         <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">{item.label}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.salary)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{number(item.salesQty)}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{currency(item.totalReceived)}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{currency(item.revenue)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{number(item.damages)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.damageCost)}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.incentive)}</td>
@@ -821,8 +832,8 @@ const OutletPerformance = () => {
 
                     <div className="grid grid-cols-1 gap-px bg-gray-200 sm:grid-cols-2 lg:grid-cols-3">
                       <MetricTile label="Eggs Delivered" value={number(item.salesQty)} accent="text-black" />
-                      <MetricTile label="Revenue" value={currency(item.totalReceived)} accent="text-green-600" />
-                      <MetricTile label="Revenue / Egg" value={currency(item.averageRevenuePerEgg)} accent="text-green-600" />
+                      <MetricTile label="Total Received" value={currency(item.totalReceived)} accent="text-green-600" />
+                      <MetricTile label="Revenue" value={currency(item.revenue)} accent="text-green-600" />
                       <MetricTile label="Per Egg Cost" value={currency(item.costPerEgg)} accent="text-black" />
                       <MetricTile label="Damage %" value={percent(damagePercent)} accent="text-red-600" />
                       <MetricTile label="Outlet Cost" value={currency(item.totalCost)} accent="text-black" />
