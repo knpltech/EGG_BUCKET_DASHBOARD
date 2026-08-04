@@ -1,0 +1,93 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // --- EggBucket Mobile App Collections ---
+
+    // Login Credentials verification (Read-only for app login, write-protected)
+    match /Authentication/{id} {
+      allow read: if true;
+      allow write: if false; 
+    }
+
+    // Core sheets & registries
+    match /customers/{id} {
+      allow read, write: if true;
+    }
+
+    match /DeliveryMan/{id} {
+      allow read, write: if true;
+    }
+    
+    match /todays_incentive/{document} {
+      allow read, write: if true;
+    }
+
+    match /zones/{id} {
+      allow read, write: if true;
+    }
+
+    match /globalcounter/{id} {
+      allow read, write: if true;
+    }
+
+    // Inventory & Metric submissions
+    match /loading_entries/{id} {
+      allow read, write: if true;
+    }
+
+    match /return_load_entries/{id} {
+      allow read, write: if true;
+    }
+
+    match /damage_reports/{id} {
+      allow read, write: if true;
+    }
+
+    match /cash_handover_entries/{id} {
+      allow read, write: if true;
+    }
+
+    match /upi_handover_entries/{id} {
+      allow read, write: if true;
+    }
+
+    match /penalty_reports/{id} {
+      allow read, write: if true;
+    }
+
+    // --- Other Collections ---
+    match /users/{uid} {
+      allow read, write: if true;
+    }
+
+    match /outlets/{id} {
+      allow read, write: if true;
+    }
+
+    match /settings/{id} {
+      allow read, write: if true;
+    }
+
+    match /counters/{id} {
+      allow read, write: if true;
+    }
+
+    match /activity_history/{id} {
+      allow read, write: if true;
+    }
+
+    match /food_allowance_entries/{id} {
+      allow read, write: if true;
+    }
+
+    match /incentive_entries/{id} {
+      allow read, write: if true;
+    }
+
+    match /notifications/{id} {
+      allow read, write: if true;
+    }
+  }
+}

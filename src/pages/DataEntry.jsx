@@ -568,33 +568,41 @@ export default function DataEntry() {
           // total amount; it is not recalculated from local sales and rate.
           setAiTotalAmount(Number(data.totalAmount) || 0);
 
-          // Fill every summary field, including zero. A zero cash handover or
-          // zero damage is still a real value for the selected outlet/date.
+          const isCurrentDate = date === todayIso;
+
           if (!hasSales && data.salesQty !== undefined) {
             console.log("🟢 CALLING setSales with:", data.salesQty);
             setSales(String(data.salesQty));
-          }
-          const cashHandoverValue = Number(data.cashHandover ?? data.cashPayment) || 0;
-          if (!hasCash) {
-            console.log("🟢 CALLING setCash with:", cashHandoverValue);
-            setCash(String(cashHandoverValue));
           }
           if (!hasDigital && data.digitalPayment !== undefined) {
             console.log("🟢 CALLING setDigital with:", data.digitalPayment);
             setDigital(String(data.digitalPayment));
           }
-          if (!hasDamages) {
-            setDamages(String(Number(data.damage) || 0));
-          }
-          if (!hasIncentive) {
-            setIncentive(String(Number(data.incentive) || 0));
-          }
-          if (!hasFoodAllowance) {
-            setFoodAllowance(String(Number(data.foodAllowance) || 0));
-          }
           const neccValue = Number(data.neccRate || (Number(data.salesPoint || 0) / 30)) || 0;
           if (!hasNecc) {
             setNeccrate(formatNeccRate(neccValue));
+          }
+
+          // Prefill right column fields (Daily Incentive, Daily Damages, Cash Payment, Food Allowance)
+          // ONLY when the selected date is the current date
+          if (isCurrentDate) {
+            const cashHandoverValue = Number(data.cashHandover ?? data.cashPayment) || 0;
+            if (!hasCash) {
+              console.log("🟢 Prefilling Cash Payment (current date) with:", cashHandoverValue);
+              setCash(String(cashHandoverValue));
+            }
+            if (!hasDamages) {
+              console.log("🟢 Prefilling Daily Damages (current date) with:", data.damage);
+              setDamages(String(Number(data.damage) || 0));
+            }
+            if (!hasIncentive) {
+              console.log("🟢 Prefilling Daily Incentive (current date) with:", data.incentive);
+              setIncentive(String(Number(data.incentive) || 0));
+            }
+            if (!hasFoodAllowance) {
+              console.log("🟢 Prefilling Food Allowance (current date) with:", data.foodAllowance);
+              setFoodAllowance(String(Number(data.foodAllowance) || 0));
+            }
           }
         }
       } catch (err) {

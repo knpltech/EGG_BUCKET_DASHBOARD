@@ -257,6 +257,32 @@ const getInventoryMetrics = async (date) => {
   }
 };
 
+const queryFirestoreCollectionByDateKey = async (targetDb, collectionName, dateKey) => {
+  if (!targetDb) return [];
+  try {
+    const snapshot = await targetDb.collection(collectionName).where("dateKey", "==", dateKey).get();
+    return snapshot.docs.map(doc => doc.data());
+  } catch (err) {
+    console.warn(`Could not query ${collectionName} by dateKey in Firestore:`, err.message);
+    return [];
+  }
+};
+
+const fetchFirestoreInventoryMetrics = async (targetDb, date) => {
+  const [foodEntries, cashEntries, damageEntries, incentiveEntries] = await Promise.all([
+    queryFirestoreCollectionByDateKey(targetDb, "food_allowance_entries", date),
+    queryFirestoreCollectionByDateKey(targetDb, "cash_handover_entries", date),
+    queryFirestoreCollectionByDateKey(targetDb, "damage_reports", date),
+    queryFirestoreCollectionByDateKey(targetDb, "incentive_entries", date),
+  ]);
+  return {
+    foodAllowanceEntries: foodEntries,
+    cashHandoverEntries: cashEntries,
+    damageEntries: damageEntries,
+    incentiveEntries: incentiveEntries,
+  };
+};
+
 const getMetricAgentNamesForOutlet = (metrics, outlet) => [
   ...(metrics?.cashHandoverEntries || []),
   ...(metrics?.foodAllowanceEntries || []),
@@ -268,22 +294,36 @@ const getMetricAgentNamesForOutlet = (metrics, outlet) => [
 
 const applyInventoryMetrics = async (summary, outlet, date, suppliedMetrics) => {
   try {
-    const metrics = suppliedMetrics || await getInventoryMetrics(date);
+    let metrics = suppliedMetrics;
+    if (!metrics) {
+      if (collectionDb) {
+        const fsMetrics = await fetchFirestoreInventoryMetrics(collectionDb, date);
+        if (fsMetrics.foodAllowanceEntries.length || fsMetrics.cashHandoverEntries.length || fsMetrics.damageEntries.length || fsMetrics.incentiveEntries.length) {
+          metrics = fsMetrics;
+        }
+      }
+      if (!metrics && db) {
+        const fsMetrics = await fetchFirestoreInventoryMetrics(db, date);
+        if (fsMetrics.foodAllowanceEntries.length || fsMetrics.cashHandoverEntries.length || fsMetrics.damageEntries.length || fsMetrics.incentiveEntries.length) {
+          metrics = fsMetrics;
+        }
+      }
+      if (!metrics) {
+        metrics = await getInventoryMetrics(date);
+      }
+    }
+
     const sumForOutlet = (entries, paths) => (Array.isArray(entries) ? entries : [])
       .filter((entry) => isMatchingOutlet(entry?.outletName || entry?.outlet, outlet))
       .reduce((total, entry) => total + pickNumber(entry, paths), 0);
 
-    // These values come from the Retail Admin collection cards and must be
-    // scoped by outlet, rather than using the API's date-wide totals.
-    summary.damage = sumForOutlet(metrics.damageEntries, ["quantity", "damage", "damages"]);
-    summary.cashHandover = sumForOutlet(metrics.cashHandoverEntries, ["cash", "amount", "value"]);
+    summary.damage = sumForOutlet(metrics.damageEntries, ["quantity", "damage", "damages", "Cash", "cash"]);
+    summary.cashHandover = sumForOutlet(metrics.cashHandoverEntries, ["Cash", "cash", "amount", "value"]);
     summary.cashPayment = summary.cashHandover;
-    summary.foodAllowance = sumForOutlet(metrics.foodAllowanceEntries, ["cash", "amount", "value"]);
-    summary.incentive = sumForOutlet(metrics.incentiveEntries, ["cash", "amount", "value"]);
+    summary.foodAllowance = sumForOutlet(metrics.foodAllowanceEntries, ["Cash", "cash", "amount", "value"]);
+    summary.incentive = sumForOutlet(metrics.incentiveEntries, ["Cash", "cash", "amount", "value"]);
   } catch (error) {
-    // Keep the rest of the entry form available if the supplementary Retail
-    // metrics service is temporarily unavailable.
-    console.error("Error fetching Retail Admin inventory metrics:", error.message);
+    console.error("Error fetching inventory metrics:", error.message);
   }
 
   return summary;
