@@ -53,10 +53,17 @@ const getRange = (type) => {
 
   if (type === "today") return { from: to, to };
   if (type === "week") return getThisWeekRange(today);
+  if (type === "lastWeek") return getLastWeekRange();
   if (type === "month") {
     return {
       from: toLocalIsoDate(new Date(today.getFullYear(), today.getMonth(), 1)),
       to: toLocalIsoDate(new Date(today.getFullYear(), today.getMonth() + 1, 0)),
+    };
+  }
+  if (type === "lastMonth") {
+    return {
+      from: toLocalIsoDate(new Date(today.getFullYear(), today.getMonth() - 1, 1)),
+      to: toLocalIsoDate(new Date(today.getFullYear(), today.getMonth(), 0)),
     };
   }
   if (type === "quarter") {
@@ -367,7 +374,9 @@ const Statistics = () => {
           />
           {[
             ["today", "Today"],
+            ["lastWeek", "Last Week"],
             ["week", "This Week"],
+            ["lastMonth", "Last Month"],
             ["month", "This Month"],
             ["quarter", "This Quarter"],
           ].map(([key, label]) => (
