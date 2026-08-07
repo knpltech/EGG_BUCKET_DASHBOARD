@@ -203,31 +203,31 @@ export default function Sidebar({ supervisor }) {
               <FontAwesomeIcon icon={faTableCells} />
               {open && "Dashboard"}
             </Link>
-            <Link to="/admin/damages" className={linkClass("/admin/damages")}> 
+            <Link to="/viewer/damages" className={linkClass("/viewer/damages")}> 
               <FontAwesomeIcon icon={faExclamationTriangle} />
               {open && "Daily Damages"}
             </Link>
-            <Link to="/admin/neccrate" className={linkClass("/admin/neccrate")}> 
+            <Link to="/viewer/neccrate" className={linkClass("/viewer/neccrate")}> 
               <FontAwesomeIcon icon={faEgg} />
               {open && "NECC Rate"}
             </Link>
-            <Link to="/admin/dailysales" className={linkClass("/admin/dailysales")}> 
+            <Link to="/viewer/dailysales" className={linkClass("/viewer/dailysales")}> 
               <FontAwesomeIcon icon={faEgg} />
               {open && "Daily Sales Quantity"}
             </Link>
-            <Link to="/admin/digital-payments" className={linkClass("/admin/digital-payments")}> 
+            <Link to="/viewer/digital-payments" className={linkClass("/viewer/digital-payments")}> 
               <FontAwesomeIcon icon={faWallet} />
               {open && "Digital Payments"}
             </Link>
-            <Link to="/admin/cash-payments" className={linkClass("/admin/cash-payments")}> 
+            <Link to="/viewer/cash-payments" className={linkClass("/viewer/cash-payments")}> 
               <FontAwesomeIcon icon={faMoneyBillWave} />
               {open && "Cash Payments"}
             </Link>
-            <Link to="/admin/daily-revenue" className={linkClass("/admin/daily-revenue")}>
+            <Link to="/viewer/daily-revenue" className={linkClass("/viewer/daily-revenue")}>
               <FontAwesomeIcon icon={faDollarSign} />
               {open && "Daily Revenue"}
             </Link>
-              <Link to="/admin/reports" className={linkClass("/admin/reports")}> 
+              <Link to="/viewer/reports" className={linkClass("/viewer/reports")}> 
             <FontAwesomeIcon icon={faChartLine} />
             {open && "Reports"}
           </Link>

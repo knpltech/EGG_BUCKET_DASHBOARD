@@ -226,6 +226,13 @@ function App() {
                 />
               }
             />
+            <Route path="/viewer/damages" element={<ProtectedRoute element={<AdminLayoutWithPanel><DailyDamages /></AdminLayoutWithPanel>} requiredRole="viewer" />} />
+            <Route path="/viewer/neccrate" element={<ProtectedRoute element={<AdminLayoutWithPanel><Neccrate /></AdminLayoutWithPanel>} requiredRole="viewer" />} />
+            <Route path="/viewer/dailysales" element={<ProtectedRoute element={<AdminLayoutWithPanel><Dailysales /></AdminLayoutWithPanel>} requiredRole="viewer" />} />
+            <Route path="/viewer/digital-payments" element={<ProtectedRoute element={<AdminLayoutWithPanel><DigitalPayments /></AdminLayoutWithPanel>} requiredRole="viewer" />} />
+            <Route path="/viewer/cash-payments" element={<ProtectedRoute element={<AdminLayoutWithPanel><CashPayments /></AdminLayoutWithPanel>} requiredRole="viewer" />} />
+            <Route path="/viewer/daily-revenue" element={<ProtectedRoute element={<AdminLayoutWithPanel><DailyRevenue /></AdminLayoutWithPanel>} requiredRole="viewer" />} />
+            <Route path="/viewer/reports" element={<ProtectedRoute element={<AdminLayoutWithPanel><Reports /></AdminLayoutWithPanel>} requiredRole="viewer" />} />
             <Route path="/viewer/data" element={<ProtectedRoute element={<ViewerData />} requiredRole="viewer" />} />
 
             <Route path="*" element={<Navigate to="/signin" replace />} />

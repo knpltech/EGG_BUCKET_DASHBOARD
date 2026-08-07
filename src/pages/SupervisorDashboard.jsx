@@ -191,6 +191,31 @@ const getStockQuantityBySupervisorZone = (rows, normalizedZones, today) => {
   );
 };
 
+const getCashBalanceBySupervisorZone = (rows, normalizedZones, today) => {
+  const latestByZone = new Map();
+
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    if (normalizeDate(row?.date || row?.createdAt) !== today) return;
+    const zoneNumber = normalizeZone(row?.zone);
+    if (!zoneNumber || !normalizedZones.includes(zoneNumber)) return;
+
+    const current = latestByZone.get(zoneNumber);
+    if (!current || getDocTimestamp(row) >= getDocTimestamp(current)) {
+      latestByZone.set(zoneNumber, row);
+    }
+  });
+
+  return Object.fromEntries(
+    normalizedZones.map((zoneNumber) => {
+      const row = latestByZone.get(zoneNumber);
+      const balance = row
+        ? toNumber(row.totalCashAmount) - toNumber(row.incentives) - toNumber(row.cashHandover) - toNumber(row.advance)
+        : 0;
+      return [formatZoneLabel(zoneNumber), balance];
+    })
+  );
+};
+
 export default function SupervisorDashboard() {
   const [eggsToday, setEggsToday] = useState(0);
   const [totalCashPayments, setTotalCashPayments] = useState(0);
@@ -200,6 +225,7 @@ export default function SupervisorDashboard() {
   const [damagesToday, setDamagesToday] = useState(0);
   const [neccRate, setNeccRate] = useState("₹0.00");
   const [zoneStockQuantity, setZoneStockQuantity] = useState({});
+  const [zoneCashBalance, setZoneCashBalance] = useState({});
 
   const normalizedUserZones = useMemo(() => {
     try {
@@ -235,7 +261,7 @@ export default function SupervisorDashboard() {
     const today = getLocalIsoDate();
 
     try {
-      const [outletsRes, salesRes, damagesRes, cashRes, digitalRes, incentiveRes, advanceRes, stockOptionsRes, foodAllowanceRes] = await Promise.all([
+      const [outletsRes, salesRes, damagesRes, cashRes, digitalRes, incentiveRes, advanceRes, stockOptionsRes, foodAllowanceRes, cashClosureRes] = await Promise.all([
         fetch(`${API_URL}/outlets/all`),
         fetch(`${API_URL}/dailysales/date/${today}`),
         fetch(`${API_URL}/daily-damage/date/${today}`),
@@ -245,6 +271,7 @@ export default function SupervisorDashboard() {
         fetch(`${API_URL}/advance/date/${today}`),
         fetch(`${API_URL}/stock-options/date/${today}`),
         fetch(`${API_URL}/food-allowance/date/${today}`),
+        fetch(`${API_URL}/cash-closure/all`),
       ]);
 
       const outletsRaw = await outletsRes.json();
@@ -257,6 +284,7 @@ export default function SupervisorDashboard() {
       let stockOptionsRaw = await stockOptionsRes.json();
       if (!Array.isArray(stockOptionsRaw) && stockOptionsRaw) stockOptionsRaw = [stockOptionsRaw];
       const foodAllowanceRaw = asRows(await foodAllowanceRes.json());
+      const cashClosureRaw = cashClosureRes.ok ? asRows(await cashClosureRes.json()) : [];
 
       const zoneOutlets = Array.isArray(outletsRaw)
         ? outletsRaw.filter((outlet) => isOutletInSupervisorZones(outlet, normalizedUserZones))
@@ -278,6 +306,7 @@ export default function SupervisorDashboard() {
       setNeccRate(`₹${computedRate.toFixed(2)}`);
 
       setZoneStockQuantity(getStockQuantityBySupervisorZone(stockOptionsRaw, normalizedUserZones, today));
+      setZoneCashBalance(getCashBalanceBySupervisorZone(cashClosureRaw, normalizedUserZones, today));
     } catch {
       setEggsToday(0);
       setTotalCashPayments(0);
@@ -287,6 +316,7 @@ export default function SupervisorDashboard() {
       setDamagesToday(0);
       setNeccRate("₹0.00");
       setZoneStockQuantity({});
+      setZoneCashBalance({});
     }
   }, [normalizedUserZones]);
 
@@ -347,6 +377,20 @@ export default function SupervisorDashboard() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-6 mb-8">
             <StatCard title="Total Food Allowances" value={formatCurrency(totalFoodAllowance)} icon="🍽️" />
+            <ZoneMetricCard
+              title="Balance Cash"
+              values={zoneCashBalance}
+              zones={normalizedUserZones}
+              formatValue={formatCurrency}
+              icon="💰"
+            />
+            <ZoneMetricCard
+              title="Stock In"
+              values={zoneStockQuantity}
+              zones={normalizedUserZones}
+              formatValue={(value) => toNumber(value).toLocaleString("en-IN")}
+              icon="📦"
+            />
           </div>
 
           {showZoneBreakdown ? (
@@ -379,6 +423,28 @@ function StatCard({ title, value, icon }) {
       <div className="flex justify-between items-center mt-2">
         <h3 className="text-3xl font-bold text-orange-600">{value}</h3>
         <span className="text-3xl">{icon}</span>
+      </div>
+    </div>
+  );
+}
+
+function ZoneMetricCard({ title, values, zones, formatValue, icon }) {
+  return (
+    <div className="bg-white shadow-md rounded-xl p-6">
+      <div className="flex items-start justify-between gap-4">
+        <p className="text-gray-600 text-sm md:text-base">{title}</p>
+        <span className="text-3xl" aria-hidden="true">{icon}</span>
+      </div>
+      <div className="mt-4 space-y-2">
+        {(zones || []).map((zoneNumber) => {
+          const zoneLabel = formatZoneLabel(zoneNumber);
+          return (
+            <div key={zoneLabel} className="flex items-center justify-between gap-3 border-b border-gray-100 pb-2 last:border-0 last:pb-0">
+              <span className="text-sm font-medium text-gray-600">{zoneLabel}</span>
+              <span className="text-3xl font-bold text-orange-600">{formatValue(values?.[zoneLabel] ?? 0)}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

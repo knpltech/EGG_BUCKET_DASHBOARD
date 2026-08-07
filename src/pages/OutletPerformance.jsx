@@ -27,13 +27,14 @@ import {
   faUtensils,
   faWallet,
 } from "@fortawesome/free-solid-svg-icons";
-import { fetchStatisticsData } from "../context/reportsApi";
+import { fetchReportsData, fetchStatisticsData } from "../context/reportsApi";
 import { getRoleFlags } from "../utils/role";
 import { getThisWeekRange, toLocalIsoDate } from "../utils/dateRange";
 
 const API_URL = (import.meta.env.VITE_API_URL || "/api").replace(/\/$/, "");
 
 const currency = (value) => `Rs. ${(Number(value) || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const wholeCurrency = (value) => `Rs. ${Math.round(Number(value) || 0).toLocaleString("en-IN")}`;
 const number = (value) => Math.round(Number(value) || 0).toLocaleString("en-IN");
 const percent = (value) => `${(Number(value) || 0).toFixed(2)}%`;
 
@@ -64,6 +65,22 @@ const getMetricTrend = (current, previous, inverse = false) => {
 
 const toNumber = (value) => Number(value) || 0;
 const roundToTwoDecimals = (value) => Math.round((Number(value) || 0) * 100) / 100;
+
+const fetchReportClosingBalances = async (outlets, range) => {
+  const balances = await Promise.all((outlets || []).map(async (outlet) => {
+    try {
+      const report = await fetchReportsData(outlet.label || outlet.key, {
+        dateFrom: range.from,
+        dateTo: range.to,
+      });
+      return [String(outlet.key), toNumber(report?.totalDifference)];
+    } catch {
+      return [String(outlet.key), 0];
+    }
+  }));
+
+  return new Map(balances);
+};
 
 const formatLongDate = (iso) => {
   if (!iso) return "-";
@@ -350,6 +367,8 @@ const OutletPerformance = () => {
   const [previousStats, setPreviousStats] = useState(null);
   const [comparisonStats, setComparisonStats] = useState(null);
   const [stats, setStats] = useState(null);
+  const [reportClosingBalances, setReportClosingBalances] = useState(() => new Map());
+  const [previousReportClosingBalances, setPreviousReportClosingBalances] = useState(() => new Map());
   const [salaryEntries, setSalaryEntries] = useState([]);
   const [dailySalaryRates, setDailySalaryRates] = useState([]);
   const [salesDayKeys, setSalesDayKeys] = useState(() => new Set());
@@ -400,9 +419,16 @@ const OutletPerformance = () => {
           ...yearList.map((year) => fetchOutletSalaryEntries(year)),
         ]);
 
+        const [currentClosingBalances, previousClosingBalances] = await Promise.all([
+          fetchReportClosingBalances(rangeData?.outletBreakdown, dateRange),
+          fetchReportClosingBalances(previousData?.outletBreakdown, previousRange),
+        ]);
+
         setStats(rangeData);
         setPreviousStats(previousData);
         setComparisonStats(comparisonData);
+        setReportClosingBalances(currentClosingBalances);
+        setPreviousReportClosingBalances(previousClosingBalances);
         setSalaryEntries(salaryData.flat());
         setDailySalaryRates(dailyRates);
         setSalesDayKeys(salesDays);
@@ -411,6 +437,8 @@ const OutletPerformance = () => {
         setStats(null);
         setPreviousStats(null);
         setComparisonStats(null);
+        setReportClosingBalances(new Map());
+        setPreviousReportClosingBalances(new Map());
         setSalaryEntries([]);
         setDailySalaryRates([]);
         setSalesDayKeys(new Set());
@@ -537,7 +565,7 @@ const OutletPerformance = () => {
     const costPerEgg = totalEggs > 0 ? totalCost / totalEggs : 0;
     const totalReceived = toNumber(item.totalReceived);
     const averageRevenuePerEgg = totalEggs > 0 ? totalReceived / totalEggs : 0;
-    const closingAmount = totalReceived - totalCost;
+    const closingAmount = reportClosingBalances.get(String(item.key)) ?? 0;
 
     return {
       ...item,
@@ -548,7 +576,7 @@ const OutletPerformance = () => {
       averageRevenuePerEgg,
       closingAmount,
     };
-  }), [outletRows, salaryByOutlet]);
+  }), [outletRows, reportClosingBalances, salaryByOutlet]);
 
   const previousPerformanceByOutlet = useMemo(() => new Map(previousOutletRows.map((item) => {
     const totalCost = (previousSalaryByOutlet.get(item.key) || 0)
@@ -564,9 +592,9 @@ const OutletPerformance = () => {
       totalCost,
       damageCost: toNumber(item.damageCost),
       averageNeccRate: toNumber(item.averageNeccRate),
-      closingAmount: toNumber(item.totalReceived) - totalCost,
+      closingAmount: previousReportClosingBalances.get(String(item.key)) ?? 0,
     }];
-  })), [previousOutletRows, previousSalaryByOutlet]);
+  })), [previousOutletRows, previousReportClosingBalances, previousSalaryByOutlet]);
 
   const derivedTotals = useMemo(() => performanceRows.reduce((acc, item) => ({
     salesQty: acc.salesQty + toNumber(item.salesQty),
@@ -921,12 +949,12 @@ const OutletPerformance = () => {
                     <div className="grid grid-cols-1 gap-px bg-gray-200 sm:grid-cols-2 lg:grid-cols-3">
                       <MetricTile label="Eggs Delivered" value={number(item.salesQty)} accent="text-black" trend={getMetricTrend(item.salesQty, previous.salesQty)} trendValue={number} />
                       <MetricTile label="Number of Damage Eggs" value={number(item.damages)} accent="text-red-600" trend={getMetricTrend(item.damages, previous.damages, true)} trendValue={number} />
-                      <MetricTile label="Closing Balance" value={currency(item.closingAmount)} accent={item.closingAmount < 0 ? "text-red-600" : "text-green-600"} trend={getMetricTrend(item.closingAmount, previous.closingAmount)} trendValue={currency} />
-                      <MetricTile label="Revenue" value={currency(item.revenue)} accent="text-green-600" trend={getMetricTrend(item.revenue, previous.revenue)} trendValue={currency} />
+                      <MetricTile label="Closing Balance" value={wholeCurrency(item.closingAmount)} accent={item.closingAmount < 0 ? "text-red-600" : "text-green-600"} trend={getMetricTrend(item.closingAmount, previous.closingAmount)} trendValue={wholeCurrency} />
+                      <MetricTile label="Revenue" value={wholeCurrency(item.revenue)} accent="text-green-600" trend={getMetricTrend(item.revenue, previous.revenue)} trendValue={wholeCurrency} />
                       <MetricTile label="Per Egg Cost" value={currency(item.costPerEgg)} accent="text-black" trend={getMetricTrend(item.costPerEgg, previous.costPerEgg, true)} trendValue={currency} />
                       <MetricTile label="Damage %" value={percent(damagePercent)} accent="text-red-600" trend={getMetricTrend(damagePercent, previous.damagePercent, true)} trendValue={percent} />
-                      <MetricTile label="Outlet Cost" value={currency(item.totalCost)} accent="text-black" trend={getMetricTrend(item.totalCost, previous.totalCost, true)} trendValue={currency} />
-                      <MetricTile label="Damage Cost" value={currency(item.damageCost)} accent="text-red-600" trend={getMetricTrend(item.damageCost, previous.damageCost, true)} trendValue={currency} />
+                      <MetricTile label="Outlet Cost" value={wholeCurrency(item.totalCost)} accent="text-black" trend={getMetricTrend(item.totalCost, previous.totalCost, true)} trendValue={wholeCurrency} />
+                      <MetricTile label="Damage Cost" value={wholeCurrency(item.damageCost)} accent="text-red-600" trend={getMetricTrend(item.damageCost, previous.damageCost, true)} trendValue={wholeCurrency} />
                       <MetricTile label="Average NECC" value={currency(item.averageNeccRate)} accent="text-green-600" trend={getMetricTrend(item.averageNeccRate, previous.averageNeccRate)} trendValue={currency} />
                     </div>
                   </article>
@@ -1176,8 +1204,8 @@ const MetricTile = ({ label, value, accent, trend, trendValue }) => (
     <div className={`mt-2 text-lg font-bold ${accent}`}>{value}</div>
     {trend && (
       <div className={`mt-1 inline-flex items-center gap-1 text-base font-extrabold leading-none ${trend.type === "up" ? "text-emerald-500" : trend.type === "down" ? "text-red-500" : "text-gray-400"}`} aria-label={`Change from the preceding period: ${trendValue(trend.value)}`}>
-        {trend.type === "up" ? <FontAwesomeIcon icon={faCaretUp} /> : trend.type === "down" ? <FontAwesomeIcon icon={faCaretDown} /> : <FontAwesomeIcon icon={faMinus} className="text-xs" />}
         <span>{trendValue(trend.value)}</span>
+        {trend.type === "up" ? <FontAwesomeIcon icon={faCaretUp} /> : trend.type === "down" ? <FontAwesomeIcon icon={faCaretDown} /> : <FontAwesomeIcon icon={faMinus} className="text-xs" />}
       </div>
     )}
   </div>

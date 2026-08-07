@@ -90,6 +90,12 @@ const getPreviousWeekDate = (isoDate) => {
   return toLocalIsoDate(date);
 };
 
+const getPreviousDayDate = (isoDate) => {
+  const date = new Date(`${isoDate}T00:00:00`);
+  date.setDate(date.getDate() - 1);
+  return toLocalIsoDate(date);
+};
+
 const buildDailyTimeline = (items, range) => {
   const byDate = new Map((items || []).map((item) => [item.key, item]));
   const start = new Date(`${range.from}T00:00:00`);
@@ -108,13 +114,14 @@ const buildComparableDailyRows = (currentItems, previousItems, range) => {
 
   return buildDailyTimeline(currentItems, range).map((item) => {
     const previous = previousByDate.get(getPreviousWeekDate(item.key)) || {};
+    const previousDay = previousByDate.get(getPreviousDayDate(item.key)) || {};
     return {
       ...item,
       weekday: formatWeekday(item.key),
       displayDate: formatLongDate(item.key),
       eggGrowth: getComparison(item.salesQty, previous.salesQty),
       damageGrowth: getComparison(item.damages, previous.damages),
-      neccGrowth: getComparison(item.averageNeccRate, previous.averageNeccRate),
+      neccGrowth: getComparison(item.averageNeccRate, previousDay.averageNeccRate),
       revenueGrowth: getComparison(item.revenue, previous.revenue),
     };
   });
@@ -445,7 +452,7 @@ const Statistics = () => {
           <section className="mb-6 rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
             <SectionHeader
               title="Daily Data"
-              subtitle={<span className="font-bold text-gray-700">Weekday-to-Weekday Comparison (e.g., Monday vs Last Monday, Tuesday vs Last Tuesday)</span>}
+              subtitle={<span className="font-bold text-gray-700">Weekday-to-Weekday Comparison (Avg NECC Rate compares with the previous day)</span>}
             />
             <div className="mt-4 grid grid-cols-1 gap-5 xl:grid-cols-2">
               <DailyDataTable title="Last Week" range={getLastWeekRange()} rows={lastWeekRows} />
