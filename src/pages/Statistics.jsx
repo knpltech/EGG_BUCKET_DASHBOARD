@@ -114,6 +114,7 @@ const buildComparableDailyRows = (currentItems, previousItems, range) => {
       displayDate: formatLongDate(item.key),
       eggGrowth: getComparison(item.salesQty, previous.salesQty),
       damageGrowth: getComparison(item.damages, previous.damages),
+      neccGrowth: getComparison(item.averageNeccRate, previous.averageNeccRate),
       revenueGrowth: getComparison(item.revenue, previous.revenue),
     };
   });
@@ -621,6 +622,7 @@ const DailyDataTable = ({ title, range, rows }) => (
             <th className="px-4 py-3 text-left">Date</th>
             <th className="px-4 py-3 text-right">Egg Count</th>
             <th className="px-4 py-3 text-right">Damage Count</th>
+            <th className="px-4 py-3 text-right">Avg NECC Rate</th>
             <th className="px-4 py-3 text-right">Revenue</th>
           </tr>
         </thead>
@@ -630,25 +632,31 @@ const DailyDataTable = ({ title, range, rows }) => (
               <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">{item.weekday}</td>
               <td className="whitespace-nowrap px-4 py-3">{item.displayDate}</td>
               <td className="px-4 py-3">
-                <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                <div className="flex flex-col items-end gap-1 whitespace-nowrap">
                   <span className="font-semibold">{number(item.salesQty)}</span>
                   <GrowthPill label="" comparison={item.eggGrowth} compact />
                 </div>
               </td>
               <td className="px-4 py-3">
-                <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                <div className="flex flex-col items-end gap-1 whitespace-nowrap">
                   <span>{damageDisplay(item.damages, item.salesQty)}</span>
                   <GrowthPill label="" comparison={item.damageGrowth} compact />
                 </div>
               </td>
               <td className="px-4 py-3">
-                <div className="flex items-center justify-end gap-1 whitespace-nowrap">
+                <div className="flex flex-col items-end gap-1 whitespace-nowrap">
+                  <span>{`Rs. ${Number(item.averageNeccRate || 0).toFixed(3)}`}</span>
+                  <GrowthPill label="" comparison={item.neccGrowth} compact />
+                </div>
+              </td>
+              <td className="px-4 py-3">
+                <div className="flex flex-col items-end gap-1 whitespace-nowrap">
                   <span>{currency(item.revenue)}</span>
                   <GrowthPill label="" comparison={item.revenueGrowth} compact />
                 </div>
               </td>
             </tr>
-          )) : <tr><td colSpan="5"><EmptyState /></td></tr>}
+          )) : <tr><td colSpan="6"><EmptyState /></td></tr>}
         </tbody>
       </table>
     </div>
