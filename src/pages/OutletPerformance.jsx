@@ -14,6 +14,8 @@ import {
 } from "recharts";
 import {
   faChartLine,
+  faCaretDown,
+  faCaretUp,
   faArrowDown,
   faArrowUp,
   faCircleExclamation,
@@ -47,6 +49,16 @@ const getGrowthComparison = (current, previous, inverse = false) => {
   return {
     type: inverse ? (increased ? "down" : "up") : (increased ? "up" : "down"),
     text: `${Math.abs(percentChange).toFixed(1)}%`,
+  };
+};
+
+const getMetricTrend = (current, previous, inverse = false) => {
+  const delta = (Number(current) || 0) - (Number(previous) || 0);
+  if (Math.abs(delta) < 0.005) return { type: "flat", value: 0 };
+  const increased = delta > 0;
+  return {
+    type: inverse ? (increased ? "down" : "up") : (increased ? "up" : "down"),
+    value: Math.abs(delta),
   };
 };
 
@@ -98,6 +110,22 @@ const getRange = (type) => {
   }
 
   return getThisWeekRange(today);
+};
+
+// The comparison period is always the immediately preceding period with the
+// same number of days. This keeps a partial week/month useful as well.
+const getPreviousRange = ({ from, to }) => {
+  if (!from || !to) return { from: "", to: "" };
+  const start = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) return { from: "", to: "" };
+
+  const dayCount = Math.floor((end - start) / 86400000) + 1;
+  const previousEnd = new Date(start);
+  previousEnd.setDate(previousEnd.getDate() - 1);
+  const previousStart = new Date(previousEnd);
+  previousStart.setDate(previousStart.getDate() - (dayCount - 1));
+  return { from: toLocalIsoDate(previousStart), to: toLocalIsoDate(previousEnd) };
 };
 
 const getAprilToTodayRange = () => {
@@ -319,6 +347,7 @@ const OutletPerformance = () => {
   const { isSupervisor, zone } = getRoleFlags();
   const [rangeType, setRangeType] = useState("week");
   const [dateRange, setDateRange] = useState(() => getRange("week"));
+  const [previousStats, setPreviousStats] = useState(null);
   const [comparisonStats, setComparisonStats] = useState(null);
   const [stats, setStats] = useState(null);
   const [salaryEntries, setSalaryEntries] = useState([]);
@@ -338,19 +367,27 @@ const OutletPerformance = () => {
       try {
         const zoneFilter = isSupervisor ? zone : "";
         const monthKeys = getMonthKeysInRange(dateRange.from, dateRange.to);
+        const previousRange = getPreviousRange(dateRange);
+        const previousMonthKeys = getMonthKeysInRange(previousRange.from, previousRange.to);
         const comparisonRange = getAprilToTodayRange();
-        const salesDaysFrom = [dateRange.from, comparisonRange.from].sort()[0];
+        const salesDaysFrom = [dateRange.from, previousRange.from, comparisonRange.from].filter(Boolean).sort()[0];
         const salesDaysTo = [dateRange.to, comparisonRange.to].sort().at(-1);
         const comparisonMonthKeys = getMonthKeysInRange(comparisonRange.from, comparisonRange.to);
         const yearList = Array.from(new Set([
           ...monthKeys,
+          ...previousMonthKeys,
           ...comparisonMonthKeys,
         ].map((key) => Number(key.slice(0, 4))).filter((year) => Number.isFinite(year))));
 
-        const [rangeData, comparisonData, dailyRates, salesDays, ...salaryData] = await Promise.all([
+        const [rangeData, previousData, comparisonData, dailyRates, salesDays, ...salaryData] = await Promise.all([
           fetchStatisticsData({
             dateFrom: dateRange.from,
             dateTo: dateRange.to,
+            zone: zoneFilter,
+          }),
+          fetchStatisticsData({
+            dateFrom: previousRange.from,
+            dateTo: previousRange.to,
             zone: zoneFilter,
           }),
           fetchStatisticsData({
@@ -364,6 +401,7 @@ const OutletPerformance = () => {
         ]);
 
         setStats(rangeData);
+        setPreviousStats(previousData);
         setComparisonStats(comparisonData);
         setSalaryEntries(salaryData.flat());
         setDailySalaryRates(dailyRates);
@@ -371,6 +409,7 @@ const OutletPerformance = () => {
       } catch {
         setError("Failed to load outlet performance data");
         setStats(null);
+        setPreviousStats(null);
         setComparisonStats(null);
         setSalaryEntries([]);
         setDailySalaryRates([]);
@@ -384,8 +423,11 @@ const OutletPerformance = () => {
   }, [dateRange, isSupervisor, zone]);
 
   const outletRows = useMemo(() => stats?.outletBreakdown || [], [stats]);
+  const previousOutletRows = useMemo(() => previousStats?.outletBreakdown || [], [previousStats]);
   const comparisonRange = useMemo(() => getAprilToTodayRange(), []);
   const selectedMonthKeys = useMemo(() => new Set(getMonthKeysInRange(dateRange.from, dateRange.to)), [dateRange.from, dateRange.to]);
+  const previousRange = useMemo(() => getPreviousRange(dateRange), [dateRange]);
+  const previousMonthKeys = useMemo(() => new Set(getMonthKeysInRange(previousRange.from, previousRange.to)), [previousRange.from, previousRange.to]);
   const comparisonMonthKeys = useMemo(() => new Set(getMonthKeysInRange(comparisonRange.from, comparisonRange.to)), [comparisonRange.from, comparisonRange.to]);
   const salaryByOutlet = useMemo(() => {
     const map = new Map();
@@ -420,6 +462,34 @@ const OutletPerformance = () => {
 
     return map;
   }, [dailySalaryRates, dateRange.from, dateRange.to, outletRows, salaryEntries, salesDayKeys, selectedMonthKeys]);
+
+  const previousSalaryByOutlet = useMemo(() => {
+    const map = new Map();
+
+    salaryEntries.forEach((entry) => {
+      const entryKey = `${entry.year}-${String(entry.month).padStart(2, "0")}`;
+      if (!previousMonthKeys.has(entryKey)) return;
+      const entryOutlets = entry?.outlets && typeof entry.outlets === "object" ? entry.outlets : {};
+      Object.keys(entryOutlets).forEach((outletId) => {
+        const rangeSalary = getFinalizedSalaryForRange(entry, outletId, previousRange.from, previousRange.to);
+        map.set(outletId, (map.get(outletId) || 0) + rangeSalary);
+      });
+    });
+
+    previousOutletRows.forEach((outlet) => {
+      if (!hasDailyRateInRange(dailySalaryRates, outlet.key, previousRange.from, previousRange.to)) return;
+      map.set(outlet.key, getProvisionalSalaryForRange(
+        dailySalaryRates,
+        salesDayKeys,
+        outlet.key,
+        previousRange.from,
+        previousRange.to,
+        new Set(),
+      ));
+    });
+
+    return map;
+  }, [dailySalaryRates, previousMonthKeys, previousOutletRows, previousRange.from, previousRange.to, salaryEntries, salesDayKeys]);
 
   const monthlySalaryByKey = useMemo(() => {
     const map = new Map();
@@ -480,6 +550,24 @@ const OutletPerformance = () => {
     };
   }), [outletRows, salaryByOutlet]);
 
+  const previousPerformanceByOutlet = useMemo(() => new Map(previousOutletRows.map((item) => {
+    const totalCost = (previousSalaryByOutlet.get(item.key) || 0)
+      + toNumber(item.damageCost)
+      + toNumber(item.incentive)
+      + toNumber(item.foodAllowance);
+    return [String(item.key), {
+      damages: toNumber(item.damages),
+      salesQty: toNumber(item.salesQty),
+      revenue: toNumber(item.revenue),
+      costPerEgg: toNumber(item.salesQty) > 0 ? totalCost / toNumber(item.salesQty) : 0,
+      damagePercent: toNumber(item.salesQty) > 0 ? (toNumber(item.damages) / toNumber(item.salesQty)) * 100 : 0,
+      totalCost,
+      damageCost: toNumber(item.damageCost),
+      averageNeccRate: toNumber(item.averageNeccRate),
+      closingAmount: toNumber(item.totalReceived) - totalCost,
+    }];
+  })), [previousOutletRows, previousSalaryByOutlet]);
+
   const derivedTotals = useMemo(() => performanceRows.reduce((acc, item) => ({
     salesQty: acc.salesQty + toNumber(item.salesQty),
     salary: acc.salary + toNumber(item.salary),
@@ -505,7 +593,6 @@ const OutletPerformance = () => {
   }), [performanceRows]);
 
   const averageNeccRate = derivedTotals.salesQty ? derivedTotals.revenue / derivedTotals.salesQty : 0;
-  const averageRevenuePerEgg = derivedTotals.salesQty ? derivedTotals.totalReceived / derivedTotals.salesQty : 0;
   const perEggCost = derivedTotals.salesQty ? derivedTotals.totalCost / derivedTotals.salesQty : 0;
   const profitScore = profitRate === null ? null : roundToTwoDecimals(averageNeccRate - profitRate - perEggCost);
   const profit = profitScore === null ? null : profitScore * derivedTotals.salesQty;
@@ -819,6 +906,7 @@ const OutletPerformance = () => {
                 const status = getOutletStatus(item);
                 const eggsDelivered = toNumber(item.salesQty);
                 const damagePercent = eggsDelivered > 0 ? (toNumber(item.damages) / eggsDelivered) * 100 : 0;
+                const previous = previousPerformanceByOutlet.get(String(item.key)) || {};
 
                 return (
                   <article key={item.key} className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-[0_10px_30px_rgba(15,23,42,0.05)]">
@@ -831,14 +919,15 @@ const OutletPerformance = () => {
                     </div>
 
                     <div className="grid grid-cols-1 gap-px bg-gray-200 sm:grid-cols-2 lg:grid-cols-3">
-                      <MetricTile label="Eggs Delivered" value={number(item.salesQty)} accent="text-black" />
-                      <MetricTile label="Total Received" value={currency(item.totalReceived)} accent="text-green-600" />
-                      <MetricTile label="Revenue" value={currency(item.revenue)} accent="text-green-600" />
-                      <MetricTile label="Per Egg Cost" value={currency(item.costPerEgg)} accent="text-black" />
-                      <MetricTile label="Damage %" value={percent(damagePercent)} accent="text-red-600" />
-                      <MetricTile label="Outlet Cost" value={currency(item.totalCost)} accent="text-black" />
-                      <MetricTile label="Damage Cost" value={currency(item.damageCost)} accent="text-red-600" />
-                      <MetricTile label="Average NECC" value={currency(item.averageNeccRate)} accent="text-green-600" />
+                      <MetricTile label="Eggs Delivered" value={number(item.salesQty)} accent="text-black" trend={getMetricTrend(item.salesQty, previous.salesQty)} trendValue={number} />
+                      <MetricTile label="Number of Damage Eggs" value={number(item.damages)} accent="text-red-600" trend={getMetricTrend(item.damages, previous.damages, true)} trendValue={number} />
+                      <MetricTile label="Closing Balance" value={currency(item.closingAmount)} accent={item.closingAmount < 0 ? "text-red-600" : "text-green-600"} trend={getMetricTrend(item.closingAmount, previous.closingAmount)} trendValue={currency} />
+                      <MetricTile label="Revenue" value={currency(item.revenue)} accent="text-green-600" trend={getMetricTrend(item.revenue, previous.revenue)} trendValue={currency} />
+                      <MetricTile label="Per Egg Cost" value={currency(item.costPerEgg)} accent="text-black" trend={getMetricTrend(item.costPerEgg, previous.costPerEgg, true)} trendValue={currency} />
+                      <MetricTile label="Damage %" value={percent(damagePercent)} accent="text-red-600" trend={getMetricTrend(damagePercent, previous.damagePercent, true)} trendValue={percent} />
+                      <MetricTile label="Outlet Cost" value={currency(item.totalCost)} accent="text-black" trend={getMetricTrend(item.totalCost, previous.totalCost, true)} trendValue={currency} />
+                      <MetricTile label="Damage Cost" value={currency(item.damageCost)} accent="text-red-600" trend={getMetricTrend(item.damageCost, previous.damageCost, true)} trendValue={currency} />
+                      <MetricTile label="Average NECC" value={currency(item.averageNeccRate)} accent="text-green-600" trend={getMetricTrend(item.averageNeccRate, previous.averageNeccRate)} trendValue={currency} />
                     </div>
                   </article>
                 );
@@ -1081,10 +1170,16 @@ const SectionHeader = ({ title, subtitle }) => (
   </div>
 );
 
-const MetricTile = ({ label, value, accent }) => (
+const MetricTile = ({ label, value, accent, trend, trendValue }) => (
   <div className="bg-white px-4 py-4">
     <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{label}</div>
     <div className={`mt-2 text-lg font-bold ${accent}`}>{value}</div>
+    {trend && (
+      <div className={`mt-1 inline-flex items-center gap-1 text-base font-extrabold leading-none ${trend.type === "up" ? "text-emerald-500" : trend.type === "down" ? "text-red-500" : "text-gray-400"}`} aria-label={`Change from the preceding period: ${trendValue(trend.value)}`}>
+        {trend.type === "up" ? <FontAwesomeIcon icon={faCaretUp} /> : trend.type === "down" ? <FontAwesomeIcon icon={faCaretDown} /> : <FontAwesomeIcon icon={faMinus} className="text-xs" />}
+        <span>{trendValue(trend.value)}</span>
+      </div>
+    )}
   </div>
 );
 
