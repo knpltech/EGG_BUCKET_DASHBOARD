@@ -176,11 +176,13 @@ export default function CashClosure() {
   const loadRows = useCallback(async (zoneName) => {
     setLoading(true);
     try {
+      const token = localStorage.getItem("token");
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
       let response;
       if (zoneName) {
-        response = await fetch(`${API_URL}/cash-closure/zone/${encodeURIComponent(zoneName)}`);
+        response = await fetch(`${API_URL}/cash-closure/zone/${encodeURIComponent(zoneName)}`, { headers });
       } else {
-        response = await fetch(`${API_URL}/cash-closure/all`);
+        response = await fetch(`${API_URL}/cash-closure/all`, { headers });
       }
 
       if (!response.ok) {
@@ -206,12 +208,14 @@ export default function CashClosure() {
     
     setFetchingAutoData(true);
     try {
+      const token = localStorage.getItem("token");
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
       const [cashPaymentsRes, incentivesRes, foodAllowanceRes, advanceRes, outletsRes] = await Promise.all([
-        fetch(`${API_URL}/cash-payments/date/${isoDate}`),
-        fetch(`${API_URL}/incentive/date/${isoDate}`),
-        fetch(`${API_URL}/food-allowance/date/${isoDate}`),
-        fetch(`${API_URL}/advance/date/${isoDate}`),
-        fetch(`${API_URL}/outlets/all`),
+        fetch(`${API_URL}/cash-payments/date/${isoDate}`, { headers }),
+        fetch(`${API_URL}/incentive/date/${isoDate}`, { headers }),
+        fetch(`${API_URL}/food-allowance/date/${isoDate}`, { headers }),
+        fetch(`${API_URL}/advance/date/${isoDate}`, { headers }),
+        fetch(`${API_URL}/outlets/all`, { headers }),
       ]);
 
       let totalCash = 0;
@@ -288,6 +292,11 @@ export default function CashClosure() {
     setCashRemarks("");
   }, [existingEntry?.id, selectedZoneLabel, selectedDate, fetchAutofillData]);
 
+  const handleRefreshData = useCallback(async () => {
+    await fetchAutofillData(selectedZoneLabel, selectedDate);
+    await loadRows(selectedZone);
+  }, [fetchAutofillData, loadRows, selectedDate, selectedZone, selectedZoneLabel]);
+
   const handleAdminEdit = useCallback((row) => {
     if (!isAdmin || !row) return;
     const rowZone = normalizeZoneLabel(row.zone) || selectedZone;
@@ -295,7 +304,7 @@ export default function CashClosure() {
     setSelectedZone(rowZone);
     setSelectedDate(rowDate);
     // scroll to top so the New Entry form is visible
-    try { window.scrollTo?.({ top: 0, behavior: "smooth" }); } catch {}
+    try { window.scrollTo?.({ top: 0, behavior: "smooth" }); } catch { /* Scrolling is best-effort. */ }
   }, [isAdmin, selectedZone, selectedDate]);
 
   const sortedRows = useMemo(() => {
@@ -533,11 +542,11 @@ export default function CashClosure() {
             )}
             <button
               type="button"
-              onClick={() => loadRows(selectedZone)}
-              disabled={loading}
+              onClick={handleRefreshData}
+              disabled={loading || fetchingAutoData}
               className="rounded-xl border border-orange-200 bg-orange-50 px-5 py-2.5 text-sm font-semibold text-orange-700 transition-colors hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loading ? "Refreshing..." : "Refresh Data"}
+              {loading || fetchingAutoData ? "Refreshing..." : "Refresh Data"}
             </button>
           </div>
         </div>
