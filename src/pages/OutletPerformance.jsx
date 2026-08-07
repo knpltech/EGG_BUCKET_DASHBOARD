@@ -947,15 +947,15 @@ const OutletPerformance = () => {
                     </div>
 
                     <div className="grid grid-cols-1 gap-px bg-gray-200 sm:grid-cols-2 lg:grid-cols-3">
-                      <MetricTile label="Eggs Delivered" value={number(item.salesQty)} accent="text-black" trend={getMetricTrend(item.salesQty, previous.salesQty)} trendValue={number} />
-                      <MetricTile label="Number of Damage Eggs" value={number(item.damages)} accent="text-red-600" trend={getMetricTrend(item.damages, previous.damages, true)} trendValue={number} />
-                      <MetricTile label="Closing Balance" value={wholeCurrency(item.closingAmount)} accent={item.closingAmount < 0 ? "text-red-600" : "text-green-600"} trend={getMetricTrend(item.closingAmount, previous.closingAmount)} trendValue={wholeCurrency} />
-                      <MetricTile label="Revenue" value={wholeCurrency(item.revenue)} accent="text-green-600" trend={getMetricTrend(item.revenue, previous.revenue)} trendValue={wholeCurrency} />
+                      <MetricTile label="Eggs Delivered" value={number(item.salesQty)} accent="text-black" />
+                      <MetricTile label="Number of Damage Eggs" value={number(item.damages)} accent="text-red-600" />
+                      <MetricTile label="Closing Balance" value={wholeCurrency(item.closingAmount)} accent={item.closingAmount < 0 ? "text-red-600" : "text-green-600"} />
+                      <MetricTile label="Revenue" value={wholeCurrency(item.revenue)} accent="text-green-600" />
                       <MetricTile label="Per Egg Cost" value={currency(item.costPerEgg)} accent="text-black" trend={getMetricTrend(item.costPerEgg, previous.costPerEgg, true)} trendValue={currency} />
                       <MetricTile label="Damage %" value={percent(damagePercent)} accent="text-red-600" trend={getMetricTrend(damagePercent, previous.damagePercent, true)} trendValue={percent} />
-                      <MetricTile label="Outlet Cost" value={wholeCurrency(item.totalCost)} accent="text-black" trend={getMetricTrend(item.totalCost, previous.totalCost, true)} trendValue={wholeCurrency} />
-                      <MetricTile label="Damage Cost" value={wholeCurrency(item.damageCost)} accent="text-red-600" trend={getMetricTrend(item.damageCost, previous.damageCost, true)} trendValue={wholeCurrency} />
-                      <MetricTile label="Average NECC" value={currency(item.averageNeccRate)} accent="text-green-600" trend={getMetricTrend(item.averageNeccRate, previous.averageNeccRate)} trendValue={currency} />
+                      <MetricTile label="Outlet Cost" value={wholeCurrency(item.totalCost)} accent="text-black" />
+                      <MetricTile label="Damage Cost" value={wholeCurrency(item.damageCost)} accent="text-red-600" />
+                      <MetricTile label="Average NECC" value={currency(item.averageNeccRate)} accent="text-green-600" />
                     </div>
                   </article>
                 );
