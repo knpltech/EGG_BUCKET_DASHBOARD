@@ -891,35 +891,60 @@ const OutletPerformance = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {performanceRows.length ? performanceRows.map((item) => {
-                    const status = getOutletStatus(item);
-                    const itemProfitScore = profitRate === null ? null : roundToTwoDecimals(toNumber(item.averageNeccRate) - profitRate - toNumber(item.costPerEgg));
-                    const itemProfit = itemProfitScore === null ? null : itemProfitScore * toNumber(item.salesQty);
-                    return (
-                      <tr key={item.key} className="border-t border-gray-100 text-gray-700">
-                        <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">{item.label}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.salary)}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right">{number(item.salesQty)}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{currency(item.revenue)}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right">{number(item.damages)}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.damageCost)}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.incentive)}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.foodAllowance)}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{currency(item.totalCost)}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.costPerEgg)}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.averageNeccRate)}</td>
-                        <td className={`whitespace-nowrap px-4 py-3 text-right font-semibold ${profitRate === null ? "text-gray-400" : "text-gray-900"}`}>
-                          {itemProfitScore === null ? "—" : currency(itemProfitScore)}
+                  {performanceRows.length ? (
+                    <>
+                      {performanceRows.map((item) => {
+                        const status = getOutletStatus(item);
+                        const itemProfitScore = profitRate === null ? null : roundToTwoDecimals(toNumber(item.averageNeccRate) - profitRate - toNumber(item.costPerEgg));
+                        const itemProfit = itemProfitScore === null ? null : itemProfitScore * toNumber(item.salesQty);
+                        return (
+                          <tr key={item.key} className="border-t border-gray-100 text-gray-700">
+                            <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">{item.label}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.salary)}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right">{number(item.salesQty)}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{currency(item.revenue)}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right">{number(item.damages)}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.damageCost)}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.incentive)}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.foodAllowance)}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{currency(item.totalCost)}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.costPerEgg)}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.averageNeccRate)}</td>
+                            <td className={`whitespace-nowrap px-4 py-3 text-right font-semibold ${profitRate === null ? "text-gray-400" : "text-gray-900"}`}>
+                              {itemProfitScore === null ? "—" : currency(itemProfitScore)}
+                            </td>
+                            <td className={`whitespace-nowrap px-4 py-3 text-right font-semibold ${profitRate === null ? "text-gray-400" : "text-gray-900"}`}>
+                              {itemProfit === null ? "—" : currency(itemProfit)}
+                            </td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right">
+                              <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-bold ${status.className}`}>{status.label}</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      <tr className="border-t-2 border-gray-200 bg-gray-50 font-bold text-gray-900">
+                        <td className="whitespace-nowrap px-4 py-3">Total</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">{currency(performanceRows.reduce((acc, curr) => acc + toNumber(curr.salary), 0))}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">{number(performanceRows.reduce((acc, curr) => acc + toNumber(curr.salesQty), 0))}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">{currency(performanceRows.reduce((acc, curr) => acc + toNumber(curr.revenue), 0))}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">{number(performanceRows.reduce((acc, curr) => acc + toNumber(curr.damages), 0))}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">{currency(performanceRows.reduce((acc, curr) => acc + toNumber(curr.damageCost), 0))}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">{currency(performanceRows.reduce((acc, curr) => acc + toNumber(curr.incentive), 0))}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">{currency(performanceRows.reduce((acc, curr) => acc + toNumber(curr.foodAllowance), 0))}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">{currency(performanceRows.reduce((acc, curr) => acc + toNumber(curr.totalCost), 0))}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">—</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">—</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">—</td>
+                        <td className={`whitespace-nowrap px-4 py-3 text-right ${profitRate === null ? "text-gray-400" : "text-gray-900"}`}>
+                          {profitRate === null ? "—" : currency(performanceRows.reduce((acc, curr) => {
+                            const itemProfitScore = roundToTwoDecimals(toNumber(curr.averageNeccRate) - profitRate - toNumber(curr.costPerEgg));
+                            return acc + (itemProfitScore * toNumber(curr.salesQty));
+                          }, 0))}
                         </td>
-                        <td className={`whitespace-nowrap px-4 py-3 text-right font-semibold ${profitRate === null ? "text-gray-400" : "text-gray-900"}`}>
-                          {itemProfit === null ? "—" : currency(itemProfit)}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right">
-                          <span className={`inline-flex rounded-md px-2 py-1 text-[11px] font-bold ${status.className}`}>{status.label}</span>
-                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right"></td>
                       </tr>
-                    );
-                  }) : (
+                    </>
+                  ) : (
                     <tr><td colSpan="14"><EmptyState /></td></tr>
                   )}
                 </tbody>
@@ -948,7 +973,7 @@ const OutletPerformance = () => {
 
                     <div className="grid grid-cols-1 gap-px bg-gray-200 sm:grid-cols-2 lg:grid-cols-3">
                       <MetricTile label="Eggs Delivered" value={number(item.salesQty)} accent="text-black" />
-                      <MetricTile label="Number of Damage Eggs" value={number(item.damages)} accent="text-red-600" />
+                      <MetricTile label="Damage Count" value={number(item.damages)} accent="text-red-600" />
                       <MetricTile label="Closing Balance" value={wholeCurrency(item.closingAmount)} accent={item.closingAmount < 0 ? "text-red-600" : "text-green-600"} />
                       <MetricTile label="Revenue" value={wholeCurrency(item.revenue)} accent="text-green-600" />
                       <MetricTile label="Per Egg Cost" value={currency(item.costPerEgg)} accent="text-black" trend={getMetricTrend(item.costPerEgg, previous.costPerEgg, true)} trendValue={currency} />

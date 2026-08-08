@@ -215,22 +215,10 @@ export default function Sidebar({ supervisor }) {
               <FontAwesomeIcon icon={faEgg} />
               {open && "Daily Sales Quantity"}
             </Link>
-            <Link to="/viewer/digital-payments" className={linkClass("/viewer/digital-payments")}> 
-              <FontAwesomeIcon icon={faWallet} />
-              {open && "Digital Payments"}
-            </Link>
-            <Link to="/viewer/cash-payments" className={linkClass("/viewer/cash-payments")}> 
-              <FontAwesomeIcon icon={faMoneyBillWave} />
-              {open && "Cash Payments"}
-            </Link>
             <Link to="/viewer/daily-revenue" className={linkClass("/viewer/daily-revenue")}>
               <FontAwesomeIcon icon={faDollarSign} />
               {open && "Daily Revenue"}
             </Link>
-              <Link to="/viewer/reports" className={linkClass("/viewer/reports")}> 
-            <FontAwesomeIcon icon={faChartLine} />
-            {open && "Reports"}
-          </Link>
             <Link to="/viewer/statistics" className={linkClass("/viewer/statistics")}> 
               <FontAwesomeIcon icon={faChartLine} />
               {open && "Statistics"}
