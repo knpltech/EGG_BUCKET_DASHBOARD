@@ -110,9 +110,23 @@ const saveFinalMapValues = async ({ collection, date, valuesField, values, outle
   const dayDocs = await getDayDocuments(collection, date);
   const preferredDoc = getPreferredDayDocument(dayDocs);
   const existingValues = mergeDayValues(dayDocs, valuesField);
-  const mergedValues = onlyMissing
-    ? { ...values, ...existingValues }
-    : { ...existingValues, ...values };
+  const mergedValues = { ...existingValues };
+  Object.entries(values).forEach(([outletId, val]) => {
+    const newVal = toNumber(val);
+    const oldVal = toNumber(existingValues[outletId]);
+    
+    if (onlyMissing) {
+      if (existingValues[outletId] === undefined) {
+        mergedValues[outletId] = newVal;
+      }
+    } else {
+      // Prioritize the new value from the source project, BUT do not overwrite 
+      // an existing manual non-zero entry with an automated zero.
+      if (newVal !== 0 || oldVal === 0 || existingValues[outletId] === undefined) {
+        mergedValues[outletId] = newVal;
+      }
+    }
+  });
   outletIds.forEach((outletId) => {
     if (mergedValues[outletId] === undefined) mergedValues[outletId] = 0;
   });
