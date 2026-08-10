@@ -126,12 +126,13 @@ export const getReports = async (req, res) => {
     // for the selected outlet/date range.
     const startDate = normalizeDateKey(dateFrom) || '';
     const endDate = normalizeDateKey(dateTo) || '';
-    const [salesSnapshot, digitalPaymentsSnapshot, cashPaymentsSnapshot, neccRateSnapshot, dailyDamagesSnapshot] = await Promise.all([
+    const [salesSnapshot, digitalPaymentsSnapshot, cashPaymentsSnapshot, neccRateSnapshot, dailyDamagesSnapshot, foodAllowanceSnapshot] = await Promise.all([
       getCollectionForDateRange('dailySales', startDate, endDate),
       getCollectionForDateRange('digitalPayments', startDate, endDate),
       getCollectionForDateRange('cashPayments', startDate, endDate),
       getCollectionForDateRange('neccRates', startDate, endDate),
-      getCollectionForDateRange('dailyDamages', startDate, endDate)
+      getCollectionForDateRange('dailyDamages', startDate, endDate),
+      getCollectionForDateRange('foodAllowance', startDate, endDate)
     ]);
 
     const fetchTime = Date.now() - startTime;
@@ -144,6 +145,7 @@ export const getReports = async (req, res) => {
       digitalPay: new Map(),
       cashPay: new Map(),
       damages: new Map(),
+      foodAllowance: new Map(),
     };
     const ensureDateEntry = (dateKey) => {
       if (!dateKey) return null;
@@ -155,6 +157,7 @@ export const getReports = async (req, res) => {
           totalAmount: 0,
           digitalPay: 0,
           cashPay: 0,
+          foodAllowance: 0,
           totalRecv: 0,
           difference: 0,
           damages: 0,
@@ -217,6 +220,16 @@ export const getReports = async (req, res) => {
       setPreferredValue('cashPay', dateKey, cashValue, data);
     });
 
+    // Process food allowance
+    foodAllowanceSnapshot.forEach(doc => {
+      const data = doc.data();
+      const dateKey = normalizeDateKey(data.date || data.createdAt);
+      if (!dateKey) return;
+
+      const foodValue = getOutletValue(data.outlets);
+      setPreferredValue('foodAllowance', dateKey, foodValue, data);
+    });
+
     const neccRateMeta = {};
 
     // Process NECC rate - outlet specific, supports legacy and current formats
@@ -263,7 +276,7 @@ export const getReports = async (req, res) => {
     let transactions = Object.values(dateMap).map(t => {
       // Only use NECC rate from neccrate collection; do not calculate or fallback
       t.totalAmount = parseFloat((t.salesQty * t.neccRate).toFixed(2));
-      t.totalRecv = parseFloat((t.digitalPay + t.cashPay).toFixed(2));
+      t.totalRecv = parseFloat((t.digitalPay + t.cashPay + t.foodAllowance).toFixed(2));
       t.difference = parseFloat((t.totalRecv - t.totalAmount).toFixed(2));
       t.damages = t.damages || 0;
       return t;
