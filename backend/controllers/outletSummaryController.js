@@ -445,10 +445,7 @@ export const getOutletSummary = async (req, res) => {
       .filter(Boolean);
 
 
-    // If no agents assigned to this outlet, we can return early
-    if (assignedAgents.length === 0) {
-      return res.status(200).json(emptySummary());
-    }
+    const hasAssignedAgents = assignedAgents.length > 0;
 
     // 3. Query customers collection efficiently using a targeted query for the specific date
     let customersForDate = [];
@@ -506,8 +503,18 @@ export const getOutletSummary = async (req, res) => {
 
       deliveries.forEach(delivery => {
         if (delivery.status === "delivered") {
-          // Match agentId against delivery agents belonging to the selected outlet
-          if (assignedAgents.includes(getAgentId(delivery))) {
+          let isMatch = false;
+
+          if (hasAssignedAgents) {
+            isMatch = assignedAgents.includes(getAgentId(delivery));
+          } else {
+            const deliveryOutlet = delivery.outletName || delivery.outlet || data.outletName || data.outlet || "";
+            if (deliveryOutlet && isMatchingOutlet(deliveryOutlet, outlet)) {
+              isMatch = true;
+            }
+          }
+
+          if (isMatch) {
             salesQty += getSalesQuantity(delivery);
             cashHandover += getCashHandover(delivery);
             digitalPayment += pickNumber(delivery, ["upiAmount", "digitalAmount", "upi", "totalUPI", "totalUpi"]);
