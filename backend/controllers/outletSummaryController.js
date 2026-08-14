@@ -339,7 +339,12 @@ const getRetailSummary = async (outlet, date) => {
   const [customers, metrics] = await Promise.all([getRetailCustomers(), getInventoryMetrics(date)]);
   const agentNames = [outletContact, ...getMetricAgentNamesForOutlet(metrics, outlet)]
     .filter((value) => normalizePersonName(value) && normalizePersonName(value) !== "-");
-  if (agentNames.length === 0) return applyInventoryMetrics(emptySummary(), outlet, date, metrics);
+
+  // When no agent contact is configured for the outlet (e.g. Kudlu Gate has no
+  // "contact" field in Firestore and no entries in the inventory metrics API),
+  // fall back to matching deliveries directly by outlet name embedded in the
+  // delivery / customer record. This avoids silently returning all zeros.
+  const hasAgentNames = agentNames.length > 0;
 
   const summary = emptySummary();
 
@@ -348,7 +353,18 @@ const getRetailSummary = async (outlet, date) => {
     const deliveries = Array.isArray(dayData) ? dayData : [dayData];
 
     deliveries.filter(Boolean).forEach((delivery) => {
-      if (delivery.status !== "delivered" || !agentNames.some((agent) => isMatchingAgent(delivery.agentName, agent))) return;
+      if (delivery.status !== "delivered") return;
+
+      if (hasAgentNames) {
+        // Primary match: by agent name
+        if (!agentNames.some((agent) => isMatchingAgent(delivery.agentName, agent))) return;
+      } else {
+        // Fallback match: by outlet name in the delivery or customer record
+        const deliveryOutlet =
+          delivery.outletName || delivery.outlet ||
+          customer.outletName || customer.outlet || "";
+        if (!deliveryOutlet || !isMatchingOutlet(deliveryOutlet, outlet)) return;
+      }
 
       summary.salesQty += getSalesQuantity(delivery);
       summary.cashHandover += getCashHandover(delivery);
