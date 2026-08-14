@@ -175,7 +175,7 @@ const normalizeDate = (d) => {
       const day = String(n.getDate()).padStart(2, "0");
       return `${year}-${month}-${day}`;
     }
-  } catch (e) {}
+  } catch (e) { }
   return String(d).slice(0, 10);
 };
 
@@ -219,39 +219,39 @@ export default function DataEntry() {
   const [date, setDate] = useState("");
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
-  const [allSalesData,     setAllSalesData]     = useState([]);
-  const [allCashData,      setAllCashData]      = useState([]);
-  const [allDigitalData,   setAllDigitalData]   = useState([]);
-  const [allDamagesData,   setAllDamagesData]   = useState([]);
-  const [allNeccData,      setAllNeccData]      = useState([]);
+  const [allSalesData, setAllSalesData] = useState([]);
+  const [allCashData, setAllCashData] = useState([]);
+  const [allDigitalData, setAllDigitalData] = useState([]);
+  const [allDamagesData, setAllDamagesData] = useState([]);
+  const [allNeccData, setAllNeccData] = useState([]);
   const [allIncentiveData, setAllIncentiveData] = useState([]);
-  const [allAdvanceData,   setAllAdvanceData]   = useState([]);
+  const [allAdvanceData, setAllAdvanceData] = useState([]);
   const [allFoodAllowanceData, setAllFoodAllowanceData] = useState([]);
-  const [allRemarksData,   setAllRemarksData]   = useState([]);
-  const [incentive,        setIncentive]        = useState("");
-  const [advance,          setAdvance]          = useState("0");
-  const [foodAllowance,    setFoodAllowance]    = useState("");
-  const [remarks,          setRemarks]          = useState("");
+  const [allRemarksData, setAllRemarksData] = useState([]);
+  const [incentive, setIncentive] = useState("");
+  const [advance, setAdvance] = useState("0");
+  const [foodAllowance, setFoodAllowance] = useState("");
+  const [remarks, setRemarks] = useState("");
 
   const [supervisorInfo, setSupervisorInfo] = useState(null);
   const [supervisorZones, setSupervisorZones] = useState([]);
 
-  const [neccrate,        setNeccrate]        = useState("");
-  const [neccrateLocked,  setNeccrateLocked]  = useState(false);
-  const [sales,           setSales]           = useState("");
-  const [salesLocked,     setSalesLocked]     = useState(false);
-  const [damages,         setDamages]         = useState("");
-  const [damagesLocked,   setDamagesLocked]   = useState(false);
-  const [cash,            setCash]            = useState("");
-  const [cashLocked,      setCashLocked]      = useState(false);
-  const [digital,         setDigital]         = useState("");
-  const [digitalLocked,   setDigitalLocked]   = useState(false);
+  const [neccrate, setNeccrate] = useState("");
+  const [neccrateLocked, setNeccrateLocked] = useState(false);
+  const [sales, setSales] = useState("");
+  const [salesLocked, setSalesLocked] = useState(false);
+  const [damages, setDamages] = useState("");
+  const [damagesLocked, setDamagesLocked] = useState(false);
+  const [cash, setCash] = useState("");
+  const [cashLocked, setCashLocked] = useState(false);
+  const [digital, setDigital] = useState("");
+  const [digitalLocked, setDigitalLocked] = useState(false);
   const [incentiveLocked, setIncentiveLocked] = useState(false);
-  const [advanceLocked,   setAdvanceLocked]   = useState(false);
+  const [advanceLocked, setAdvanceLocked] = useState(false);
   const [foodAllowanceLocked, setFoodAllowanceLocked] = useState(false);
-  const [remarksLocked,   setRemarksLocked]   = useState(false);
-  const [isSubmitting,    setIsSubmitting]    = useState(false);
-  const [isDeleting,      setIsDeleting]      = useState(false);
+  const [remarksLocked, setRemarksLocked] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isFetchingSummary, setIsFetchingSummary] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [aiTotalAmount, setAiTotalAmount] = useState(0);
@@ -318,11 +318,11 @@ export default function DataEntry() {
         sRes.json(), cRes.json(), dRes.json(), dmRes.json(), nRes.json(),
         iRes.json(), aRes.json(), fRes.json(), rRes.json(),
       ]);
-      setAllSalesData(Array.isArray(sData)  ? sData  : []);
-      setAllCashData(Array.isArray(cData)   ? cData  : []);
+      setAllSalesData(Array.isArray(sData) ? sData : []);
+      setAllCashData(Array.isArray(cData) ? cData : []);
       setAllDigitalData(Array.isArray(dData) ? dData : []);
       setAllDamagesData(Array.isArray(dmData) ? dmData : []);
-      setAllNeccData(Array.isArray(nData)   ? nData  : []);
+      setAllNeccData(Array.isArray(nData) ? nData : []);
       setAllIncentiveData(Array.isArray(iData) ? iData : []);
       setAllAdvanceData(Array.isArray(aData) ? aData : []);
       setAllFoodAllowanceData(Array.isArray(fData) ? fData : []);
@@ -375,10 +375,10 @@ export default function DataEntry() {
 
   /* ================= SUPERVISOR INFO ================= */
   useEffect(() => {
-    if (!date || !outlet) { 
+    if (!date || !outlet) {
       setSupervisorInfo(null);
       setSupervisorZones([]);
-      return; 
+      return;
     }
 
     const allZones = new Set();
@@ -504,15 +504,15 @@ export default function DataEntry() {
 
   /* ================= RESET ================= */
   const handleReset = () => {
-    if (!neccrateLocked)  setNeccrate("");
-    if (!salesLocked)     setSales("");
-    if (!damagesLocked)   setDamages("");
-    if (!cashLocked)      setCash("");
-    if (!digitalLocked)   setDigital("");
+    if (!neccrateLocked) setNeccrate("");
+    if (!salesLocked) setSales("");
+    if (!damagesLocked) setDamages("");
+    if (!cashLocked) setCash("");
+    if (!digitalLocked) setDigital("");
     if (!incentiveLocked) setIncentive("");
-    if (!advanceLocked)   setAdvance("0");
+    if (!advanceLocked) setAdvance("0");
     if (!foodAllowanceLocked) setFoodAllowance("");
-    if (!remarksLocked)   setRemarks("");
+    if (!remarksLocked) setRemarks("");
   };
 
   /* ================= FETCH OUTLET SUMMARY ================= */
@@ -522,7 +522,7 @@ export default function DataEntry() {
       setAiTotalAmount(0);
       return;
     }
-    
+
     // Only run if outlet or date actually changed
     if (prevOutletDateRef.current.outlet === outlet && prevOutletDateRef.current.date === date) {
       return;
@@ -558,11 +558,11 @@ export default function DataEntry() {
         const url = `${API}/outlet-summary?outlet=${encodeURIComponent(outlet)}&date=${encodeURIComponent(date)}`;
         const res = await fetch(url, { headers });
         if (!res.ok) throw new Error("Failed to fetch outlet summary");
-        
+
         const data = await res.json();
         console.log("🟢 fetchSummary RECEIVED FROM BACKEND:", outlet, date, data);
         console.log("🟢 hasSales?", hasSales, "hasCash?", hasCash, "hasDigital?", hasDigital);
-        
+
         if (isMounted) {
           // The AI/Retail summary is the source of truth for the displayed
           // total amount; it is not recalculated from local sales and rate.
@@ -583,14 +583,16 @@ export default function DataEntry() {
             setNeccrate(formatNeccRate(neccValue));
           }
 
-          // Prefill right column fields (Daily Incentive, Daily Damages, Cash Payment, Food Allowance)
+          // Cash Payment (cash handover) — prefill for any date
+          const cashHandoverValue = Number(data.cashHandover ?? data.cashPayment) || 0;
+          if (!hasCash) {
+            console.log("🟢 Prefilling Cash Payment with:", cashHandoverValue);
+            setCash(String(cashHandoverValue));
+          }
+
+          // Prefill right column fields (Daily Incentive, Daily Damages, Food Allowance)
           // ONLY when the selected date is the current date
           if (isCurrentDate) {
-            const cashHandoverValue = Number(data.cashHandover ?? data.cashPayment) || 0;
-            if (!hasCash) {
-              console.log("🟢 Prefilling Cash Payment (current date) with:", cashHandoverValue);
-              setCash(String(cashHandoverValue));
-            }
             if (!hasDamages) {
               console.log("🟢 Prefilling Daily Damages (current date) with:", data.damage);
               setDamages(String(Number(data.damage) || 0));
@@ -611,9 +613,9 @@ export default function DataEntry() {
         if (isMounted) setIsFetchingSummary(false);
       }
     };
-    
+
     fetchSummary();
-    
+
     return () => { isMounted = false; };
   }, [outlet, date, isLoadingData, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allFoodAllowanceData]);
 
@@ -712,13 +714,13 @@ export default function DataEntry() {
     }
 
     const missingFields = [];
-    if (!neccrateLocked  && neccrate === "")  missingFields.push("NECC Rate");
-    if (!salesLocked     && sales === "")     missingFields.push("Daily Sales");
-    if (!damagesLocked   && damages === "")   missingFields.push("Daily Damages");
-    if (!cashLocked      && cash === "")      missingFields.push("Cash Payment");
-    if (!digitalLocked   && digital === "")   missingFields.push("Digital Payment");
+    if (!neccrateLocked && neccrate === "") missingFields.push("NECC Rate");
+    if (!salesLocked && sales === "") missingFields.push("Daily Sales");
+    if (!damagesLocked && damages === "") missingFields.push("Daily Damages");
+    if (!cashLocked && cash === "") missingFields.push("Cash Payment");
+    if (!digitalLocked && digital === "") missingFields.push("Digital Payment");
     if (!incentiveLocked && incentive === "") missingFields.push("Daily Incentive");
-    if (!advanceLocked   && advance === "")   missingFields.push("Advance");
+    if (!advanceLocked && advance === "") missingFields.push("Advance");
     if (!foodAllowanceLocked && foodAllowance === "") missingFields.push("Food Allowance");
 
     if (missingFields.length > 0) {
@@ -727,12 +729,12 @@ export default function DataEntry() {
     }
 
     let user = null;
-    try { user = JSON.parse(localStorage.getItem("user")); } catch (e) {}
+    try { user = JSON.parse(localStorage.getItem("user")); } catch (e) { }
 
     const addedByInfo = user ? {
-      username:  user.username || user.uid || "Unknown",
-      zone:      user.zoneId   || user.zone || "No Zone",
-      role:      user.role     || "unknown",
+      username: user.username || user.uid || "Unknown",
+      zone: user.zoneId || user.zone || "No Zone",
+      role: user.role || "unknown",
       timestamp: new Date().toISOString(),
     } : null;
 
@@ -810,13 +812,13 @@ export default function DataEntry() {
 
       alert("Data saved successfully ✅");
 
-      if (!neccrateLocked  && neccrate !== "")  setNeccrateLocked(true);
-      if (!salesLocked     && sales !== "")     setSalesLocked(true);
-      if (!damagesLocked   && damages !== "")   setDamagesLocked(true);
-      if (!cashLocked      && cash !== "")      setCashLocked(true);
-      if (!digitalLocked   && digital !== "")   setDigitalLocked(true);
+      if (!neccrateLocked && neccrate !== "") setNeccrateLocked(true);
+      if (!salesLocked && sales !== "") setSalesLocked(true);
+      if (!damagesLocked && damages !== "") setDamagesLocked(true);
+      if (!cashLocked && cash !== "") setCashLocked(true);
+      if (!digitalLocked && digital !== "") setDigitalLocked(true);
       if (!incentiveLocked && incentive !== "") setIncentiveLocked(true);
-      if (!advanceLocked   && advance !== "")   setAdvanceLocked(true);
+      if (!advanceLocked && advance !== "") setAdvanceLocked(true);
       if (!foodAllowanceLocked && foodAllowance !== "") setFoodAllowanceLocked(true);
 
       await loadAllData();
@@ -829,22 +831,22 @@ export default function DataEntry() {
   };
 
   /* ================= DERIVED VALUES ================= */
-  const digitalNum = Number(digital)  || 0;
-  const cashNum    = Number(cash)     || 0;
-  const damagesNum = Number(damages)  || 0;
+  const digitalNum = Number(digital) || 0;
+  const cashNum = Number(cash) || 0;
+  const damagesNum = Number(damages) || 0;
   const foodAllowanceNum = Number(foodAllowance) || 0;
 
-  const totalAmount    = useMemo(() => +aiTotalAmount.toFixed(2),              [aiTotalAmount]);
-  const totalRecv      = useMemo(() => +(digitalNum + cashNum + foodAllowanceNum).toFixed(2), [digitalNum, cashNum, foodAllowanceNum]);
-  const closingBalance = useMemo(() => +(totalRecv - totalAmount).toFixed(2),  [totalRecv, totalAmount]);
+  const totalAmount = useMemo(() => Math.round(aiTotalAmount), [aiTotalAmount]);
+  const totalRecv = useMemo(() => Math.round(digitalNum + cashNum + foodAllowanceNum), [digitalNum, cashNum, foodAllowanceNum]);
+  const closingBalance = useMemo(() => Math.round(totalRecv - totalAmount), [totalRecv, totalAmount]);
 
   const formatCurrency = (v) => `₹${Number(v || 0).toLocaleString()}`;
 
   const hasUnlockedValue =
     (!neccrateLocked && neccrate !== "") || (!salesLocked && sales !== "") ||
-    (!damagesLocked  && damages !== "")  || (!cashLocked  && cash !== "")  ||
-    (!digitalLocked  && digital !== "")  || (!incentiveLocked && incentive !== "") ||
-    (!advanceLocked  && advance !== "")  || (!foodAllowanceLocked && foodAllowance !== "");
+    (!damagesLocked && damages !== "") || (!cashLocked && cash !== "") ||
+    (!digitalLocked && digital !== "") || (!incentiveLocked && incentive !== "") ||
+    (!advanceLocked && advance !== "") || (!foodAllowanceLocked && foodAllowance !== "");
 
   const allAlreadyLocked =
     neccrateLocked && salesLocked && damagesLocked &&
@@ -852,13 +854,13 @@ export default function DataEntry() {
     foodAllowanceLocked;
 
   const allUnlockedFilled =
-    (neccrateLocked  || neccrate !== "")  &&
-    (salesLocked     || sales !== "")     &&
-    (damagesLocked   || damages !== "")   &&
-    (cashLocked      || cash !== "")      &&
-    (digitalLocked   || digital !== "")   &&
+    (neccrateLocked || neccrate !== "") &&
+    (salesLocked || sales !== "") &&
+    (damagesLocked || damages !== "") &&
+    (cashLocked || cash !== "") &&
+    (digitalLocked || digital !== "") &&
     (incentiveLocked || incentive !== "") &&
-    (advanceLocked   || advance !== "")   &&
+    (advanceLocked || advance !== "") &&
     (foodAllowanceLocked || foodAllowance !== "");
 
   const canSubmit = !allAlreadyLocked && allUnlockedFilled;
@@ -918,7 +920,7 @@ export default function DataEntry() {
           >
             <option value="">Select Outlet</option>
             {outlets.map(o => {
-              const area   = o.area || o.name || o.id;
+              const area = o.area || o.name || o.id;
               const status = o.status || "Active";
               return (
                 <option key={o.id || area} value={area}>
@@ -987,13 +989,13 @@ export default function DataEntry() {
             )}
 
             {/* Added By Info */}
-{supervisorZones.length > 0 && (
-  <div className="mb-4 rounded-xl bg-blue-50 border border-blue-200 px-4 py-3">
-    <p className="text-xs md:text-sm text-blue-700 font-semibold">
-      📝 Added by supervisor of {supervisorZones.map(z => `Zone ${z}`).join(", ")}
-    </p>
-  </div>
-)}
+            {supervisorZones.length > 0 && (
+              <div className="mb-4 rounded-xl bg-blue-50 border border-blue-200 px-4 py-3">
+                <p className="text-xs md:text-sm text-blue-700 font-semibold">
+                  📝 Added by supervisor of {supervisorZones.map(z => `Zone ${z}`).join(", ")}
+                </p>
+              </div>
+            )}
 
             {/* ---- Delete Button (admin only) ---- */}
             {isAdmin && hasDataForOutlet && (
@@ -1020,105 +1022,105 @@ export default function DataEntry() {
             )}
 
             {/* ---- Daily Sales + Daily Incentive ---- */}
-<div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
-  <div>
-    <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Daily Sales</label>
-    <input type="number" placeholder="Daily Sales" className={inputCls(salesLocked)}
-      value={sales} disabled={salesLocked || outletInactive} onChange={e => setSales(e.target.value)} />
-    {salesLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
-  </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Daily Sales</label>
+                <input type="number" placeholder="Daily Sales" className={inputCls(salesLocked)}
+                  value={sales} disabled={salesLocked || outletInactive} onChange={e => setSales(e.target.value)} />
+                {salesLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
+              </div>
 
-  <div>
-    <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Daily Incentive</label>
-    <input
-      type="number" placeholder="Daily Incentive"
-      className={inputCls(incentiveLocked)}
-      value={incentive} disabled={incentiveLocked || outletInactive}
-      onChange={e => setIncentive(e.target.value)}
-    />
-    {incentiveLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
-  </div>
-</div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Daily Incentive</label>
+                <input
+                  type="number" placeholder="Daily Incentive"
+                  className={inputCls(incentiveLocked)}
+                  value={incentive} disabled={incentiveLocked || outletInactive}
+                  onChange={e => setIncentive(e.target.value)}
+                />
+                {incentiveLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
+              </div>
+            </div>
 
-{/* ---- NECC Rate + Daily Damages ---- */}
-<div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
-  <div>
-    <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">
-      NECC Rate
-      <span className="ml-1 text-xs text-gray-400 font-normal">(per outlet)</span>
-    </label>
-    <input
-      type="number" step="0.001" placeholder="NECC Rate for this outlet"
-      className={inputCls(neccrateLocked)}
-      value={neccrate} disabled={neccrateLocked || outletInactive}
-      onChange={e => setNeccrate(e.target.value)}
-    />
-    {neccrateLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
-  </div>
+            {/* ---- NECC Rate + Daily Damages ---- */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">
+                  NECC Rate
+                  <span className="ml-1 text-xs text-gray-400 font-normal">(per outlet)</span>
+                </label>
+                <input
+                  type="number" step="0.001" placeholder="NECC Rate for this outlet"
+                  className={inputCls(neccrateLocked)}
+                  value={neccrate} disabled={neccrateLocked || outletInactive}
+                  onChange={e => setNeccrate(e.target.value)}
+                />
+                {neccrateLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
+              </div>
 
-  <div>
-    <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Daily Damages</label>
-    <input type="number" placeholder="Daily Damages" className={inputCls(damagesLocked)}
-      value={damages} disabled={damagesLocked || outletInactive} onChange={e => setDamages(e.target.value)} />
-    {damagesLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
-  </div>
-</div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Daily Damages</label>
+                <input type="number" placeholder="Daily Damages" className={inputCls(damagesLocked)}
+                  value={damages} disabled={damagesLocked || outletInactive} onChange={e => setDamages(e.target.value)} />
+                {damagesLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
+              </div>
+            </div>
 
-{/* ---- Digital Payment + Cash Payment ---- */}
-<div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
-  <div>
-    <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Digital Payment</label>
-    <input type="number" placeholder="Digital Payment" className={inputCls(digitalLocked)}
-      value={digital} disabled={digitalLocked || outletInactive} onChange={e => setDigital(e.target.value)} />
-    {digitalLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
-  </div>
+            {/* ---- Digital Payment + Cash Payment ---- */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Digital Payment</label>
+                <input type="number" placeholder="Digital Payment" className={inputCls(digitalLocked)}
+                  value={digital} disabled={digitalLocked || outletInactive} onChange={e => setDigital(e.target.value)} />
+                {digitalLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
+              </div>
 
-  <div>
-    <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Cash Payment</label>
-    <input type="number" placeholder="Cash Payment" className={inputCls(cashLocked)}
-      value={cash} disabled={cashLocked || outletInactive} onChange={e => setCash(e.target.value)} />
-    {cashLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
-  </div>
-</div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Cash Payment</label>
+                <input type="number" placeholder="Cash Payment" className={inputCls(cashLocked)}
+                  value={cash} disabled={cashLocked || outletInactive} onChange={e => setCash(e.target.value)} />
+                {cashLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
+              </div>
+            </div>
 
-<div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
-  <div>
-    <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Advance</label>
-    <input
-      type="number" placeholder="Advance"
-      className={inputCls(advanceLocked)}
-      value={advance} disabled={advanceLocked || outletInactive}
-      onChange={e => setAdvance(e.target.value)}
-    />
-    {advanceLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
-  </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Advance</label>
+                <input
+                  type="number" placeholder="Advance"
+                  className={inputCls(advanceLocked)}
+                  value={advance} disabled={advanceLocked || outletInactive}
+                  onChange={e => setAdvance(e.target.value)}
+                />
+                {advanceLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
+              </div>
 
-  <div>
-    <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Food Allowance</label>
-    <input
-      type="number" placeholder="Food Allowance"
-      className={inputCls(foodAllowanceLocked)}
-      value={foodAllowance} disabled={foodAllowanceLocked || outletInactive}
-      onChange={e => setFoodAllowance(e.target.value)}
-    />
-    {foodAllowanceLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
-  </div>
-</div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Food Allowance</label>
+                <input
+                  type="number" placeholder="Food Allowance"
+                  className={inputCls(foodAllowanceLocked)}
+                  value={foodAllowance} disabled={foodAllowanceLocked || outletInactive}
+                  onChange={e => setFoodAllowance(e.target.value)}
+                />
+                {foodAllowanceLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
+              </div>
+            </div>
 
-<div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
-  <div>
-    <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Remarks (optional)</label>
-    <input
-      type="text" placeholder="Add remarks if any"
-      className={inputCls(remarksLocked)}
-      value={remarks} disabled={remarksLocked || outletInactive}
-      onChange={e => setRemarks(e.target.value)}
-    />
-    {remarksLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
-  </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1 md:text-base">Remarks (optional)</label>
+                <input
+                  type="text" placeholder="Add remarks if any"
+                  className={inputCls(remarksLocked)}
+                  value={remarks} disabled={remarksLocked || outletInactive}
+                  onChange={e => setRemarks(e.target.value)}
+                />
+                {remarksLocked && <div className="text-xs text-green-700 mt-1">✓ Already entered</div>}
+              </div>
 
-  <div />
-</div>
+              <div />
+            </div>
             {/* ---- Summary Card ---- */}
             <div className="mt-5">
               <div className="bg-eggWhite p-4 rounded-xl shadow-sm border border-gray-100">
