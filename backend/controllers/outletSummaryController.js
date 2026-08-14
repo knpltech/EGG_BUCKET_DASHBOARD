@@ -407,13 +407,22 @@ export const getOutletSummary = async (req, res) => {
     }
 
     // 2. Find agents assigned to the selected outlet
-    const searchOutletName = outlet.toLowerCase().replace(/eggbucket/g, "").trim();
+    // Normalize to alphanumeric-only for robust matching.
+    // Handles variations like "Kudlu Gate", "KudluGate", "kudlu-gate", "KUDLU GATE" etc.
+    const normalizeOutletKey = (name) => String(name || "")
+      .toLowerCase()
+      .replace(/eggbucket/gi, "")
+      .replace(/[^a-z0-9]/g, "")
+      .trim();
+    const searchOutletKey = normalizeOutletKey(outlet);
 
     const assignedAgents = deliveryManCache
       .filter(agent => {
         if (!agent.outlet) return false;
-        const agentOutletName = agent.outlet.toLowerCase().replace(/eggbucket/g, "").trim();
-        return agentOutletName === searchOutletName || agentOutletName.includes(searchOutletName) || searchOutletName.includes(agentOutletName);
+        const agentKey = normalizeOutletKey(agent.outlet);
+        return agentKey === searchOutletKey
+          || agentKey.includes(searchOutletKey)
+          || searchOutletKey.includes(agentKey);
       })
       .map(agent => agent.uid ?? agent.id ?? agent.agentId ?? agent.agentID)
       .filter(Boolean);
@@ -430,18 +439,26 @@ export const getOutletSummary = async (req, res) => {
 
     if (!cacheEntry || now - cacheEntry.time > CUSTOMERS_CACHE_TTL) {
       try {
-        // Only fetch customers that actually have a delivered order on this specific date!
-        // This drops the reads from ~393 down to just ~40!
-        const snapshot = await collectionDb.collection("customers")
-          .where(`last8Days.${date}.status`, "==", "delivered")
-          .get();
+        // Fetch all customers and filter in code.
+        // The previous approach used a nested-field Firestore query
+        // (.where(`last8Days.${date}.status`, "==", "delivered")) which only
+        // works when the day's delivery is stored as a plain object. Some
+        // outlets (e.g. Kudlu Gate) store deliveries as an ARRAY, making the
+        // nested-field query silently return 0 results for those outlets.
+        // Fetching all docs and filtering in code handles both formats.
+        const allSnapshot = await collectionDb.collection("customers").get();
+        customersForDate = allSnapshot.docs
+          .map(doc => doc.data())
+          .filter(data => {
+            const dayData = data.last8Days?.[date];
+            if (!dayData) return false;
+            const deliveries = Array.isArray(dayData) ? dayData : [dayData];
+            return deliveries.some(d => d?.status === "delivered");
+          });
 
-        customersForDate = snapshot.docs.map(doc => doc.data());
-
-        // Cache the specific date
         customersDateCache[date] = {
           data: customersForDate,
-          time: now
+          time: now,
         };
       } catch (err) {
         console.error("Error fetching customers collection for date:", err.message);
