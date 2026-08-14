@@ -287,6 +287,7 @@ const getMetricAgentNamesForOutlet = (metrics, outlet) => [
   ...(metrics?.cashHandoverEntries || []),
   ...(metrics?.foodAllowanceEntries || []),
   ...(metrics?.incentiveEntries || []),
+  ...(metrics?.damageEntries || []),   // also check damage entries (may exist even when cash/food/incentive = 0)
 ]
   .filter((entry) => isMatchingOutlet(entry?.outletName || entry?.outlet, outlet))
   .map((entry) => entry?.agentName)
