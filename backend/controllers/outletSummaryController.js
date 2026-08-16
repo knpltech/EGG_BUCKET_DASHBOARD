@@ -503,16 +503,13 @@ export const getOutletSummary = async (req, res) => {
 
       deliveries.forEach(delivery => {
         if (delivery.status === "delivered") {
-          let isMatch = false;
-
-          if (hasAssignedAgents) {
-            isMatch = assignedAgents.includes(getAgentId(delivery));
-          } else {
-            const deliveryOutlet = delivery.outletName || delivery.outlet || data.outletName || data.outlet || "";
-            if (deliveryOutlet && isMatchingOutlet(deliveryOutlet, outlet)) {
-              isMatch = true;
-            }
-          }
+          // DeliveryMan IDs can be absent or stale for an outlet.  A delivery
+          // explicitly tagged with the selected outlet is equally authoritative,
+          // so retain it even when DeliveryMan has a different mapping.
+          const deliveryOutlet = delivery.outletName || delivery.outlet || data.outletName || data.outlet || "";
+          const matchesOutlet = Boolean(deliveryOutlet && isMatchingOutlet(deliveryOutlet, outlet));
+          const matchesAssignedAgent = hasAssignedAgents && assignedAgents.includes(getAgentId(delivery));
+          const isMatch = matchesAssignedAgent || matchesOutlet;
 
           if (isMatch) {
             salesQty += getSalesQuantity(delivery);
