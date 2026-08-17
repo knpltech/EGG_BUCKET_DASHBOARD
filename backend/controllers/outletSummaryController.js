@@ -393,16 +393,18 @@ const getRetailSummary = async (outlet, date) => {
     deliveries.filter(Boolean).forEach((delivery) => {
       if (delivery.status !== "delivered") return;
 
-      if (hasAgentNames) {
-        // Primary match: by agent name
-        if (!agentNames.some((agent) => isMatchingAgent(delivery.agentName, agent))) return;
-      } else {
-        // Fallback match: by outlet name in the delivery or customer record
-        const deliveryOutlet =
-          delivery.outletName || delivery.outlet ||
-          customer.outletName || customer.outlet || "";
-        if (!deliveryOutlet || !isMatchingOutlet(deliveryOutlet, outlet)) return;
-      }
+      const deliveryOutlet =
+        delivery.outletName || delivery.outlet ||
+        customer.outletName || customer.outlet || "";
+      const matchesAssignedAgent = hasAgentNames && agentNames
+        .some((agent) => isMatchingAgent(delivery.agentName, agent));
+      const matchesOutlet = Boolean(deliveryOutlet && isMatchingOutlet(deliveryOutlet, outlet));
+
+      // An agent assignment can be stale while the delivery still contains the
+      // correct outlet. Treat either explicit association as authoritative.
+      // Previously, the presence of any metric-agent name disabled the outlet
+      // match entirely, which could make valid Kudlu Gate deliveries disappear.
+      if (!matchesAssignedAgent && !matchesOutlet) return;
 
       summary.salesQty += getSalesQuantity(delivery);
       summary.cashHandover += getCashHandover(delivery);
@@ -595,22 +597,37 @@ export const getOutletSummary = async (req, res) => {
 
     const summaryWithMetrics = await applyInventoryMetrics(summary, outlet, date);
 
-    // DeliveryMan assignments can lag behind the Retail Admin application.
-    // In that state a valid delivery (such as Kudlu's KRISHNA entry) has no
-    // usable outlet field or current assignment in this Firebase collection.
-    // The retail feed has the authoritative agent name, so use it only when
-    // the collection lookup produced no data at all.
-    const hasCollectionData = Object.values(summaryWithMetrics)
-      .some((value) => Number(value) !== 0);
+    // The inventory metric collections can contain only cash/UPI handovers.
+    // Do not let those values mask a failed/stale delivery lookup: sales and
+    // total amount must be checked independently before deciding Firebase has
+    // a complete outlet summary. This was the source of the intermittent
+    // production result where Kudlu Gate showed payments but zero sales.
+    const isMissingDeliveryTotals =
+      toNumber(summaryWithMetrics.salesQty) <= 0 ||
+      toNumber(summaryWithMetrics.totalAmount) <= 0;
 
-    if (!hasCollectionData) {
+    if (isMissingDeliveryTotals) {
       try {
         const retailSummary = await getRetailSummary(outlet, date);
-        const hasRetailData = Object.values(retailSummary)
-          .some((value) => Number(value) !== 0);
-        if (hasRetailData) return res.status(200).json(retailSummary);
+        const hasRetailDeliveryTotals =
+          toNumber(retailSummary.salesQty) > 0 ||
+          toNumber(retailSummary.totalAmount) > 0;
+
+        if (hasRetailDeliveryTotals) {
+          // Preserve handover metrics from the collection database, but fill
+          // every missing delivery-derived value from the authoritative Retail
+          // feed. This avoids overwriting valid cash/UPI values and prevents a
+          // partial response from reaching the data-entry screen.
+          const mergedSummary = { ...summaryWithMetrics };
+          ["salesQty", "totalAmount", "salesPoint", "neccRate"].forEach((field) => {
+            if (toNumber(mergedSummary[field]) <= 0 && toNumber(retailSummary[field]) > 0) {
+              mergedSummary[field] = retailSummary[field];
+            }
+          });
+          return res.status(200).json(mergedSummary);
+        }
       } catch (error) {
-        // Preserve the existing zero summary if the optional retail service is
+        // Preserve the collection response if the optional Retail service is
         // unavailable; this endpoint must remain usable for all outlets.
         console.error("Retail Admin fallback unavailable:", error.message);
       }
