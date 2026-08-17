@@ -433,19 +433,28 @@ export const getOutletSummary = async (req, res) => {
       .trim();
     const searchOutletKey = normalizeOutletKey(outlet);
 
-    const assignedAgents = deliveryManCache
+    const matchingOutletAgents = deliveryManCache
       .filter(agent => {
         if (!agent.outlet) return false;
         const agentKey = normalizeOutletKey(agent.outlet);
         return agentKey === searchOutletKey
           || agentKey.includes(searchOutletKey)
           || searchOutletKey.includes(agentKey);
-      })
+      });
+
+    const assignedAgents = matchingOutletAgents
       .map(agent => agent.uid ?? agent.id ?? agent.agentId ?? agent.agentID)
       .filter(Boolean);
 
+    // Some retail deliveries retain a former customer's assignment/route but
+    // record the actual delivery under the current agent's name. Match that
+    // name too, so an outdated assignment cannot hide a valid outlet sale.
+    const assignedAgentNames = matchingOutletAgents
+      .map(agent => agent.agentName ?? agent.name ?? agent.fullName ?? agent.displayName ?? agent.username)
+      .filter(name => normalizePersonName(name) && normalizePersonName(name) !== "-");
 
-    const hasAssignedAgents = assignedAgents.length > 0;
+
+    const hasAssignedAgents = assignedAgents.length > 0 || assignedAgentNames.length > 0;
 
     // 3. Query customers collection efficiently using a targeted query for the specific date
     let customersForDate = [];
@@ -508,7 +517,10 @@ export const getOutletSummary = async (req, res) => {
           // so retain it even when DeliveryMan has a different mapping.
           const deliveryOutlet = delivery.outletName || delivery.outlet || data.outletName || data.outlet || "";
           const matchesOutlet = Boolean(deliveryOutlet && isMatchingOutlet(deliveryOutlet, outlet));
-          const matchesAssignedAgent = hasAssignedAgents && assignedAgents.includes(getAgentId(delivery));
+          const matchesAssignedAgent = hasAssignedAgents && (
+            assignedAgents.includes(getAgentId(delivery)) ||
+            assignedAgentNames.some(name => isMatchingAgent(delivery.agentName, name))
+          );
           const isMatch = matchesAssignedAgent || matchesOutlet;
 
           if (isMatch) {
