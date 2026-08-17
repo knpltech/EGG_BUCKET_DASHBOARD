@@ -314,6 +314,18 @@ const applyInventoryMetrics = async (summary, outlet, date, suppliedMetrics) => 
       }
     }
 
+    // Digital Payment must reflect what was actually handed over as UPI, not
+    // the total UPI collected in customer deliveries. Firestore metric
+    // snapshots may not include this collection, so obtain this specific
+    // value from the Retail Admin metrics API when necessary.
+    if (!Array.isArray(metrics?.upiHandoverEntries)) {
+      const retailMetrics = await getInventoryMetrics(date);
+      metrics = {
+        ...metrics,
+        upiHandoverEntries: retailMetrics?.upiHandoverEntries || [],
+      };
+    }
+
     const sumForOutlet = (entries, paths) => (Array.isArray(entries) ? entries : [])
       .filter((entry) => isMatchingOutlet(entry?.outletName || entry?.outlet, outlet))
       .reduce((total, entry) => total + pickNumber(entry, paths), 0);
@@ -323,6 +335,7 @@ const applyInventoryMetrics = async (summary, outlet, date, suppliedMetrics) => 
     summary.cashPayment = summary.cashHandover;
     summary.foodAllowance = sumForOutlet(metrics.foodAllowanceEntries, ["Cash", "cash", "amount", "value"]);
     summary.incentive = sumForOutlet(metrics.incentiveEntries, ["Cash", "cash", "amount", "value"]);
+    summary.digitalPayment = sumForOutlet(metrics.upiHandoverEntries, ["Cash", "cash", "amount", "value"]);
   } catch (error) {
     console.error("Error fetching inventory metrics:", error.message);
   }
