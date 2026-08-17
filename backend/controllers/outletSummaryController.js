@@ -556,7 +556,30 @@ export const getOutletSummary = async (req, res) => {
       neccRate
     };
 
-    return res.status(200).json(await applyInventoryMetrics(summary, outlet, date));
+    const summaryWithMetrics = await applyInventoryMetrics(summary, outlet, date);
+
+    // DeliveryMan assignments can lag behind the Retail Admin application.
+    // In that state a valid delivery (such as Kudlu's KRISHNA entry) has no
+    // usable outlet field or current assignment in this Firebase collection.
+    // The retail feed has the authoritative agent name, so use it only when
+    // the collection lookup produced no data at all.
+    const hasCollectionData = Object.values(summaryWithMetrics)
+      .some((value) => Number(value) !== 0);
+
+    if (!hasCollectionData) {
+      try {
+        const retailSummary = await getRetailSummary(outlet, date);
+        const hasRetailData = Object.values(retailSummary)
+          .some((value) => Number(value) !== 0);
+        if (hasRetailData) return res.status(200).json(retailSummary);
+      } catch (error) {
+        // Preserve the existing zero summary if the optional retail service is
+        // unavailable; this endpoint must remain usable for all outlets.
+        console.error("Retail Admin fallback unavailable:", error.message);
+      }
+    }
+
+    return res.status(200).json(summaryWithMetrics);
 
   } catch (error) {
     console.error("Error in getOutletSummary:", error);
