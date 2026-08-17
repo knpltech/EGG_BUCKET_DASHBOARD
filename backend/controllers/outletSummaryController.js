@@ -330,12 +330,36 @@ const applyInventoryMetrics = async (summary, outlet, date, suppliedMetrics) => 
       .filter((entry) => isMatchingOutlet(entry?.outletName || entry?.outlet, outlet))
       .reduce((total, entry) => total + pickNumber(entry, paths), 0);
 
+    // Retail keeps earlier UPI-handover submissions when an agent corrects a
+    // value. Collections shows the current handover, i.e. the newest entry,
+    // so Data Entry must not add superseded submissions together.
+    const latestForOutlet = (entries) => (Array.isArray(entries) ? entries : [])
+      .filter((entry) => isMatchingOutlet(entry?.outletName || entry?.outlet, outlet))
+      .reduce((latest, entry) => {
+        if (!latest) return entry;
+
+        const toTimestamp = (value) => {
+          if (typeof value === "number") return value;
+          if (value && typeof value === "object") return Number(value._seconds ?? value.seconds ?? 0) * 1000
+            + Math.floor(Number(value._nanoseconds ?? value.nanoseconds ?? 0) / 1_000_000);
+          const parsed = Date.parse(value);
+          return Number.isFinite(parsed) ? parsed : 0;
+        };
+
+        // Keep the later array item when timestamps are equal or unavailable;
+        // the Retail API returns the current revision last in that case.
+        return toTimestamp(entry.createdAt) >= toTimestamp(latest.createdAt) ? entry : latest;
+      }, null);
+
     summary.damage = sumForOutlet(metrics.damageEntries, ["quantity", "damage", "damages", "Cash", "cash"]);
     summary.cashHandover = sumForOutlet(metrics.cashHandoverEntries, ["Cash", "cash", "amount", "value"]);
     summary.cashPayment = summary.cashHandover;
     summary.foodAllowance = sumForOutlet(metrics.foodAllowanceEntries, ["Cash", "cash", "amount", "value"]);
     summary.incentive = sumForOutlet(metrics.incentiveEntries, ["Cash", "cash", "amount", "value"]);
-    summary.digitalPayment = sumForOutlet(metrics.upiHandoverEntries, ["Cash", "cash", "amount", "value"]);
+    summary.digitalPayment = pickNumber(
+      latestForOutlet(metrics.upiHandoverEntries),
+      ["Cash", "cash", "amount", "value"]
+    );
   } catch (error) {
     console.error("Error fetching inventory metrics:", error.message);
   }
