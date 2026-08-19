@@ -126,13 +126,14 @@ export const getReports = async (req, res) => {
     // for the selected outlet/date range.
     const startDate = normalizeDateKey(dateFrom) || '';
     const endDate = normalizeDateKey(dateTo) || '';
-    const [salesSnapshot, digitalPaymentsSnapshot, cashPaymentsSnapshot, neccRateSnapshot, dailyDamagesSnapshot, foodAllowanceSnapshot] = await Promise.all([
+    const [salesSnapshot, digitalPaymentsSnapshot, cashPaymentsSnapshot, neccRateSnapshot, dailyDamagesSnapshot, foodAllowanceSnapshot, dataEntriesSnapshot] = await Promise.all([
       getCollectionForDateRange('dailySales', startDate, endDate),
       getCollectionForDateRange('digitalPayments', startDate, endDate),
       getCollectionForDateRange('cashPayments', startDate, endDate),
       getCollectionForDateRange('neccRates', startDate, endDate),
       getCollectionForDateRange('dailyDamages', startDate, endDate),
-      getCollectionForDateRange('foodAllowance', startDate, endDate)
+      getCollectionForDateRange('foodAllowance', startDate, endDate),
+      getCollectionForDateRange('dataEntries', startDate, endDate)
     ]);
 
     const fetchTime = Date.now() - startTime;
@@ -146,6 +147,7 @@ export const getReports = async (req, res) => {
       cashPay: new Map(),
       damages: new Map(),
       foodAllowance: new Map(),
+      totalAmount: new Map(),
     };
     const ensureDateEntry = (dateKey) => {
       if (!dateKey) return null;
@@ -272,10 +274,19 @@ export const getReports = async (req, res) => {
       setPreferredValue('damages', dateKey, damagesValue, data);
     });
 
+    // Keep Reports aligned with the Total Amount saved in Daily Entry.
+    dataEntriesSnapshot.forEach(doc => {
+      const data = doc.data();
+      const dateKey = normalizeDateKey(data.date || data.createdAt);
+      if (!dateKey || !hasOutletAlias(data.outletId || data.outlet)) return;
+      setPreferredValue('totalAmount', dateKey, data.totalSalesAmount, data);
+    });
+
     // Convert to array and calculate
     let transactions = Object.values(dateMap).map(t => {
-      // Only use NECC rate from neccrate collection; do not calculate or fallback
-      t.totalAmount = parseFloat((t.salesQty * t.neccRate).toFixed(2));
+      // Older dates without a saved Daily Entry use quantity × NECC rate.
+      const hasSavedAmount = valueMetadata.totalAmount.has(t.date);
+      t.totalAmount = Math.round(hasSavedAmount ? t.totalAmount : (t.salesQty * t.neccRate));
       t.totalRecv = parseFloat((t.digitalPay + t.cashPay + t.foodAllowance).toFixed(2));
       t.difference = parseFloat((t.totalRecv - t.totalAmount).toFixed(2));
       t.damages = t.damages || 0;

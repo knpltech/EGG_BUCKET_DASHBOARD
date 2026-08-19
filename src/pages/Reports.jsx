@@ -12,6 +12,8 @@ const toLocalIsoDate = (value) => {
   return `${year}-${month}-${day}`;
 };
 
+const formatWholeCurrency = (value) => `₹${Math.round(Number(value) || 0).toLocaleString('en-IN')}`;
+
 // DEBUG: Fetch all outlet names from backend data for troubleshooting
 async function fetchAllOutletNames() {
   try {
@@ -359,7 +361,7 @@ const Reports = () => {
         { Field: '', Value: '' },
         { Field: 'Total Sales Quantity', Value: `${reportData.totalSalesQuantity || 0} eggs` },
         { Field: 'Average Closing Balance', Value: `₹${Math.round(avgClosingBalance)}` },
-        { Field: 'Total Amount', Value: `₹${reportData.totalAmount?.toLocaleString() || '0'}` },
+        { Field: 'Total Amount', Value: formatWholeCurrency(reportData.totalAmount) },
         { Field: 'Total Damages', Value: `${Math.round(Math.abs(reportData.totalDamages || 0))}` },
         { Field: '', Value: '' }
       ];
@@ -368,11 +370,11 @@ const Reports = () => {
         Date: t.date,
         'Sales Qty': t.salesQty,
         'NECC Rate': `₹${t.neccRate.toFixed(2)}`,
-        'Total Amount': `₹${t.totalAmount.toLocaleString()}`,
-        'Digital Pay': `₹${t.digitalPay.toLocaleString()}`,
-        'Cash Pay': `₹${t.cashPay.toLocaleString()}`,
-        'Total Recv.': `₹${t.totalRecv.toLocaleString()}`,
-        'Closing Balance': `₹${t.difference.toLocaleString()}`
+        'Total Amount': formatWholeCurrency(t.totalAmount),
+        'Digital Pay': formatWholeCurrency(t.digitalPay),
+        'Cash Pay': formatWholeCurrency(t.cashPay),
+        'Total Recv.': formatWholeCurrency(t.totalRecv),
+        'Closing Balance': formatWholeCurrency(t.difference)
       }));
 
       const damagesExportData = damagesData.map(d => ({
@@ -634,7 +636,7 @@ const Reports = () => {
                   <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Total Amount</span>
                 </div>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-bold text-gray-900">₹ {reportData.totalAmount?.toLocaleString() || '0'}</span>
+                  <span className="text-3xl font-bold text-gray-900">{formatWholeCurrency(reportData.totalAmount)}</span>
                 </div>
               </div>
 
@@ -685,12 +687,12 @@ const Reports = () => {
                             <td className="whitespace-nowrap px-4 py-3">{transaction.date}</td>
                             <td className="whitespace-nowrap px-4 py-3 text-right">{transaction.salesQty}</td>
                             <td className="whitespace-nowrap px-4 py-3 text-right">₹{transaction.neccRate.toFixed(2)}</td>
-                            <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">₹{transaction.totalAmount.toLocaleString()}</td>
-                            <td className="whitespace-nowrap px-4 py-3 text-right">₹{transaction.digitalPay.toLocaleString()}</td>
-                            <td className="whitespace-nowrap px-4 py-3 text-right">₹{transaction.cashPay.toLocaleString()}</td>
-                            <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">₹{transaction.totalRecv.toLocaleString()}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{formatWholeCurrency(transaction.totalAmount)}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right">{formatWholeCurrency(transaction.digitalPay)}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right">{formatWholeCurrency(transaction.cashPay)}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{formatWholeCurrency(transaction.totalRecv)}</td>
                             <td className={`whitespace-nowrap px-4 py-3 text-right font-semibold ${transaction.difference < 0 ? 'text-red-600' : transaction.difference > 0 ? 'text-green-600' : 'text-gray-700'}`}>
-                              {transaction.difference > 0 ? '+ ' : transaction.difference < 0 ? '- ' : ''}₹{Math.abs(transaction.difference).toLocaleString()}
+                              {transaction.difference > 0 ? '+ ' : transaction.difference < 0 ? '- ' : ''}{formatWholeCurrency(Math.abs(transaction.difference))}
                             </td>
                           </tr>
                         ))}
@@ -698,12 +700,12 @@ const Reports = () => {
                           <td className="whitespace-nowrap px-4 py-3">GRAND TOTAL</td>
                           <td className="whitespace-nowrap px-4 py-3 text-right">{columnTotals.quantity}</td>
                           <td className="whitespace-nowrap px-4 py-3 text-right">-</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right">₹{columnTotals.amount.toLocaleString()}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right">₹{columnTotals.digitalPay.toLocaleString()}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right">₹{columnTotals.cashPay.toLocaleString()}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right">₹{columnTotals.totalRecv.toLocaleString()}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right">{formatWholeCurrency(columnTotals.amount)}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right">{formatWholeCurrency(columnTotals.digitalPay)}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right">{formatWholeCurrency(columnTotals.cashPay)}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right">{formatWholeCurrency(columnTotals.totalRecv)}</td>
                           <td className={`whitespace-nowrap px-4 py-3 text-right ${columnTotals.closingBalance < 0 ? 'text-red-600' : columnTotals.closingBalance > 0 ? 'text-green-600' : 'text-orange-700'}`}>
-                            {columnTotals.closingBalance > 0 ? '+ ' : columnTotals.closingBalance < 0 ? '- ' : ''}₹{Math.abs(columnTotals.closingBalance).toLocaleString()}
+                            {columnTotals.closingBalance > 0 ? '+ ' : columnTotals.closingBalance < 0 ? '- ' : ''}{formatWholeCurrency(Math.abs(columnTotals.closingBalance))}
                           </td>
                         </tr>
                       </>

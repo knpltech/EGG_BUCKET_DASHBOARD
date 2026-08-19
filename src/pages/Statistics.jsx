@@ -120,7 +120,12 @@ const buildComparableDailyRows = (currentItems, previousItems, range) => {
       weekday: formatWeekday(item.key),
       displayDate: formatLongDate(item.key),
       eggGrowth: getComparison(item.salesQty, previous.salesQty),
-      damageGrowth: getComparison(item.damages, previous.damages),
+      // Damage trends compare the damage rate (damaged eggs ÷ egg count),
+      // not only the raw count, against the immediately preceding day.
+      damageGrowth: getComparison(
+        damagePercent(item.damages, item.salesQty),
+        damagePercent(previousDay.damages, previousDay.salesQty),
+      ),
       neccGrowth: getComparison(item.averageNeccRate, previousDay.averageNeccRate),
       revenueGrowth: getComparison(item.revenue, previous.revenue),
     };
@@ -452,7 +457,7 @@ const Statistics = () => {
           <section className="mb-6 rounded-lg border border-gray-100 bg-white p-5 shadow-sm">
             <SectionHeader
               title="Daily Data"
-              subtitle={<span className="font-bold text-gray-700">Weekday-to-Weekday Comparison (Avg NECC Rate compares with the previous day)</span>}
+              subtitle={<span className="font-bold text-gray-700">Egg Count and Revenue compare with the same weekday last week. Damage % and Avg NECC Rate compare with the previous day.</span>}
             />
             <div className="mt-4 grid grid-cols-1 gap-5 xl:grid-cols-2">
               <DailyDataTable title="Last Week" range={getLastWeekRange()} rows={lastWeekRows} />
