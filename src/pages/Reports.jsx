@@ -672,10 +672,10 @@ const Reports = () => {
                       <th className="min-w-[130px] px-4 py-3">DATE</th>
                       <th className="px-4 py-3 whitespace-nowrap text-right">QUANTITY</th>
                       <th className="px-4 py-3 whitespace-nowrap text-right">NECC RATE</th>
-                      <th className="px-4 py-3 whitespace-nowrap text-right">AMOUNT</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-right">TOTAL AMOUNT</th>
                       <th className="px-4 py-3 whitespace-nowrap text-right">DIGITAL PAYMENT</th>
                       <th className="px-4 py-3 whitespace-nowrap text-right">CASH PAYMENT</th>
-                      <th className="px-4 py-3 whitespace-nowrap text-right">TOTAL AMOUNT</th>
+                      <th className="px-4 py-3 whitespace-nowrap text-right">RECEIVED AMOUNT</th>
                       <th className="px-4 py-3 whitespace-nowrap text-right">CLOSING BALANCE</th>
                     </tr>
                   </thead>

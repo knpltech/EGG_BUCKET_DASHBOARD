@@ -909,7 +909,7 @@ const OutletPerformance = () => {
                             <td className="whitespace-nowrap px-4 py-3 font-semibold text-gray-900">{item.label}</td>
                             <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.salary)}</td>
                             <td className="whitespace-nowrap px-4 py-3 text-right">{number(item.salesQty)}</td>
-                            <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{currency(item.revenue)}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{wholeCurrency(item.revenue)}</td>
                             <td className="whitespace-nowrap px-4 py-3 text-right">{number(item.damages)}</td>
                             <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.damageCost)}</td>
                             <td className="whitespace-nowrap px-4 py-3 text-right">{currency(item.incentive)}</td>
@@ -933,7 +933,7 @@ const OutletPerformance = () => {
                         <td className="whitespace-nowrap px-4 py-3">Total</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{currency(performanceRows.reduce((acc, curr) => acc + toNumber(curr.salary), 0))}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{number(performanceRows.reduce((acc, curr) => acc + toNumber(curr.salesQty), 0))}</td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right">{currency(performanceRows.reduce((acc, curr) => acc + toNumber(curr.revenue), 0))}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">{wholeCurrency(performanceRows.reduce((acc, curr) => acc + toNumber(curr.revenue), 0))}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{number(performanceRows.reduce((acc, curr) => acc + toNumber(curr.damages), 0))}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{currency(performanceRows.reduce((acc, curr) => acc + toNumber(curr.damageCost), 0))}</td>
                         <td className="whitespace-nowrap px-4 py-3 text-right">{currency(performanceRows.reduce((acc, curr) => acc + toNumber(curr.incentive), 0))}</td>
