@@ -27,7 +27,7 @@ import {
   faUtensils,
   faWallet,
 } from "@fortawesome/free-solid-svg-icons";
-import { fetchReportsData, fetchStatisticsData } from "../context/reportsApi";
+import { fetchReportsData, fetchStatisticsData, STATISTICS_INVALIDATED_EVENT } from "../context/reportsApi";
 import { getRoleFlags } from "../utils/role";
 import { getThisWeekRange, toLocalIsoDate } from "../utils/dateRange";
 
@@ -377,6 +377,13 @@ const OutletPerformance = () => {
   const [todayRate, setTodayRate] = useState("");
   const [profitRate, setProfitRate] = useState(null);
   const [profitCalculatorError, setProfitCalculatorError] = useState("");
+  const [statisticsVersion, setStatisticsVersion] = useState(0);
+
+  useEffect(() => {
+    const refreshPerformance = () => setStatisticsVersion((version) => version + 1);
+    window.addEventListener(STATISTICS_INVALIDATED_EVENT, refreshPerformance);
+    return () => window.removeEventListener(STATISTICS_INVALIDATED_EVENT, refreshPerformance);
+  }, []);
 
   useEffect(() => {
     const loadPerformance = async () => {
@@ -448,7 +455,7 @@ const OutletPerformance = () => {
     };
 
     loadPerformance();
-  }, [dateRange, isSupervisor, zone]);
+  }, [dateRange, isSupervisor, zone, statisticsVersion]);
 
   const outletRows = useMemo(() => stats?.outletBreakdown || [], [stats]);
   const previousOutletRows = useMemo(() => previousStats?.outletBreakdown || [], [previousStats]);

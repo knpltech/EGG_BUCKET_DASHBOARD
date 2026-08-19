@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from "react";
 import { getRoleFlags } from "../utils/role";
+import { invalidateStatisticsCache } from "../context/reportsApi";
 
 const API = import.meta.env.VITE_API_URL || "/api";
 
@@ -810,6 +811,7 @@ export default function DataEntry() {
         }
       }
 
+      invalidateStatisticsCache();
       alert("Data saved successfully ✅");
 
       if (!neccrateLocked && neccrate !== "") setNeccrateLocked(true);

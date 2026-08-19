@@ -21,7 +21,7 @@ import {
   faMoneyBillWave,
   faRotateRight,
 } from "@fortawesome/free-solid-svg-icons";
-import { fetchStatisticsData } from "../context/reportsApi";
+import { fetchStatisticsData, STATISTICS_INVALIDATED_EVENT } from "../context/reportsApi";
 import { getRoleFlags } from "../utils/role";
 import { getThisWeekRange, toLocalIsoDate } from "../utils/dateRange";
 
@@ -227,6 +227,13 @@ const Statistics = () => {
   const [comparisonStats, setComparisonStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [statisticsVersion, setStatisticsVersion] = useState(0);
+
+  useEffect(() => {
+    const refreshStatistics = () => setStatisticsVersion((version) => version + 1);
+    window.addEventListener(STATISTICS_INVALIDATED_EVENT, refreshStatistics);
+    return () => window.removeEventListener(STATISTICS_INVALIDATED_EVENT, refreshStatistics);
+  }, []);
 
   useEffect(() => {
     const loadStatistics = async () => {
@@ -261,7 +268,7 @@ const Statistics = () => {
     };
 
     loadStatistics();
-  }, [dateRange, isSupervisor, zone]);
+  }, [dateRange, isSupervisor, zone, statisticsVersion]);
 
   const totals = dailyStats?.totals || {};
   const daily = useMemo(() => dailyStats?.daily || [], [dailyStats]);

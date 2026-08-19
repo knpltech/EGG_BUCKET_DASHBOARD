@@ -9,6 +9,16 @@ const config = {
 const API_BASE_URL = config.apiBaseUrl;
 const statisticsCache = new Map();
 const STATISTICS_CACHE_TTL_MS = 5 * 60 * 1000;
+export const STATISTICS_INVALIDATED_EVENT = 'statistics-data-invalidated';
+
+// Keep normal navigation fast, while allowing a successful Data Entry save
+// to make all statistics requests fresh immediately.
+export const invalidateStatisticsCache = () => {
+  statisticsCache.clear();
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(STATISTICS_INVALIDATED_EVENT));
+  }
+};
 
 const getLocalIsoDate = (value = new Date()) => {
   const date = value instanceof Date ? value : new Date(value);
@@ -402,6 +412,7 @@ export default {
   fetchOutlets,
   exportReports,
   fetchStatisticsData,
+  invalidateStatisticsCache,
   fetchTodayRevenue,
   fetchZoneWiseRevenue
 };
