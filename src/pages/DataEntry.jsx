@@ -253,6 +253,7 @@ export default function DataEntry() {
   const [remarksLocked, setRemarksLocked] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isManualReentry, setIsManualReentry] = useState(false);
   const [isFetchingSummary, setIsFetchingSummary] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [aiTotalAmount, setAiTotalAmount] = useState(0);
@@ -299,18 +300,19 @@ export default function DataEntry() {
     try {
       const token = localStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const requestOptions = { headers, cache: "no-store" };
       const { from, to } = getDataWindow(date || todayIso);
       const query = `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
       const [sRes, cRes, dRes, dmRes, nRes, iRes, aRes, fRes, rRes] = await Promise.all([
-        fetch(`${API}/dailysales/all${query}`, { headers }),
-        fetch(`${API}/cash-payments/all${query}`, { headers }),
-        fetch(`${API}/digital-payments/all${query}`, { headers }),
-        fetch(`${API}/daily-damage/all${query}`, { headers }),
-        fetch(`${API}/neccrate/all${query}`, { headers }),
-        fetch(`${API}/incentive/all${query}`, { headers }),
-        fetch(`${API}/advance/all${query}`, { headers }),
-        fetch(`${API}/food-allowance/all${query}`, { headers }),
-        fetch(`${API}/remarks/all${query}`, { headers }),
+        fetch(`${API}/dailysales/all${query}`, requestOptions),
+        fetch(`${API}/cash-payments/all${query}`, requestOptions),
+        fetch(`${API}/digital-payments/all${query}`, requestOptions),
+        fetch(`${API}/daily-damage/all${query}`, requestOptions),
+        fetch(`${API}/neccrate/all${query}`, requestOptions),
+        fetch(`${API}/incentive/all${query}`, requestOptions),
+        fetch(`${API}/advance/all${query}`, requestOptions),
+        fetch(`${API}/food-allowance/all${query}`, requestOptions),
+        fetch(`${API}/remarks/all${query}`, requestOptions),
       ]);
       if (![sRes, cRes, dRes, dmRes, nRes, iRes, aRes, fRes, rRes].every((response) => response.ok)) {
         throw new Error("Failed to load data entry records");
@@ -455,6 +457,7 @@ export default function DataEntry() {
 
   /* ================= RESET ON DATE/OUTLET CHANGE ================= */
   useEffect(() => {
+    setIsManualReentry(false);
     setNeccrate(""); setNeccrateLocked(false);
     setSales(""); setSalesLocked(false);
     setDamages(""); setDamagesLocked(false);
@@ -469,6 +472,7 @@ export default function DataEntry() {
   /* ================= LOCK CHECK ================= */
   useEffect(() => {
     if (!outlet || !date) return;
+    if (isManualReentry) return;
     const findMappedRecord = (rows, field) => findPreferredRecord(rows, (doc) =>
       normalizeDate(doc.date || doc.createdAt) === date && getMappedOutletValue(doc[field], outletKeys).found);
     const applyMappedLock = (rows, field, setValue, setLocked) => {
@@ -501,7 +505,7 @@ export default function DataEntry() {
       setRemarks(entry.value);
       setRemarksLocked(true);
     }
-  }, [date, outlet, outletKeys, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allAdvanceData, allFoodAllowanceData, allRemarksData]);
+  }, [date, outlet, outletKeys, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allAdvanceData, allFoodAllowanceData, allRemarksData, isManualReentry]);
 
   /* ================= RESET ================= */
   const handleReset = () => {
@@ -531,13 +535,13 @@ export default function DataEntry() {
     prevOutletDateRef.current = { outlet, date };
 
     // Check synchronous lock status based on loaded data
-    const hasSales = allSalesData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
-    const hasCash = allCashData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
-    const hasDigital = allDigitalData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
-    const hasDamages = allDamagesData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.damages && doc.damages[outlet] !== undefined);
-    const hasNecc = allNeccData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outletId === outlet);
-    const hasIncentive = allIncentiveData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
-    const hasFoodAllowance = allFoodAllowanceData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
+    const hasSales = !isManualReentry && allSalesData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
+    const hasCash = !isManualReentry && allCashData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
+    const hasDigital = !isManualReentry && allDigitalData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
+    const hasDamages = !isManualReentry && allDamagesData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.damages && doc.damages[outlet] !== undefined);
+    const hasNecc = !isManualReentry && allNeccData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outletId === outlet);
+    const hasIncentive = !isManualReentry && allIncentiveData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
+    const hasFoodAllowance = !isManualReentry && allFoodAllowanceData.some(doc => normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
 
     const savedSales = findPreferredRecord(allSalesData, doc =>
       normalizeDate(doc.date || doc.createdAt) === date && doc.outlets && doc.outlets[outlet] !== undefined);
@@ -618,7 +622,7 @@ export default function DataEntry() {
     fetchSummary();
 
     return () => { isMounted = false; };
-  }, [outlet, date, isLoadingData, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allFoodAllowanceData]);
+  }, [outlet, date, isLoadingData, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allFoodAllowanceData, isManualReentry]);
 
 
   /* ================= DELETE OUTLET DATA FOR DATE ================= */
@@ -687,6 +691,8 @@ export default function DataEntry() {
       setRemarks(""); setRemarksLocked(false);
       setSupervisorInfo(null);
       setSupervisorZones([]);
+      prevOutletDateRef.current = { outlet: "", date: "" };
+      setIsManualReentry(true);
 
       invalidateStatisticsCache();
       await loadAllData();
@@ -829,6 +835,7 @@ export default function DataEntry() {
       if (!advanceLocked && advance !== "") setAdvanceLocked(true);
       if (!foodAllowanceLocked && foodAllowance !== "") setFoodAllowanceLocked(true);
 
+      setIsManualReentry(false);
       await loadAllData();
     } catch (err) {
       console.error(err);
