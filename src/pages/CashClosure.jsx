@@ -153,6 +153,7 @@ export default function CashClosure() {
   const [advance, setAdvance] = useState("0");
   const [cashHandover, setCashHandover] = useState("0");
   const [cashRemarks, setCashRemarks] = useState("");
+  const [historyRange, setHistoryRange] = useState("thisWeek");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [fetchingAutoData, setFetchingAutoData] = useState(false);
@@ -308,14 +309,51 @@ export default function CashClosure() {
   }, [isAdmin, selectedZone, selectedDate]);
 
   const sortedRows = useMemo(() => {
+    const today = getLocalIsoDate();
+    const now = new Date(`${today}T00:00:00`);
+    let from = "";
+    let to = "";
+
+    if (historyRange === "today") {
+      from = today;
+      to = today;
+    } else if (historyRange === "yesterday") {
+      now.setDate(now.getDate() - 1);
+      from = getLocalIsoDate(now);
+      to = from;
+    } else if (historyRange === "thisWeek") {
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - now.getDay());
+      from = getLocalIsoDate(weekStart);
+      to = today;
+    } else if (historyRange === "lastWeek") {
+      const lastWeekEnd = new Date(now);
+      lastWeekEnd.setDate(now.getDate() - now.getDay() - 1);
+      const lastWeekStart = new Date(lastWeekEnd);
+      lastWeekStart.setDate(lastWeekEnd.getDate() - 6);
+      from = getLocalIsoDate(lastWeekStart);
+      to = getLocalIsoDate(lastWeekEnd);
+    } else if (historyRange === "thisMonth") {
+      from = getLocalIsoDate(new Date(now.getFullYear(), now.getMonth(), 1));
+      to = today;
+    } else if (historyRange === "lastMonth") {
+      from = getLocalIsoDate(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+      to = getLocalIsoDate(new Date(now.getFullYear(), now.getMonth(), 0));
+    }
+
     return [...rows]
-      .filter((row) => normalizeZoneLabel(row?.zone) === selectedZoneLabel)
+      .filter((row) => {
+        if (normalizeZoneLabel(row?.zone) !== selectedZoneLabel) return false;
+        if (!from || !to) return true;
+        const rowDate = normalizeDate(row?.date || row?.createdAt);
+        return rowDate >= from && rowDate <= to;
+      })
       .sort((left, right) => {
         const dateCompare = String(right?.date || "").localeCompare(String(left?.date || ""));
         if (dateCompare !== 0) return dateCompare;
         return String(left?.zone || "").localeCompare(String(right?.zone || ""));
       });
-  }, [rows, selectedZoneLabel]);
+  }, [historyRange, rows, selectedZoneLabel]);
 
   const balance = useMemo(() => {
     const total = toNumber(totalCashAmount);
@@ -557,8 +595,23 @@ export default function CashClosure() {
               <h2 className="text-lg font-semibold text-gray-900">Cash Closure History</h2>
               <p className="text-sm text-gray-500">All saved zone records are shown here.</p>
             </div>
-            <div className="rounded-full bg-orange-50 px-4 py-1 text-xs font-semibold text-orange-700">
-              {sortedRows.length} record{sortedRows.length === 1 ? "" : "s"}
+            <div className="flex flex-wrap items-center gap-2">
+              {["today", "yesterday", "thisWeek", "lastWeek", "thisMonth", "lastMonth", "all"].map((range) => {
+                const labels = { today: "Today", yesterday: "Yesterday", thisWeek: "This Week", lastWeek: "Last Week", thisMonth: "This Month", lastMonth: "Last Month", all: "All Dates" };
+                return (
+                  <button
+                    key={range}
+                    type="button"
+                    onClick={() => setHistoryRange(range)}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${historyRange === range ? "border-orange-500 bg-orange-500 text-white" : "border-gray-200 bg-white text-gray-700 hover:border-orange-300 hover:text-orange-600"}`}
+                  >
+                    {labels[range]}
+                  </button>
+                );
+              })}
+              <div className="rounded-full bg-orange-50 px-4 py-1 text-xs font-semibold text-orange-700">
+                {sortedRows.length} record{sortedRows.length === 1 ? "" : "s"}
+              </div>
             </div>
           </div>
 

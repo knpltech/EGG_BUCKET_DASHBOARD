@@ -621,9 +621,14 @@ export default function DataEntry() {
   }, [outlet, date, isLoadingData, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allFoodAllowanceData]);
 
 
-  /* ================= DELETE OUTLET DATA FOR DATE (admin only) ================= */
+  /* ================= DELETE OUTLET DATA FOR DATE ================= */
   const handleDeleteDate = async () => {
     if (!date || !outlet) return;
+
+    if (isSupervisor && date !== todayIso) {
+      alert("Supervisors can delete only today's data.");
+      return;
+    }
 
     if (!window.confirm(
       `Are you sure you want to delete all data for outlet "${outlet}" on ${formatDisplayDate(date)}?\n\nThis action cannot be undone.`
@@ -667,9 +672,9 @@ export default function DataEntry() {
       const errors = results.filter(r => r.error);
       if (errors.length > 0) {
         console.error("Errors during deletion:", errors);
-        alert(`⚠️ Some data may not have been deleted. Please refresh and try again.`);
+        alert("Some data could not be deleted. The form remains locked; please refresh and try again.");
+        return;
       }
-
       // Reset all fields and locks
       setNeccrate(""); setNeccrateLocked(false);
       setSales(""); setSalesLocked(false);
@@ -683,6 +688,7 @@ export default function DataEntry() {
       setSupervisorInfo(null);
       setSupervisorZones([]);
 
+      invalidateStatisticsCache();
       await loadAllData();
       if (errors.length === 0) {
         alert(`Data for "${outlet}" on ${formatDisplayDate(date)} deleted successfully ✅`);
@@ -999,8 +1005,8 @@ export default function DataEntry() {
               </div>
             )}
 
-            {/* ---- Delete Button (admin only) ---- */}
-            {isAdmin && hasDataForOutlet && (
+            {/* ---- Delete Button (admin or supervisor) ---- */}
+            {(isAdmin || isSupervisor) && hasDataForOutlet && (
               <div className="mb-4">
                 <button
                   onClick={handleDeleteDate}
