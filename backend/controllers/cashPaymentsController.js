@@ -27,11 +27,24 @@ export const addCashPayment = async (req, res) => {
 
     const existingSnapshot = await db.collection("cashPayments")
       .where("date", "==", date)
-      .limit(1)
       .get();
 
     if (!existingSnapshot.empty) {
-      const existingDoc = existingSnapshot.docs[0];
+      // Duplicate same-date documents can exist after an automated sync. Write
+      // to an existing manual outlet record when possible; otherwise use the
+      // newest document so a correction is never attached to an old zero row.
+      const submittedKeys = Object.keys(outletsWithDup);
+      const getTime = (data) => {
+        const value = data.updatedAt || data.createdAt;
+        return value?.toDate ? value.toDate().getTime() : new Date(value || 0).getTime() || 0;
+      };
+      const existingDoc = [...existingSnapshot.docs].sort((left, right) => {
+        const leftData = left.data();
+        const rightData = right.data();
+        const leftManual = submittedKeys.some((key) => leftData.addedByPerOutlet?.[key]);
+        const rightManual = submittedKeys.some((key) => rightData.addedByPerOutlet?.[key]);
+        return Number(rightManual) - Number(leftManual) || getTime(rightData) - getTime(leftData);
+      })[0];
       const existingData = existingDoc.data();
       const mergedOutlets = { ...existingData.outlets, ...outletsWithDup };
       const mergedTotal = Object.values(mergedOutlets).reduce((sum, val) => sum + (parseFloat(val) || 0), 0);
@@ -155,22 +168,22 @@ export const deleteCashPaymentByOutletAndDate = async (req, res) => {
     const { date, outletId } = req.params;
     if (!date || !outletId) return res.status(400).json({ message: "Date and outletId are required" });
 
-    const snapshot = await db.collection("cashPayments").where("date", "==", date).limit(1).get();
+    const snapshot = await db.collection("cashPayments").where("date", "==", date).get();
     if (snapshot.empty) return res.status(404).json({ message: "No entry found for this date" });
 
-    const doc = snapshot.docs[0];
-    const data = doc.data();
-    const outlets = { ...data.outlets };
-    const addedByPerOutlet = { ...(data.addedByPerOutlet || {}) };
+    const matchingDocs = snapshot.docs.filter((doc) => doc.data().outlets?.[outletId] !== undefined);
+    if (!matchingDocs.length) return res.status(404).json({ message: "Outlet not found for this date" });
 
-    if (outlets[outletId] === undefined) return res.status(404).json({ message: "Outlet not found for this date" });
-
-    delete outlets[outletId];
-    delete addedByPerOutlet[outletId];
-    const newTotal = Object.values(outlets).reduce((sum, v) => sum + (Number(v) || 0), 0);
-
-    await doc.ref.update({ outlets, addedByPerOutlet, total: newTotal, updatedAt: new Date() });
-    res.status(200).json({ message: `Outlet ${outletId} removed from cash payments for ${date}`, count: 1 });
+    await Promise.all(matchingDocs.map(async (doc) => {
+      const data = doc.data();
+      const outlets = { ...(data.outlets || {}) };
+      const addedByPerOutlet = { ...(data.addedByPerOutlet || {}) };
+      delete outlets[outletId];
+      delete addedByPerOutlet[outletId];
+      const total = Object.values(outlets).reduce((sum, value) => sum + (Number(value) || 0), 0);
+      await doc.ref.update({ outlets, addedByPerOutlet, total, updatedAt: new Date() });
+    }));
+    res.status(200).json({ message: `Outlet ${outletId} removed from cash payments for ${date}`, count: matchingDocs.length });
   } catch (error) {
     res.status(500).json({ message: "Error deleting outlet from cash payments", error: error.message });
   }

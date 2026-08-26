@@ -258,3 +258,94 @@ export const deleteDataEntryByOutletAndDate = async (req, res) => {
     res.status(500).json({ message: "Error deleting data entry", error: error.message });
   }
 };
+
+// Remove one outlet's saved values from every collection for a date. Several
+// historical collections can have duplicate same-date documents, so deleting
+// only the first match leaves a stale zero row that Data Entry later locks.
+export const resetOutletDataForDate = async (req, res) => {
+  try {
+    const { date, outletId } = req.params;
+    if (!date || !outletId) {
+      return res.status(400).json({ message: "Date and outletId are required" });
+    }
+
+    const normalize = (value) => String(value || "").trim().toLowerCase();
+    const aliases = new Set([normalize(outletId)]);
+    const outletsSnapshot = await db.collection("outlets").get();
+    outletsSnapshot.docs.forEach((doc) => {
+      const outlet = doc.data() || {};
+      const values = [doc.id, outlet.id, outlet.area, outlet.name];
+      if (values.some((value) => normalize(value) === normalize(outletId))) {
+        values.forEach((value) => { if (value) aliases.add(normalize(value)); });
+      }
+    });
+    const matchesOutlet = (value) => aliases.has(normalize(value));
+
+    const mappedCollections = [
+      ["dailySales", "outlets"], ["cashPayments", "outlets"],
+      ["digitalPayments", "outlets"], ["dailyDamages", "damages"],
+      ["incentive", "outlets"], ["advance", "outlets"],
+      ["foodAllowance", "outlets"], ["remarks", "outlets"],
+    ];
+    const snapshots = await Promise.all([
+      ...mappedCollections.map(([collection]) => db.collection(collection).where("date", "==", date).get()),
+      db.collection("neccRates").where("date", "==", date).get(),
+      db.collection("dataEntries").where("date", "==", date).get(),
+    ]);
+
+    const batch = db.batch();
+    let affectedCount = 0;
+    mappedCollections.forEach(([collection, field], index) => {
+      snapshots[index].docs.forEach((doc) => {
+        const data = doc.data() || {};
+        const values = { ...(data[field] || {}) };
+        const matchingKeys = Object.keys(values).filter(matchesOutlet);
+        if (!matchingKeys.length) return;
+
+        const addedByPerOutlet = { ...(data.addedByPerOutlet || {}) };
+        const manuallyEnteredOutlets = { ...(data.manuallyEnteredOutlets || {}) };
+        matchingKeys.forEach((key) => {
+          delete values[key];
+          delete addedByPerOutlet[key];
+          delete manuallyEnteredOutlets[key];
+        });
+        const total = Object.values(values).reduce((sum, value) => sum + (Number(value) || 0), 0);
+        batch.update(doc.ref, {
+          [field]: values,
+          addedByPerOutlet,
+          manuallyEnteredOutlets,
+          total,
+          updatedAt: new Date(),
+        });
+        affectedCount += 1;
+      });
+    });
+
+    const neccSnapshot = snapshots[mappedCollections.length];
+    neccSnapshot.docs.forEach((doc) => {
+      const data = doc.data() || {};
+      if (matchesOutlet(data.outletId || data.outlet)) {
+        batch.delete(doc.ref);
+        affectedCount += 1;
+      }
+    });
+
+    const dataEntriesSnapshot = snapshots[mappedCollections.length + 1];
+    dataEntriesSnapshot.docs.forEach((doc) => {
+      const data = doc.data() || {};
+      if ([data.outletId, data.outletArea, data.outletName].some(matchesOutlet)) {
+        batch.delete(doc.ref);
+        affectedCount += 1;
+      }
+    });
+
+    if (affectedCount) await batch.commit();
+    res.status(200).json({
+      message: `Cleared ${affectedCount} saved record(s) for outlet ${outletId} on ${date}`,
+      count: affectedCount,
+    });
+  } catch (error) {
+    console.error("Error resetting outlet data:", error);
+    res.status(500).json({ message: "Error resetting outlet data", error: error.message });
+  }
+};

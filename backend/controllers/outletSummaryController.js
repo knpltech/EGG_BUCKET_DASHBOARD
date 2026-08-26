@@ -602,24 +602,28 @@ export const getOutletSummary = async (req, res) => {
     // total amount must be checked independently before deciding Firebase has
     // a complete outlet summary. This was the source of the intermittent
     // production result where Kudlu Gate showed payments but zero sales.
-    const isMissingDeliveryTotals =
-      toNumber(summaryWithMetrics.salesQty) <= 0 ||
-      toNumber(summaryWithMetrics.totalAmount) <= 0;
+    const sourceFields = [
+      "salesQty", "totalAmount", "salesPoint", "neccRate",
+      "damage", "foodAllowance", "incentive",
+    ];
+    const isSourceIncomplete = sourceFields.some((field) =>
+      toNumber(summaryWithMetrics[field]) <= 0
+    );
 
-    if (isMissingDeliveryTotals) {
+    if (isSourceIncomplete) {
       try {
         const retailSummary = await getRetailSummary(outlet, date);
-        const hasRetailDeliveryTotals =
-          toNumber(retailSummary.salesQty) > 0 ||
-          toNumber(retailSummary.totalAmount) > 0;
+        const hasRetailSourceData = sourceFields.some((field) =>
+          toNumber(retailSummary[field]) > 0
+        );
 
-        if (hasRetailDeliveryTotals) {
+        if (hasRetailSourceData) {
           // Preserve handover metrics from the collection database, but fill
           // every missing delivery-derived value from the authoritative Retail
           // feed. This avoids overwriting valid cash/UPI values and prevents a
           // partial response from reaching the data-entry screen.
           const mergedSummary = { ...summaryWithMetrics };
-          ["salesQty", "totalAmount", "salesPoint", "neccRate"].forEach((field) => {
+          sourceFields.forEach((field) => {
             if (toNumber(mergedSummary[field]) <= 0 && toNumber(retailSummary[field]) > 0) {
               mergedSummary[field] = retailSummary[field];
             }

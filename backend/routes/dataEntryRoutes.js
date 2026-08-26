@@ -5,6 +5,7 @@ import {
   getDataEntriesByOutlet,
   getDataEntriesByDate,
   deleteDataEntryByOutletAndDate,
+  resetOutletDataForDate,
 } from "../controllers/dataEntryController.js";
 
 const router = express.Router();
@@ -20,6 +21,9 @@ router.get("/outlet/:outletId", getDataEntriesByOutlet);
 
 // GET /api/data-entry/date/:date - Get entries by date
 router.get("/date/:date", getDataEntriesByDate);
+
+// DELETE /api/data-entry/reset/date/:date/outlet/:outletId - Clear all saved fields for one outlet/date
+router.delete("/reset/date/:date/outlet/:outletId", resetOutletDataForDate);
 
 // DELETE /api/data-entry/date/:date/outlet/:outletId - Delete one outlet/date entry
 router.delete("/date/:date/outlet/:outletId", deleteDataEntryByOutletAndDate);
