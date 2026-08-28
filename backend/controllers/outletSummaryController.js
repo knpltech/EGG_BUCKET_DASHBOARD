@@ -294,6 +294,11 @@ const getMetricAgentNamesForOutlet = (metrics, outlet) => [
   .filter(Boolean);
 
 const applyInventoryMetrics = async (summary, outlet, date, suppliedMetrics) => {
+  // Never use a delivery's total UPI as the handover value. If the UPI
+  // handover source is unavailable, leave this at zero instead of exposing a
+  // misleading collection total in Data Entry.
+  summary.digitalPayment = 0;
+
   try {
     let metrics = suppliedMetrics;
     if (!metrics) {
@@ -408,7 +413,6 @@ const getRetailSummary = async (outlet, date) => {
 
       summary.salesQty += getSalesQuantity(delivery);
       summary.cashHandover += getCashHandover(delivery);
-      summary.digitalPayment += pickNumber(delivery, ["upiAmount", "digitalAmount", "upi", "totalUPI", "totalUpi"]);
       summary.totalAmount += pickNumber(delivery, ["totalAmount", "amount", "netAmount"]);
       summary.damage += getDamage(delivery);
       summary.foodAllowance += getFoodAllowance(delivery);
@@ -533,7 +537,6 @@ export const getOutletSummary = async (req, res) => {
     let salesQty = 0;
     let cashPayment = 0;
     let cashHandover = 0;
-    let digitalPayment = 0;
     let totalAmount = 0;
     let damage = 0;
     let foodAllowance = 0;
@@ -565,7 +568,6 @@ export const getOutletSummary = async (req, res) => {
           if (isMatch) {
             salesQty += getSalesQuantity(delivery);
             cashHandover += getCashHandover(delivery);
-            digitalPayment += pickNumber(delivery, ["upiAmount", "digitalAmount", "upi", "totalUPI", "totalUpi"]);
             totalAmount += pickNumber(delivery, ["totalAmount", "amount", "netAmount"]);
             damage += getDamage(delivery);
             foodAllowance += getFoodAllowance(delivery);
@@ -586,7 +588,7 @@ export const getOutletSummary = async (req, res) => {
       salesQty,
       cashPayment: cashHandover,
       cashHandover,
-      digitalPayment,
+      digitalPayment: 0,
       totalAmount,
       damage,
       foodAllowance,

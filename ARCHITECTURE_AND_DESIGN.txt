@@ -1,0 +1,468 @@
+EGGBUCKET — APPLICATION ARCHITECTURE & DESIGN DOCUMENT
+======================================================
+
+Document purpose
+----------------
+This document describes the application as implemented in this repository. It
+covers the end-to-end request path, application modules, data model, login and
+access control, operational flows, API surface, and important security/design
+considerations. It is intended to be the maintained technical reference for
+EggBucket.
+
+1. PRODUCT SUMMARY
+------------------
+EggBucket is an internal egg-distribution and retail-sales management system.
+It manages outlets, users and zones, records day-level operational values, and
+turns those records into dashboards, cash closure, inventory, salary, and
+reporting views.
+
+Core business areas
+  • Outlet and user/supervisor management.
+  • Zone-based operational data entry.
+  • Daily sales, damages, NECC rate, cash and digital collections.
+  • Incentive, advance, food allowance, and remarks capture.
+  • Zone inventory/stock options and cash closure.
+  • Outlet performance, summaries, statistics, reports, and Excel export.
+  • Payment-auditor workflow for digital-payment verification.
+
+2. HIGH-LEVEL ARCHITECTURE
+--------------------------
+
+    Browser (React single-page app)
+        |
+        | HTTPS / JSON; Authorization: Bearer <JWT> is added automatically
+        v
+    Express API (Node.js)
+        |-- Authentication middleware (JWT validation)
+        |-- Routes --> Controllers --> Business rules / aggregation
+        |-- In-memory response cache
+        |-- India-time scheduled default/finalisation job
+        v
+    Firebase Admin SDK --> Cloud Firestore
+        |
+        +--> Optional Retail Admin API for source outlet/collection summaries
+
+Frontend
+  • React 19, Vite 7, React Router DOM 7.
+  • Tailwind CSS-based presentation, FontAwesome icons, Recharts charts, and
+    XLSX client-side Excel export.
+  • BrowserRouter provides an SPA. Vercel/server rewrite returns index.html for
+    non-API paths so direct navigation works.
+  • React contexts: DamageContext and PanelContext provide shared UI state.
+  • Utilities include role/zone normalization, date ranges, record merging,
+    source attribution, and an authenticated fetch wrapper.
+
+Backend
+  • Node.js, Express 5, Firebase Admin SDK, jsonwebtoken, and bcryptjs.
+  • Route modules keep HTTP definitions separate from controller business
+    logic. Controllers use Firestore collections directly.
+  • `backend/server.js` registers JSON parsing, permissive CORS, caching, API
+    metrics (optional), auth middleware, scheduled jobs, and SPA static
+    serving.
+
+Persistence
+  • Cloud Firestore is the main application database.
+  • The backend authenticates to Firestore with service-account credentials or
+    FIREBASE_PROJECT_ID/FIREBASE_CLIENT_EMAIL/FIREBASE_PRIVATE_KEY environment
+    variables.
+  • The browser currently talks to the backend rather than Firestore directly.
+
+3. REPOSITORY DESIGN
+--------------------
+
+  src/
+    App.jsx                    Route table and client-side ProtectedRoute
+    main.jsx                   React bootstrap; installs authenticated fetch
+    pages/                     Page-level business screens
+    components/                Reusable UI components (Sidebar, Topbar, etc.)
+    layouts/                   Admin and supervisor shell layouts
+    context/                   Shared React state providers
+    utils/                     Roles, zones, dates, fetch, and data helpers
+
+  backend/
+    server.js                  Express composition, middleware, scheduler
+    routes/                    URL and method declarations
+    controllers/               Firestore CRUD, calculations, aggregation
+    middleware/                JWT and JSON response cache middleware
+    config/firebase.js         Firebase Admin initialisation
+    services/midnightDefaults.js Daily data/default finalisation scheduler
+    utils/                     Date query and supervisor time-cutoff rules
+    scripts/                   One-off maintenance/inspection scripts
+
+  firestore.rules              Firestore direct-client security rules
+  firestore.indexes.json       Firestore index definitions
+  vercel.json                  Frontend deployment/rewrite configuration
+
+4. USER ROLES AND INTENDED RESPONSIBILITIES
+--------------------------------------------
+
+Admin
+  Full operational access in the UI: dashboards, data entry, inventory/stock
+  options, cash closure, outlet salary, daily records, master data, analytics,
+  reports, and user/supervisor maintenance. Admins can create/update stock
+  options and outlet salary rates at the API level (these two write endpoints
+  explicitly use verifyAdmin).
+
+Supervisor
+  Assigned to a zone (or, in some UI paths, multiple zones). The supervisor
+  dashboard filters to the assigned zone(s). Supervisors use data entry,
+  inventory, cash closure, reports, sales, damages, payments, rates, incentive,
+  advance, food allowance, and remarks in supervisor routes. Controller-level
+  validation prevents a supervisor from submitting prior-day records for
+  supported daily-entry endpoints; only today in Asia/Kolkata is allowed.
+
+Data Agent
+  Intended to receive a set of granular permissions through the `roles` array,
+  for example: `daily_sales`, `daily_damages`, `neccrate`, `cash_payments`,
+  `digital_payments`, `advance`, `food_allowance`, `incentive`, `outlets`,
+  `distribution`, and `dashboard`. The client router and sidebar use these
+  values to show and allow corresponding pages. Data-agent accounts may also
+  carry a zone.
+
+Viewer
+  Read-only UI role. Available routes are dashboard, daily damage, NECC rate,
+  daily sales, daily revenue, statistics, and a viewer information screen.
+  Pages use viewer flags to disable editing and allow cross-zone viewing where
+  implemented.
+
+Payment Auditor
+  A specialised user. After login the browser opens Digital Payments. The UI
+  permits the auditor to set per-outlet digital-payment audit status to
+  `pending`, `verified`, or `mismatch`, retaining auditor attribution.
+
+Role source of truth
+  Account documents live in separate Firestore collections: `admin`,
+  `dataagents`, `viewers`, `supervisors`, and `paymentAuditors`. A document can
+  have `role` and/or a lowercase `roles` array. The client normalizes values to
+  lowercase when evaluating access.
+
+5. LOGIN, TOKEN, AND REQUEST FLOW
+---------------------------------
+
+1. The user opens `/signin`, enters username/password, selects a role, and
+   selects a zone when the selected role is Supervisor. The backend also
+   supports Data Agent login/zone validation, but the current SignIn role
+   dropdown does not expose a Data Agent option; this is an implementation gap.
+2. SignIn POSTs `{ username, password, role, zone }` to
+   `POST {VITE_API_URL}/auth/signin`.
+3. `authController.loginUser` normalizes the selected role and selects the
+   matching account collection. It looks up the exact document ID, then falls
+   back to a case-insensitive document-ID match.
+4. For Supervisor and Data Agent, the submitted zone is compared with the
+   stored `zoneId`/`zone` when both exist. A mismatch rejects the login.
+5. bcrypt compares the submitted password with the stored password hash.
+   Passwords are omitted from successful user responses and user-list APIs.
+6. The server signs an eight-hour JWT using JWT_SECRET. Current JWT payload:
+   `{ username, role }`.
+7. The browser stores the token in localStorage as `token`; it stores the
+   returned user profile in localStorage as `user`, setting the selected role
+   and effective zone in that local object.
+8. The browser redirects by selected role:
+       Admin           -> /admin/dashboard
+       Supervisor      -> /supervisor/dashboard
+       Data Agent      -> /dataagent/dashboard
+       Viewer          -> /viewer/dashboard
+       Payment Auditor -> /admin/digital-payments
+9. `installAuthenticatedFetch()` replaces window.fetch. For URLs underneath
+   VITE_API_URL (or `/api` by default), it adds the Bearer JWT unless a caller
+   already supplied Authorization.
+10. The backend keeps `/api` health and `/api/auth/signin` public. All routes
+    mounted after `/api` in server.js pass through `requireAuthentication`,
+    which verifies the token and puts its payload in `req.user`.
+
+Session behaviour
+  • JWT expiry or an invalid/missing token gives HTTP 401 from the backend.
+  • Client ProtectedRoute redirects a user without local `user` and `token` to
+    `/signin` before loading a protected page.
+  • Sign-out clears all localStorage and redirects to `/signin`.
+  • There is no refresh-token, token revocation, server-side session, or
+    automatic expiry redirect mechanism at present.
+
+6. CLIENT-SIDE ROUTING AND UI ACCESS FLOW
+-----------------------------------------
+
+Public routes
+  `/` (LandingPage) and `/signin`.
+
+ProtectedRoute
+  • Reads user and token from localStorage.
+  • Admin is allowed through every protected route.
+  • `/viewer/*` requires Viewer; `/supervisor/*` requires Supervisor.
+  • `/dataagent/*` and `/dashboard` require `dataagent` in effective roles.
+  • Other admin-prefixed pages require a matching granular permission unless
+    the user is Admin. Payment Auditor is additionally allowed for a required
+    `digital_payments` permission.
+
+Shell layouts
+  • AdminLayoutWithPanel: Sidebar + Topbar + scrollable main content.
+  • SupervisorLayout: Sidebar + Topbar + padded main content.
+  • Sidebar dynamically renders the navigation based on local role/roles.
+
+Important design note: these route checks and navigation hiding improve the UI
+experience but are not a security boundary. localStorage can be edited by a
+browser user. Real authorization must be enforced by the API from `req.user`.
+
+7. DATA DOMAIN AND FIRESTORE MODEL
+----------------------------------
+
+Master data
+  `outlets`
+    Document ID is the outlet id. Typical fields: id, name, area, contact,
+    phone, status, reviewStatus, zoneId, createdBy, createdAt.
+  `admin`, `dataagents`, `viewers`, `supervisors`, `paymentAuditors`
+    Login-account documents, normally addressed by username/document ID.
+    Typical fields include role/roles, password hash, and zone/zoneId.
+  `distributors`
+    Distributor data created and listed through distributor/admin flows.
+
+Daily per-outlet map records
+  Most daily modules save a date document containing an object whose keys are
+  outlet IDs and whose values are quantities or money. This makes an entire day
+  editable/mergeable while keeping totals efficient.
+
+  Collection          Main map field        Purpose
+  ------------------  --------------------  ---------------------------------
+  `dailySales`        outlets               Daily sale quantities
+  `dailyDamages`      damages               Damage quantities
+  `cashPayments`      outlets               Cash received/handover
+  `digitalPayments`   outlets               Digital received; includes audit
+  `incentive`         outlets               Per-outlet incentives
+  `advance`           outlets               Per-outlet advances
+  `foodAllowance`     outlets               Per-outlet allowance
+  `remarks`           remarks / outlets     Per-outlet operational comments
+
+  These records normally include date, total, createdAt/updatedAt and may
+  include `addedByPerOutlet` attribution. Mutations merge submitted outlet
+  values with the relevant date record. Some legacy/automatic data can produce
+  duplicate documents for a date; controllers try to select a preferred manual
+  or recent document and merge values.
+
+Rate, inventory, and closure records
+  `neccRates`
+    Per-outlet/date rate records, including rateValue, display rate text,
+    outlet/outletId, remarks, timestamps, and automatic/final flags.
+  `stockOptionsEntries`
+    Zone/date stock-in option record. Admin creation and updates synchronize
+    stockIn to inventory and recalculate it.
+  `zoneStockEntries`
+    Zone/date inventory with openingStock, stockIn, sales, damages,
+    closingStock, remarks, provenance, and timestamps. Closing stock follows:
+      closing stock = opening stock + stock in - sales - damages
+    The system derives zone sales/damages from active outlets in that zone.
+  `cashClosures`
+    Zone/date closeout data. Calculates/holds cash-related closing values and
+    supports zone/date retrieval, deletion, and automatic missing entries.
+  `outletSalaryEntries`, `outletDailySalaryRates`
+    Salary period entries and administrator-managed daily rates.
+
+Supporting/external-source collections
+  Firestore rules also list mobile/source collections such as customers,
+  DeliveryMan, loading_entries, return_load_entries, damage_reports,
+  cash_handover_entries, upi_handover_entries, penalty_reports, zones,
+  counters, and activity_history. The outlet-summary service can also obtain
+  collection/source data from the configured Retail Admin service.
+
+8. BUSINESS FLOWS
+-----------------
+
+Daily operational entry
+  1. An operator chooses a date and outlet(s) in the appropriate page.
+  2. The page posts a date and outlet-ID keyed values to its API resource.
+  3. The controller validates the payload and, where applicable, validates the
+     supervisor same-day cutoff.
+  4. Existing date records are read and values merged; the total is recalculated.
+  5. Attribution is retained per outlet when `addedBy` was supplied.
+  6. Any successful non-GET API request clears the shared response cache.
+
+Digital payment audit
+  1. Cash/digital entry is stored in its daily map, optionally with operator
+     attribution per outlet.
+  2. The auditor sets an allowed status for a specific document and outlet.
+  3. The controller writes `auditStatuses.<outlet>` and
+     `auditedByPerOutlet.<outlet>` with timestamp and user details.
+
+Zone inventory
+  1. Admin establishes zone/day stock in through Stock Options.
+  2. The stock-option controller updates the linked zone inventory record and
+     recalculates inventory from the changed date forward.
+  3. Sales and damage totals are calculated from outlets assigned to that zone.
+  4. Supervisors are restricted in the controller to one zone-stock submission
+     per day; UI narrows their available zone selection.
+
+Cash closure
+  Zone/date closure records are upserted and queried by zone and date. The
+  scheduler creates a missing closure default for each configured zone.
+
+Reports and statistics
+  • Reports aggregate sales, rate, cash, digital payment, received totals, and
+    differences by outlet/date range.
+  • Statistics returns cross-outlet/chart-ready aggregates and accepts date and
+    zone filters.
+  • The Report page applies a supervisor zone filter to outlet choices and can
+    create a browser-side XLSX workbook from displayed transactions.
+
+Nightly/default finalisation (Asia/Kolkata)
+  `startMidnightDefaultsScheduler` runs once at startup and every minute.
+  • Before 23:30: processes the prior day’s daily defaults.
+  • From 23:30: processes today’s daily default/final values.
+  • From 23:45: also creates stock-option, inventory, and cash-closure defaults.
+  • The job reads active outlets, may pull source summaries, and fills missing
+    values without replacing an existing manual non-zero record with an
+    automated zero. It keeps in-process `lastDailyEntryDate` and
+    `lastInventoryDate` flags.
+
+9. API DESIGN
+-------------
+
+Public
+  GET  /api                         Health response
+  POST /api/auth/signin             Login
+
+Authenticated API groups (valid JWT required)
+  /api/admin             User/distributor/account lists, create/delete users,
+                         supervisors, payment auditors, retail summary
+  /api/outlets           Add/list/delete outlets; list a zone’s outlets
+  /api/dailysales        Add, all/date reads, update, date/outlet deletion
+  /api/daily-damage      Equivalent daily-damage operations
+  /api/neccrate          Add, all/latest/date reads, update, deletions
+  /api/cash-payments     Add, all/date reads, update, deletions
+  /api/digital-payments  Add, all/date reads, update, audit status, deletions
+  /api/incentive         Add, all/date reads, update, deletions
+  /api/advance           Add, all/date reads, update, deletions
+  /api/food-allowance    Add, all/date reads, update, deletions
+  /api/remarks           Add, all/date reads, update, deletions
+  /api/data-entry        Add, all/outlet/date reads, reset/delete outlet/date
+  /api/distributor       Add/list distributor records
+  /api/supervisor        Add supervisor
+  /api/zone-stock        Zone inventory read/upsert/delete/reset operations
+  /api/stock-options     Zone stock options; admin-only writes
+  /api/cash-closure      Zone closure read/upsert/delete/reset operations
+  /api/outlet-summary    Source-derived outlet summary
+  /api/outlet-salary     Salary reads; admin-only writes/rate writes
+  /api/reports           Outlet list, reports, statistics, export endpoint
+
+Date list endpoints generally accept `from`, `to`, and `limit` where they use
+the shared date-query helper. Limit is bounded to 500.
+
+10. CACHING, RESILIENCE, AND OBSERVABILITY
+------------------------------------------
+
+  • Heavy list/aggregation GETs have a process-memory cache, normally five
+    minutes (HEAVY_GET_CACHE_TTL_MS). Reports and statistics also use scoped
+    caches. Successful writes clear the response cache.
+  • Outlet reads have a separate in-memory fresh/stale cache. It can return a
+    stale result during a Firestore quota failure and returns 429 with
+    Retry-After when it cannot safely serve one.
+  • Login detects Firestore quota failures and responds with HTTP 429 and a
+    retry duration; the sign-in page explains the retry to the user.
+  • Optional API metrics log JSON request data, duration, status, cache status,
+    and content length when API_METRICS_ENABLED=true.
+  • Caches and scheduler state are in process. They are not shared across
+    instances, so multi-instance deployment requires a shared cache and a
+    distributed scheduler/lock for strict once-only execution.
+
+11. CONFIGURATION AND DEPLOYMENT
+--------------------------------
+
+Frontend environment
+  VITE_API_URL              API base URL. The frontend defaults to `/api` in
+                            authenticatedFetch; SignIn expects this variable.
+
+Backend environment
+  PORT                       Defaults to 5000.
+  JWT_SECRET                 Required; server startup fails without it.
+  FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
+                             Preferred Firebase Admin credentials.
+  serviceAccountKey.json     Local fallback under backend/config (must not be
+                             committed).
+  ENTRY_TIMEZONE             Defaults to Asia/Kolkata.
+  API_METRICS_ENABLED        Enables request metric logs.
+  HEAVY_GET_CACHE_TTL_MS, REPORTS_OUTLETS_CACHE_TTL_MS,
+  STATISTICS_CACHE_TTL_MS, OUTLETS_CACHE_TTL_MS, OUTLETS_STALE_MAX_MS
+                             Cache tuning.
+  RETAIL_ADMIN_API_URL, RETAIL_ADMIN_TOKEN or RETAIL_ADMIN_USERNAME/password
+                             External Retail Admin summary integration.
+
+Deployment shape
+  • Build frontend with `npm run build`; Vite writes `dist/`.
+  • Run backend with `npm start` inside `backend/` (`node server.js`).
+  • Backend can serve `../dist` itself. Vercel/Netlify can instead host the
+    frontend while a Render/Railway/VPS service hosts the API.
+  • Set VITE_API_URL to the deployed API `/api` root or rely on a same-origin
+    proxy/rewrite. Deploy only over HTTPS in production.
+
+12. CURRENT ACCESS-CONTROL ASSESSMENT AND REQUIRED HARDENING
+------------------------------------------------------------
+
+What is enforced today
+  1. All data API groups are behind JWT authentication in server.js.
+  2. bcrypt validates password hashes at login.
+  3. Client route/sidebar logic models role and granular data-agent access.
+  4. `verifyAdmin` is applied to Stock Options create/update and outlet-salary
+     upsert/daily-rate write operations.
+  5. Some controller rules protect supervisor time cutoff and one-per-day
+     inventory entry; zone-outlet retrieval has an extra supervisor zone check.
+
+Gaps to address before treating RBAC as secure
+  1. Most controllers only require an authenticated JWT, not a required role or
+     permission. For example, user administration, outlet mutation, daily
+     updates, delete/reset actions, payment audit changes, and reports are not
+     consistently protected by server-side authorization.
+  2. The JWT only contains `username` and `role`; it does not contain the
+     `roles` permission array or zone assignment. The server cannot reliably
+     enforce granular role/zone policy from token claims alone.
+  3. Some controllers trust `addedBy` supplied in the request body for role,
+     username, and zone. That data is client-controlled and must not grant
+     permissions or be treated as authoritative audit identity.
+  4. `firestore.rules` currently allows unconditional read/write access to many
+     collections (`if true`). Firebase Admin bypasses these rules, but they are
+     unsafe if any Firebase client credentials are exposed or direct client
+     access is introduced.
+  5. CORS is currently unrestricted (`cors()`), allowing any origin to call the
+     API with a token available to that origin. Restrict production origins.
+  6. JWT lives in localStorage, which is exposed to any successful XSS. Use
+     strong CSP/XSS controls, or migrate to secure HttpOnly/SameSite cookies
+     with CSRF protection where appropriate.
+  7. No login rate limiting/account lockout or audit log is implemented. Add
+     rate limits, login event logging, and password-reset/rotation policies.
+  8. Password hashes are correctly used, but creation/seed scripts must always
+     hash passwords and must never log credentials or service-account keys.
+
+Recommended authorization design
+  • Create `authorize({ roles, permissions, zoneScope, action })` middleware.
+  • On every request, derive identity from verified `req.user`, then load a
+    trusted account/permission snapshot (or issue short-lived signed claims
+    containing roles, permissions, and permitted zones).
+  • Make policy explicit per route: admin-only master data/deletes/resets;
+    payment-auditor-only audit status; supervisor only assigned zones; viewer
+    GET-only; data agent only assigned permissions and zones.
+  • Derive `addedBy` server-side from that trusted identity, rather than body.
+  • Apply Firestore least-privilege rules: deny direct client access by default
+    if the backend is the only data access path.
+  • Add integration tests that prove every prohibited role gets 403, every
+    allowed role gets expected response, and cross-zone access is denied.
+
+13. MAINTENANCE CHECKLIST
+-------------------------
+
+When adding a new feature:
+  1. Define the collection/document shape and required Firestore indexes.
+  2. Add controller validation and an explicit server-side authorization policy.
+  3. Add route with correct method, then mount it after authentication.
+  4. Add UI page/route/sidebar visibility only after API policy exists.
+  5. Record actor identity on the server and decide zone/date lock rules.
+  6. Decide cache/invalidation behaviour and whether reports consume the data.
+  7. Add automated tests for validation, permission, zone, and calculation paths.
+  8. Update this document and API documentation.
+
+Key source files
+----------------
+  Frontend routes/access:  src/App.jsx, src/utils/role.js,
+                            src/utils/authenticatedFetch.js, src/components/Sidebar.jsx
+  Login:                   src/pages/SignIn.jsx, backend/controllers/authController.js
+  Auth middleware:         backend/middleware/authMiddleware.js
+  API composition:         backend/server.js and backend/routes/
+  Scheduled workflows:     backend/services/midnightDefaults.js
+  Firestore setup/rules:   backend/config/firebase.js, firestore.rules
+
+Last reviewed against repository source: 2026-08-27.
