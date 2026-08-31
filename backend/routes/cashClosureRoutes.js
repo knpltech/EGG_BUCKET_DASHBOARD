@@ -5,6 +5,7 @@ import {
   getAllCashClosures,
   getCashClosuresByZone,
   getCashClosuresByZoneAndDate,
+  getCashClosureAutofillData,
   resetAllCashClosures,
   upsertCashClosure,
 } from "../controllers/cashClosureController.js";
@@ -12,6 +13,7 @@ import {
 const router = express.Router();
 
 router.get("/all", getAllCashClosures);
+router.get("/autofill/zone/:zone/date/:date", getCashClosureAutofillData);
 router.get("/zone/:zone", getCashClosuresByZone);
 router.get("/zone/:zone/date/:date", getCashClosuresByZoneAndDate);
 router.post("/upsert", upsertCashClosure);

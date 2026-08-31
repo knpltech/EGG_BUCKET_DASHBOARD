@@ -190,6 +190,33 @@ const getLatestRowsByDate = (rows, valueKey) => {
   return byDate;
 };
 
+// Inventory is derived from final Data Entry sales and damage totals.  Do not
+// turn an unavailable source into a saved stock value: the 11:45 job waits for
+// every active outlet in the zone to have verified those two fields.
+const getPendingInventorySyncOutlets = async (zone, date) => {
+  const [outletsSnap, syncSnap] = await Promise.all([
+    db.collection(OUTLETS_COLLECTION).get(),
+    db.collection("dailyEntrySyncStatus").doc(date).get(),
+  ]);
+  const syncOutlets = syncSnap.data()?.outlets || {};
+  const zoneOutlets = outletsSnap.docs
+    .map(mapDoc)
+    .filter((outlet) => {
+      const outletZone = normalizeZoneLabel(outlet?.zoneId || outlet?.zone || outlet?.zoneNumber);
+      return outletZone === zone && (!outlet.status || outlet.status === "Active") && outlet.id;
+    });
+
+  if (!syncSnap.exists) return { sourceSyncMissing: true, outletIds: zoneOutlets.map((outlet) => outlet.id) };
+
+  const outletIds = zoneOutlets
+    .filter((outlet) => {
+      const status = syncOutlets[outlet.id];
+      return !status || status.status === "pending" || (status.pendingFields || []).some((field) => field === "sales" || field === "damages");
+    })
+    .map((outlet) => outlet.id);
+  return { sourceSyncMissing: false, outletIds };
+};
+
 const computeZoneDayTotals = async (zone, dateIso) => {
   const [outletsSnap, salesSnap, damagesSnap] = await Promise.all([
     db.collection(OUTLETS_COLLECTION).get(),
@@ -321,6 +348,16 @@ export const ensureMissingZoneStockEntry = async (zone, date) => {
     return normalizeDate(row.date || row.createdAt) === normalizedDate;
   });
   if (alreadySaved) return { created: false, existing: true };
+
+  const pendingSync = await getPendingInventorySyncOutlets(normalizedZone, normalizedDate);
+  if (pendingSync.sourceSyncMissing || pendingSync.outletIds.length) {
+    console.warn(
+      `[inventory midnight] Skipped ${normalizedZone} on ${normalizedDate}: ${pendingSync.sourceSyncMissing
+        ? "Data Entry final sync is missing"
+        : `${pendingSync.outletIds.length} outlet(s) have pending sales/damages`}.`,
+    );
+    return { created: false, pending: true, pendingOutletIds: pendingSync.outletIds };
+  }
 
   const [totals, openingStock, stockOptionsSnap] = await Promise.all([
     computeZoneDayTotals(normalizedZone, normalizedDate),

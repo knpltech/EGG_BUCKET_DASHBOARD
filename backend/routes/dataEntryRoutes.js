@@ -4,6 +4,7 @@ import {
   getAllDataEntries,
   getDataEntriesByOutlet,
   getDataEntriesByDate,
+  getFinalSyncStatus,
   deleteDataEntryByOutletAndDate,
   resetOutletDataForDate,
 } from "../controllers/dataEntryController.js";
@@ -15,6 +16,9 @@ router.post("/", addDataEntry);
 
 // GET /api/data-entry/all - Get all data entries
 router.get("/all", getAllDataEntries);
+
+// GET /api/data-entry/final-sync-status?date=YYYY-MM-DD
+router.get("/final-sync-status", getFinalSyncStatus);
 
 // GET /api/data-entry/outlet/:outletId - Get entries by outlet
 router.get("/outlet/:outletId", getDataEntriesByOutlet);

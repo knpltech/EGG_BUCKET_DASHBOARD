@@ -229,6 +229,19 @@ export const getDataEntriesByDate = async (req, res) => {
   }
 };
 
+// Final-sync state is separate from saved values, so a failed source fetch is
+// visible in Data Entry and can never be mistaken for a valid zero entry.
+export const getFinalSyncStatus = async (req, res) => {
+  try {
+    const { date } = req.query;
+    if (!date) return res.status(400).json({ message: "date is required" });
+    const snapshot = await db.collection("dailyEntrySyncStatus").doc(date).get();
+    return res.status(200).json(snapshot.exists ? { id: snapshot.id, ...snapshot.data() } : { date, outlets: {} });
+  } catch (error) {
+    return res.status(500).json({ message: "Error fetching final sync status", error: error.message });
+  }
+};
+
 // Delete data entry records for one outlet/date
 export const deleteDataEntryByOutletAndDate = async (req, res) => {
   try {

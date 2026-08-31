@@ -294,6 +294,18 @@ const getMetricAgentNamesForOutlet = (metrics, outlet) => [
   .filter(Boolean);
 
 const applyInventoryMetrics = async (summary, outlet, date, suppliedMetrics) => {
+  // Keep an internal per-field verification marker for the nightly final sync.
+  // A real zero is safe to save only after its source was successfully read.
+  summary.syncAvailability = {
+    sales: true,
+    neccRate: true,
+    cash: false,
+    digital: false,
+    damages: false,
+    incentive: false,
+    foodAllowance: false,
+  };
+
   // Never use a delivery's total UPI as the handover value. If the UPI
   // handover source is unavailable, leave this at zero instead of exposing a
   // misleading collection total in Data Entry.
@@ -365,6 +377,14 @@ const applyInventoryMetrics = async (summary, outlet, date, suppliedMetrics) => 
       latestForOutlet(metrics.upiHandoverEntries),
       ["Cash", "cash", "amount", "value"]
     );
+    summary.syncAvailability = {
+      ...summary.syncAvailability,
+      cash: true,
+      digital: true,
+      damages: true,
+      incentive: true,
+      foodAllowance: true,
+    };
   } catch (error) {
     console.error("Error fetching inventory metrics:", error.message);
   }

@@ -5,7 +5,7 @@ import { ensureCashClosureEntry } from "../controllers/cashClosureController.js"
 import { getSourceOutletSummary } from "../controllers/outletSummaryController.js";
 
 const ZONES = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"];
-const DAILY_ENTRY_FINAL_MINUTES = (23 * 60) + 30;
+const DAILY_ENTRY_FINAL_MINUTES = (23 * 60) + 15;
 const INVENTORY_FINAL_MINUTES = (23 * 60) + 45;
 
 const getIndiaDate = (offsetDays = 0) => {
@@ -205,29 +205,62 @@ const saveFinalRemarks = async (date, outletIds) => {
   }
 };
 
+const saveDailyEntrySyncStatus = async (date, outletStatuses, startedAt) => {
+  const completedAt = new Date();
+  await db.collection("dailyEntrySyncStatus").doc(date).set({
+    date,
+    outlets: outletStatuses,
+    startedAt,
+    completedAt,
+    durationMs: completedAt.getTime() - startedAt.getTime(),
+    updatedAt: completedAt,
+  }, { merge: true });
+};
+
 const ensureDailyEntryDefaults = async (date) => {
   const outlets = await getActiveOutlets();
   if (!outlets.length) return;
-
-  const sourceRows = await Promise.all(outlets.map(async (outlet) => {
+  const startedAt = new Date();
+  const sourceResults = await Promise.allSettled(outlets.map(async (outlet) => {
     const sourceOutlet = outlet.area || outlet.name || outlet.id;
-    const summary = await getSourceOutletSummary(sourceOutlet, date);
-    return { outletId: outlet.id, summary };
+    return { outletId: outlet.id, summary: await getSourceOutletSummary(sourceOutlet, date) };
   }));
 
-  const values = sourceRows.reduce((result, { outletId, summary }) => {
-    result.sales[outletId] = toNumber(summary.salesQty);
-    result.cash[outletId] = toNumber(summary.cashPayment ?? summary.cashHandover);
-    result.digital[outletId] = toNumber(summary.digitalPayment);
-    result.damages[outletId] = toNumber(summary.damage);
-    result.incentive[outletId] = toNumber(summary.incentive);
-    result.foodAllowance[outletId] = toNumber(summary.foodAllowance);
-    result.advance[outletId] = 0;
-    result.neccRate[outletId] = toNumber(summary.neccRate);
-    return result;
-  }, {
+  const values = {
     sales: {}, cash: {}, digital: {}, damages: {}, incentive: {},
     foodAllowance: {}, advance: {}, neccRate: {},
+  };
+  const outletStatuses = {};
+
+  sourceResults.forEach((result, index) => {
+    const outlet = outlets[index];
+    const outletId = outlet.id;
+    if (result.status === "rejected") {
+      outletStatuses[outletId] = {
+        status: "pending",
+        error: String(result.reason?.message || "Source data could not be read"),
+        updatedAt: new Date().toISOString(),
+      };
+      return;
+    }
+
+    const { summary } = result.value;
+    const available = summary.syncAvailability || {};
+    if (available.sales) values.sales[outletId] = toNumber(summary.salesQty);
+    if (available.neccRate) values.neccRate[outletId] = toNumber(summary.neccRate);
+    if (available.cash) values.cash[outletId] = toNumber(summary.cashPayment ?? summary.cashHandover);
+    if (available.digital) values.digital[outletId] = toNumber(summary.digitalPayment);
+    if (available.damages) values.damages[outletId] = toNumber(summary.damage);
+    if (available.incentive) values.incentive[outletId] = toNumber(summary.incentive);
+    if (available.foodAllowance) values.foodAllowance[outletId] = toNumber(summary.foodAllowance);
+
+    const pendingFields = ["sales", "neccRate", "cash", "digital", "damages", "incentive", "foodAllowance"]
+      .filter((field) => !available[field]);
+    outletStatuses[outletId] = {
+      status: pendingFields.length ? "partial" : "saved",
+      pendingFields,
+      updatedAt: new Date().toISOString(),
+    };
   });
 
   await Promise.all([
@@ -238,11 +271,17 @@ const ensureDailyEntryDefaults = async (date) => {
     saveFinalMapValues({ collection: "incentive", date, valuesField: "outlets", values: values.incentive }),
     // The source project has no advance value; retain a manual value if there
     // is one, otherwise save the required zero for every outlet.
-    saveFinalMapValues({ collection: "advance", date, valuesField: "outlets", values: values.advance, onlyMissing: true }),
+    saveFinalMapValues({ collection: "advance", date, valuesField: "outlets", values: values.advance, outletIds: outlets.map((outlet) => outlet.id), onlyMissing: true }),
     saveFinalMapValues({ collection: "foodAllowance", date, valuesField: "outlets", values: values.foodAllowance }),
     saveFinalNeccRates(date, values.neccRate),
     saveFinalRemarks(date, outlets.map((outlet) => outlet.id)),
+    saveDailyEntrySyncStatus(date, outletStatuses, startedAt),
   ]);
+
+  const saved = Object.values(outletStatuses).filter((item) => item.status === "saved").length;
+  const partial = Object.values(outletStatuses).filter((item) => item.status === "partial").length;
+  const pending = Object.values(outletStatuses).filter((item) => item.status === "pending").length;
+  console.info(`Daily entry final sync ${date}: ${saved} saved, ${partial} partial, ${pending} pending in ${Date.now() - startedAt.getTime()}ms.`);
 };
 
 let lastDailyEntryDate = "";
@@ -271,10 +310,10 @@ const runInventoryDefaults = async (date) => {
 };
 
 export const runMidnightDefaults = async (date = getIndiaDate(-1)) => {
-  const [dailyProcessed, inventoryProcessed] = await Promise.all([
-    runDailyEntryDefaults(date),
-    runInventoryDefaults(date),
-  ]);
+  // Cash closure consumes Data Entry's verified final-sync status, so this
+  // recovery path must never start inventory/cash closure before that sync.
+  const dailyProcessed = await runDailyEntryDefaults(date);
+  const inventoryProcessed = await runInventoryDefaults(date);
   return dailyProcessed || inventoryProcessed;
 };
 

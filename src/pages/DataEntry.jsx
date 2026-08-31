@@ -248,6 +248,7 @@ export default function DataEntry() {
   const [allAdvanceData, setAllAdvanceData] = useState([]);
   const [allFoodAllowanceData, setAllFoodAllowanceData] = useState([]);
   const [allRemarksData, setAllRemarksData] = useState([]);
+  const [finalSyncStatus, setFinalSyncStatus] = useState(null);
   const [incentive, setIncentive] = useState("");
   const [advance, setAdvance] = useState("0");
   const [foodAllowance, setFoodAllowance] = useState("");
@@ -287,6 +288,10 @@ export default function DataEntry() {
       .some((value) => normalizeOutletKey(value) === normalizeOutletKey(outlet)));
     return [...new Set([outlet, selected?.id, selected?.area, selected?.name].filter(Boolean))];
   }, [outlet, outlets]);
+  const selectedFinalSync = useMemo(
+    () => getMappedOutletValue(finalSyncStatus?.outlets, outletKeys).value || null,
+    [finalSyncStatus, outletKeys],
+  );
   const todayIso = useMemo(() => {
     const now = new Date();
     const year = now.getFullYear();
@@ -326,7 +331,7 @@ export default function DataEntry() {
       const requestOptions = { headers, cache: "no-store" };
       const { from, to } = getDataWindow(date || todayIso);
       const query = `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
-      const [sRes, cRes, dRes, dmRes, nRes, iRes, aRes, fRes, rRes] = await Promise.all([
+      const [sRes, cRes, dRes, dmRes, nRes, iRes, aRes, fRes, rRes, syncRes] = await Promise.all([
         fetch(`${API}/dailysales/all${query}`, requestOptions),
         fetch(`${API}/cash-payments/all${query}`, requestOptions),
         fetch(`${API}/digital-payments/all${query}`, requestOptions),
@@ -336,13 +341,15 @@ export default function DataEntry() {
         fetch(`${API}/advance/all${query}`, requestOptions),
         fetch(`${API}/food-allowance/all${query}`, requestOptions),
         fetch(`${API}/remarks/all${query}`, requestOptions),
+        date ? fetch(`${API}/data-entry/final-sync-status?date=${encodeURIComponent(date)}`, requestOptions) : Promise.resolve(null),
       ]);
       if (![sRes, cRes, dRes, dmRes, nRes, iRes, aRes, fRes, rRes].every((response) => response.ok)) {
         throw new Error("Failed to load data entry records");
       }
-      const [sData, cData, dData, dmData, nData, iData, aData, fData, rData] = await Promise.all([
+      const [sData, cData, dData, dmData, nData, iData, aData, fData, rData, syncData] = await Promise.all([
         sRes.json(), cRes.json(), dRes.json(), dmRes.json(), nRes.json(),
         iRes.json(), aRes.json(), fRes.json(), rRes.json(),
+        syncRes?.ok ? syncRes.json() : Promise.resolve(null),
       ]);
       // Ignore a slow response for an outlet/date that the user has already left.
       if (requestId !== loadRequestRef.current) return;
@@ -355,6 +362,7 @@ export default function DataEntry() {
       setAllAdvanceData(Array.isArray(aData) ? aData : []);
       setAllFoodAllowanceData(Array.isArray(fData) ? fData : []);
       setAllRemarksData(Array.isArray(rData) ? rData : []);
+      setFinalSyncStatus(syncData);
     } catch (err) {
       console.error("Error loading all data:", err);
     } finally {
@@ -499,6 +507,7 @@ export default function DataEntry() {
   useEffect(() => {
     if (!outlet || !date) return;
     if (isManualReentry) return;
+    const pendingSyncFields = new Set(selectedFinalSync?.pendingFields || []);
     const getMappedPriority = (doc) => {
       const enteredManually = getMappedOutletValue(doc.addedByPerOutlet, outletKeys).found
         || getMappedOutletValue(doc.manuallyEnteredOutlets, outletKeys).found;
@@ -507,10 +516,11 @@ export default function DataEntry() {
       if (doc.finalSourceSync) return 2;
       return 1;
     };
-    const findMappedRecord = (rows, field) => findPreferredRecord(
+    const findMappedRecord = (rows, field, syncField = field) => findPreferredRecord(
       rows,
       (doc) => {
         if (normalizeDate(doc.date || doc.createdAt) !== date) return false;
+        if (doc.finalSourceSync && syncField && pendingSyncFields.has(syncField)) return false;
         const entry = getMappedOutletValue(doc[field], outletKeys);
         // A generated zero is only a placeholder. A manual zero is still a
         // real saved value because its per-outlet metadata gives it priority.
@@ -519,8 +529,8 @@ export default function DataEntry() {
       getMappedPriority,
       (doc) => getMappedOutletValue(doc[field], outletKeys).value,
     );
-    const applyMappedLock = (rows, field, setValue, setLocked) => {
-      const record = findMappedRecord(rows, field);
+    const applyMappedLock = (rows, field, syncField, setValue, setLocked) => {
+      const record = findMappedRecord(rows, field, syncField);
       if (!record) return false;
       setValue(getMappedOutletValue(record[field], outletKeys).value);
       setLocked(true);
@@ -528,20 +538,22 @@ export default function DataEntry() {
     };
 
     const savedLocks = {
-      sales: applyMappedLock(allSalesData, "outlets", setSales, setSalesLocked),
-      cash: applyMappedLock(allCashData, "outlets", setCash, setCashLocked),
-      digital: applyMappedLock(allDigitalData, "outlets", setDigital, setDigitalLocked),
-      damages: applyMappedLock(allDamagesData, "damages", setDamages, setDamagesLocked),
-      incentive: applyMappedLock(allIncentiveData, "outlets", setIncentive, setIncentiveLocked),
-      advance: applyMappedLock(allAdvanceData, "outlets", setAdvance, setAdvanceLocked),
-      foodAllowance: applyMappedLock(allFoodAllowanceData, "outlets", setFoodAllowance, setFoodAllowanceLocked),
+      sales: applyMappedLock(allSalesData, "outlets", "sales", setSales, setSalesLocked),
+      cash: applyMappedLock(allCashData, "outlets", "cash", setCash, setCashLocked),
+      digital: applyMappedLock(allDigitalData, "outlets", "digital", setDigital, setDigitalLocked),
+      damages: applyMappedLock(allDamagesData, "damages", "damages", setDamages, setDamagesLocked),
+      incentive: applyMappedLock(allIncentiveData, "outlets", "incentive", setIncentive, setIncentiveLocked),
+      advance: applyMappedLock(allAdvanceData, "outlets", "advance", setAdvance, setAdvanceLocked),
+      foodAllowance: applyMappedLock(allFoodAllowanceData, "outlets", "foodAllowance", setFoodAllowance, setFoodAllowanceLocked),
     };
 
-    const savedSalesRecord = findMappedRecord(allSalesData, "outlets");
+    const savedSalesRecord = findMappedRecord(allSalesData, "outlets", "sales");
 
     const foundNecc = findPreferredRecord(
       allNeccData,
-      (doc) => normalizeDate(doc.date || doc.createdAt) === date && matchesOutletKey(doc.outletId || doc.outlet, outletKeys),
+      (doc) => normalizeDate(doc.date || doc.createdAt) === date
+        && matchesOutletKey(doc.outletId || doc.outlet, outletKeys)
+        && !(doc.finalSourceSync && pendingSyncFields.has("neccRate")),
       (doc) => doc.addedBy ? 4 : !doc.autoGenerated ? 3 : doc.finalSourceSync ? 2 : 1,
       (doc) => doc.rateValue ?? doc.rate,
     );
@@ -572,7 +584,7 @@ export default function DataEntry() {
       setRemarks(entry.value);
       setRemarksLocked(true);
     }
-  }, [date, outlet, outletKeys, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allAdvanceData, allFoodAllowanceData, allRemarksData, isManualReentry]);
+  }, [date, outlet, outletKeys, allSalesData, allCashData, allDigitalData, allDamagesData, allNeccData, allIncentiveData, allAdvanceData, allFoodAllowanceData, allRemarksData, isManualReentry, selectedFinalSync]);
 
   /* ================= RESET ================= */
   const handleReset = () => {
@@ -1040,6 +1052,18 @@ export default function DataEntry() {
         {/* ---- Fields ---- */}
         {outlet && date && (
           <>
+            {selectedFinalSync && selectedFinalSync.status !== "saved" && (
+              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                <p className="text-sm font-semibold text-amber-800">
+                  {selectedFinalSync.status === "pending" ? "Final sync pending" : "Final sync partially saved"}
+                </p>
+                <p className="mt-1 text-xs text-amber-700">
+                  {selectedFinalSync.pendingFields?.length
+                    ? `Not locked: ${selectedFinalSync.pendingFields.join(", ")}. Refresh the source and submit these values manually if required.`
+                    : "The source could not be read, so no zero values were locked."}
+                </p>
+              </div>
+            )}
             {/* All data submitted banner */}
             {allAlreadyLocked && (
               <div className="mb-4 rounded-xl bg-green-50 border border-green-200 px-4 py-3 flex items-center gap-2">

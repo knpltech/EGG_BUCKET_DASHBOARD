@@ -46,8 +46,6 @@ const normalizeZoneLabel = (zone) => {
   return match ? `Zone ${match[1]}` : normalized;
 };
 
-const normalizeTextKey = (value) => String(value ?? "").toLowerCase().replace(/\s+/g, " ").trim();
-
 const toNumber = (value) => {
   const numeric = Number(String(value ?? "").replace(/,/g, "").trim());
   return Number.isFinite(numeric) ? numeric : 0;
@@ -78,24 +76,6 @@ const extractUserZones = (user, fallbackZone) => {
     .sort((a, b) => Number(normalizeZone(a)) - Number(normalizeZone(b)));
 };
 
-const buildZoneOutletKeySet = (outlets, zoneLabel) => {
-  const normalizedZone = normalizeZone(zoneLabel);
-  const keys = new Set();
-
-  (Array.isArray(outlets) ? outlets : []).forEach((outlet) => {
-    if (!outlet || typeof outlet !== "object") return;
-    const outletZone = normalizeZone(outlet.zoneId || outlet.zone || outlet.zoneNumber);
-    if (!outletZone || outletZone !== normalizedZone) return;
-
-    [outlet.id, outlet.name, outlet.area].forEach((key) => {
-      const normalized = normalizeTextKey(key);
-      if (normalized) keys.add(normalized);
-    });
-  });
-
-  return keys;
-};
-
 const getResponseErrorMessage = async (response, fallbackMessage) => {
   try {
     const responseClone = response.clone();
@@ -113,35 +93,6 @@ const getResponseErrorMessage = async (response, fallbackMessage) => {
   }
 };
 
-const toZoneScopedTotal = (entries, zoneLabel, zoneOutletKeys) => {
-  const normalizedZone = normalizeZone(zoneLabel);
-  const valuesByOutlet = new Map();
-
-  (Array.isArray(entries) ? entries : [entries]).forEach((entry) => {
-    if (!entry || typeof entry !== "object") return;
-    const outlets = entry.outlets && typeof entry.outlets === "object" && !Array.isArray(entry.outlets)
-      ? entry.outlets
-      : {};
-    const addedByPerOutlet = entry.addedByPerOutlet && typeof entry.addedByPerOutlet === "object"
-      ? entry.addedByPerOutlet
-      : {};
-
-    Object.entries(outlets).forEach(([outletKey, rawAmount]) => {
-      const byUserZone = normalizeZone(addedByPerOutlet?.[outletKey]?.zone) === normalizedZone;
-      const byOutletZone = zoneOutletKeys.has(normalizeTextKey(outletKey));
-      if (!byUserZone && !byOutletZone) return;
-
-      const currentAmount = Number(valuesByOutlet.get(outletKey)) || 0;
-      const nextAmount = toNumber(rawAmount);
-      if (!valuesByOutlet.has(outletKey) || nextAmount !== 0 || currentAmount === 0) {
-        valuesByOutlet.set(outletKey, nextAmount);
-      }
-    });
-  });
-
-  return Array.from(valuesByOutlet.values()).reduce((sum, amount) => sum + amount, 0);
-};
-
 export default function CashClosure() {
   const { isAdmin, isSupervisor, isViewer, zone } = getRoleFlags();
   const [rows, setRows] = useState([]);
@@ -157,6 +108,7 @@ export default function CashClosure() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [fetchingAutoData, setFetchingAutoData] = useState(false);
+  const [autofillStatus, setAutofillStatus] = useState(null);
 
   const user = useMemo(() => {
     try {
@@ -211,48 +163,20 @@ export default function CashClosure() {
     try {
       const token = localStorage.getItem("token");
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const [cashPaymentsRes, incentivesRes, foodAllowanceRes, advanceRes, outletsRes] = await Promise.all([
-        fetch(`${API_URL}/cash-payments/date/${isoDate}`, { headers }),
-        fetch(`${API_URL}/incentive/date/${isoDate}`, { headers }),
-        fetch(`${API_URL}/food-allowance/date/${isoDate}`, { headers }),
-        fetch(`${API_URL}/advance/date/${isoDate}`, { headers }),
-        fetch(`${API_URL}/outlets/all`, { headers }),
-      ]);
-
-      let totalCash = 0;
-      let incentivesAmount = 0;
-      let foodAllowanceAmount = 0;
-      let advanceAmount = 0;
-
-      const outletsData = outletsRes.ok ? await outletsRes.json() : [];
-      const zoneOutletKeys = buildZoneOutletKeySet(outletsData, zoneName);
-
-      if (cashPaymentsRes.ok) {
-        const cashPaymentsData = await cashPaymentsRes.json();
-        totalCash = toZoneScopedTotal(cashPaymentsData, zoneName, zoneOutletKeys);
-      }
-
-      if (incentivesRes.ok) {
-        const data = await incentivesRes.json();
-        incentivesAmount = toZoneScopedTotal(data, zoneName, zoneOutletKeys);
-      }
-
-      if (foodAllowanceRes.ok) {
-        const data = await foodAllowanceRes.json();
-        foodAllowanceAmount = toZoneScopedTotal(data, zoneName, zoneOutletKeys);
-      }
-
-      if (advanceRes.ok) {
-        const data = await advanceRes.json();
-        advanceAmount = toZoneScopedTotal(data, zoneName, zoneOutletKeys);
-      }
-
-      setTotalCashAmount(String(totalCash));
-      setIncentives(String(incentivesAmount));
-      setFoodAllowance(String(foodAllowanceAmount));
-      setAdvance(String(advanceAmount));
+      const response = await fetch(
+        `${API_URL}/cash-closure/autofill/zone/${encodeURIComponent(zoneName)}/date/${encodeURIComponent(isoDate)}`,
+        { headers },
+      );
+      if (!response.ok) throw new Error("Failed to fetch cash closure totals");
+      const data = await response.json();
+      setTotalCashAmount(String(data.totalCashAmount ?? 0));
+      setIncentives(String(data.incentives ?? 0));
+      setFoodAllowance(String(data.foodAllowance ?? 0));
+      setAdvance(String(data.advance ?? 0));
+      setAutofillStatus(data);
     } catch (error) {
       console.error("Error fetching autofill data:", error);
+      setAutofillStatus(null);
     } finally {
       setFetchingAutoData(false);
     }
@@ -519,6 +443,17 @@ export default function CashClosure() {
               </div>
             </div>
           </div>
+
+          {existingEntry?.autoGenerated && (
+            <div className="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+              Automatically saved from the verified Data Entry final sync at 11:45 PM.
+            </div>
+          )}
+          {!existingEntry && autofillStatus && !autofillStatus.ready && (
+            <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Cash Closure is waiting for verified Data Entry values for {autofillStatus.pendingOutletIds?.length || 0} outlet(s). It will not auto-save zero totals.
+            </div>
+          )}
 
           <div className="mt-6 border-t border-gray-200 pt-6">
             <div>
