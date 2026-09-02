@@ -6,6 +6,10 @@ import { getSourceOutletSummary } from "../controllers/outletSummaryController.j
 
 const ZONES = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"];
 const DAILY_ENTRY_FINAL_MINUTES = (23 * 60) + 15;
+// Retail Admin can finish publishing handover metrics shortly after the
+// first final-sync run. Keep retrying partial outlet records during this
+// bounded window, but never run the final source sync for the rest of night.
+const DAILY_ENTRY_FINAL_RETRY_END_MINUTES = (23 * 60) + 30;
 const INVENTORY_FINAL_MINUTES = (23 * 60) + 45;
 
 const getIndiaDate = (offsetDays = 0) => {
@@ -289,8 +293,19 @@ let lastInventoryDate = "";
 
 const getIndiaNow = () => new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
 
-const runDailyEntryDefaults = async (date) => {
-  if (lastDailyEntryDate === date) return false;
+const hasPartialDailyEntrySync = async (date) => {
+  const statusDoc = await db.collection("dailyEntrySyncStatus").doc(date).get();
+  if (!statusDoc.exists) return true;
+  return Object.values(statusDoc.data()?.outlets || {})
+    .some((outletStatus) => outletStatus?.status === "partial" || outletStatus?.status === "pending");
+};
+
+const runDailyEntryDefaults = async (date, { retryPartial = false } = {}) => {
+  if (lastDailyEntryDate === date) {
+    // The first 11:15 PM run must not prevent retries of entries whose Retail
+    // metrics were still being published. Fully saved days are left untouched.
+    if (!retryPartial || !(await hasPartialDailyEntrySync(date))) return false;
+  }
   await ensureDailyEntryDefaults(date);
   lastDailyEntryDate = date;
   return true;
@@ -329,7 +344,11 @@ export const startMidnightDefaultsScheduler = (onComplete = null) => {
       if (minutes < DAILY_ENTRY_FINAL_MINUTES) {
         processed = await runMidnightDefaults(yesterday);
       } else {
-        if (await runDailyEntryDefaults(today)) processed = true;
+        // From 11:15 through 11:30 PM, save the fetched values and retry only
+        // outlets with incomplete source data. This lets every displayed final
+        // value reach its collection once Retail Admin finishes publishing it.
+        if (minutes <= DAILY_ENTRY_FINAL_RETRY_END_MINUTES
+          && await runDailyEntryDefaults(today, { retryPartial: true })) processed = true;
         if (minutes >= INVENTORY_FINAL_MINUTES && await runInventoryDefaults(today)) processed = true;
       }
 
