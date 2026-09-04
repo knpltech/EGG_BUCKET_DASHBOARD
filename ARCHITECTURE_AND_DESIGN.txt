@@ -303,9 +303,9 @@ Reports and statistics
 
 Nightly/default finalisation (Asia/Kolkata)
   `startMidnightDefaultsScheduler` runs once at startup and every minute.
-  • Before 23:30: processes the prior day’s daily defaults.
-  • From 23:30: processes today’s daily default/final values.
-  • From 23:45: also creates stock-option, inventory, and cash-closure defaults.
+  • Before 23:20: processes the prior day’s daily defaults.
+  • From 23:20: fetches and finalises every Data Entry field for every active outlet.
+  • From 23:40: also creates stock-option, inventory, and cash-closure defaults.
   • The job reads active outlets, may pull source summaries, and fills missing
     values without replacing an existing manual non-zero record with an
     automated zero. It keeps in-process `lastDailyEntryDate` and

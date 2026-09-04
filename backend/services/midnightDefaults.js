@@ -5,12 +5,11 @@ import { ensureCashClosureEntry } from "../controllers/cashClosureController.js"
 import { getSourceOutletSummary } from "../controllers/outletSummaryController.js";
 
 const ZONES = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"];
-const DAILY_ENTRY_FINAL_MINUTES = (23 * 60) + 15;
-// Retail Admin can finish publishing handover metrics shortly after the
-// first final-sync run. Keep retrying partial outlet records during this
-// bounded window, but never run the final source sync for the rest of night.
-const DAILY_ENTRY_FINAL_RETRY_END_MINUTES = (23 * 60) + 30;
-const INVENTORY_FINAL_MINUTES = (23 * 60) + 45;
+// All times below use Asia/Kolkata. Data Entry must be finalised at 11:20 PM
+// and the dependent inventory, stock-option, and cash-closure records at
+// 11:40 PM.
+const DAILY_ENTRY_FINAL_MINUTES = (23 * 60) + 20;
+const INVENTORY_FINAL_MINUTES = (23 * 60) + 40;
 
 const getIndiaDate = (offsetDays = 0) => {
   const indiaNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
@@ -239,9 +238,17 @@ const ensureDailyEntryDefaults = async (date) => {
   sourceResults.forEach((result, index) => {
     const outlet = outlets[index];
     const outletId = outlet.id;
+    // A final Data Entry document must contain every field for every active
+    // outlet. Initialise fields to zero, then replace them with source values
+    // whenever those values are available.
+    Object.keys(values).forEach((field) => {
+      values[field][outletId] = 0;
+    });
+
     if (result.status === "rejected") {
       outletStatuses[outletId] = {
-        status: "pending",
+        status: "saved",
+        sourceUnavailableFields: ["sales", "neccRate", "cash", "digital", "damages", "incentive", "foodAllowance"],
         error: String(result.reason?.message || "Source data could not be read"),
         updatedAt: new Date().toISOString(),
       };
@@ -261,31 +268,30 @@ const ensureDailyEntryDefaults = async (date) => {
     const pendingFields = ["sales", "neccRate", "cash", "digital", "damages", "incentive", "foodAllowance"]
       .filter((field) => !available[field]);
     outletStatuses[outletId] = {
-      status: pendingFields.length ? "partial" : "saved",
-      pendingFields,
+      status: "saved",
+      sourceUnavailableFields: pendingFields,
       updatedAt: new Date().toISOString(),
     };
   });
 
+  const outletIds = outlets.map((outlet) => outlet.id);
   await Promise.all([
-    saveFinalMapValues({ collection: "dailySales", date, valuesField: "outlets", values: values.sales }),
-    saveFinalMapValues({ collection: "cashPayments", date, valuesField: "outlets", values: values.cash }),
-    saveFinalMapValues({ collection: "digitalPayments", date, valuesField: "outlets", values: values.digital }),
-    saveFinalMapValues({ collection: "dailyDamages", date, valuesField: "damages", values: values.damages }),
-    saveFinalMapValues({ collection: "incentive", date, valuesField: "outlets", values: values.incentive }),
+    saveFinalMapValues({ collection: "dailySales", date, valuesField: "outlets", values: values.sales, outletIds }),
+    saveFinalMapValues({ collection: "cashPayments", date, valuesField: "outlets", values: values.cash, outletIds }),
+    saveFinalMapValues({ collection: "digitalPayments", date, valuesField: "outlets", values: values.digital, outletIds }),
+    saveFinalMapValues({ collection: "dailyDamages", date, valuesField: "damages", values: values.damages, outletIds }),
+    saveFinalMapValues({ collection: "incentive", date, valuesField: "outlets", values: values.incentive, outletIds }),
     // The source project has no advance value; retain a manual value if there
     // is one, otherwise save the required zero for every outlet.
-    saveFinalMapValues({ collection: "advance", date, valuesField: "outlets", values: values.advance, outletIds: outlets.map((outlet) => outlet.id), onlyMissing: true }),
-    saveFinalMapValues({ collection: "foodAllowance", date, valuesField: "outlets", values: values.foodAllowance }),
+    saveFinalMapValues({ collection: "advance", date, valuesField: "outlets", values: values.advance, outletIds, onlyMissing: true }),
+    saveFinalMapValues({ collection: "foodAllowance", date, valuesField: "outlets", values: values.foodAllowance, outletIds }),
     saveFinalNeccRates(date, values.neccRate),
-    saveFinalRemarks(date, outlets.map((outlet) => outlet.id)),
+    saveFinalRemarks(date, outletIds),
     saveDailyEntrySyncStatus(date, outletStatuses, startedAt),
   ]);
 
   const saved = Object.values(outletStatuses).filter((item) => item.status === "saved").length;
-  const partial = Object.values(outletStatuses).filter((item) => item.status === "partial").length;
-  const pending = Object.values(outletStatuses).filter((item) => item.status === "pending").length;
-  console.info(`Daily entry final sync ${date}: ${saved} saved, ${partial} partial, ${pending} pending in ${Date.now() - startedAt.getTime()}ms.`);
+  console.info(`Daily entry final sync ${date}: ${saved} saved in ${Date.now() - startedAt.getTime()}ms.`);
 };
 
 let lastDailyEntryDate = "";
@@ -293,19 +299,8 @@ let lastInventoryDate = "";
 
 const getIndiaNow = () => new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
 
-const hasPartialDailyEntrySync = async (date) => {
-  const statusDoc = await db.collection("dailyEntrySyncStatus").doc(date).get();
-  if (!statusDoc.exists) return true;
-  return Object.values(statusDoc.data()?.outlets || {})
-    .some((outletStatus) => outletStatus?.status === "partial" || outletStatus?.status === "pending");
-};
-
-const runDailyEntryDefaults = async (date, { retryPartial = false } = {}) => {
-  if (lastDailyEntryDate === date) {
-    // The first 11:15 PM run must not prevent retries of entries whose Retail
-    // metrics were still being published. Fully saved days are left untouched.
-    if (!retryPartial || !(await hasPartialDailyEntrySync(date))) return false;
-  }
+const runDailyEntryDefaults = async (date) => {
+  if (lastDailyEntryDate === date) return false;
   await ensureDailyEntryDefaults(date);
   lastDailyEntryDate = date;
   return true;
@@ -344,11 +339,7 @@ export const startMidnightDefaultsScheduler = (onComplete = null) => {
       if (minutes < DAILY_ENTRY_FINAL_MINUTES) {
         processed = await runMidnightDefaults(yesterday);
       } else {
-        // From 11:15 through 11:30 PM, save the fetched values and retry only
-        // outlets with incomplete source data. This lets every displayed final
-        // value reach its collection once Retail Admin finishes publishing it.
-        if (minutes <= DAILY_ENTRY_FINAL_RETRY_END_MINUTES
-          && await runDailyEntryDefaults(today, { retryPartial: true })) processed = true;
+        if (await runDailyEntryDefaults(today)) processed = true;
         if (minutes >= INVENTORY_FINAL_MINUTES && await runInventoryDefaults(today)) processed = true;
       }
 

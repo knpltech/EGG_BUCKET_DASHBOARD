@@ -191,7 +191,7 @@ const getLatestRowsByDate = (rows, valueKey) => {
 };
 
 // Inventory is derived from final Data Entry sales and damage totals.  Do not
-// turn an unavailable source into a saved stock value: the 11:45 job waits for
+// turn an unavailable source into a saved stock value: the 11:40 PM job waits for
 // every active outlet in the zone to have verified those two fields.
 const getPendingInventorySyncOutlets = async (zone, date) => {
   const [outletsSnap, syncSnap] = await Promise.all([
