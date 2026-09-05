@@ -314,22 +314,27 @@ export const resetAllCashClosures = async (_req, res) => {
 
 const normalizeTextKey = (value) => String(value ?? "").toLowerCase().replace(/\s+/g, " ").trim();
 
-const getZoneOutletKeys = (outlets, zone) => {
-  const keys = new Set();
+const getZoneOutletAliasMap = (outlets, zone) => {
+  const aliases = new Map();
   const normalizedZone = normalizeZoneLabel(zone);
 
   for (const outlet of outlets || []) {
     if (normalizeZoneLabel(outlet?.zoneId || outlet?.zone || outlet?.zoneNumber) !== normalizedZone) continue;
+    // Use the outlet document ID as the canonical key.  Data written by older
+    // clients may instead use an area or outlet name, so map every alias to
+    // that same physical outlet.
+    const canonicalKey = String(outlet?.id || outlet?.area || outlet?.name || "").trim();
+    if (!canonicalKey) continue;
     [outlet.id, outlet.name, outlet.area].forEach((key) => {
       const normalizedKey = normalizeTextKey(key);
-      if (normalizedKey) keys.add(normalizedKey);
+      if (normalizedKey) aliases.set(normalizedKey, canonicalKey);
     });
   }
 
-  return keys;
+  return aliases;
 };
 
-const getMergedZoneScopedTotal = (docs, zone, zoneOutletKeys) => {
+const getMergedZoneScopedTotal = (docs, zone, outletAliasMap) => {
   const valuesByOutlet = new Map();
   const normalizedZone = normalizeZoneLabel(zone);
 
@@ -342,18 +347,36 @@ const getMergedZoneScopedTotal = (docs, zone, zoneOutletKeys) => {
 
     Object.entries(values).forEach(([outletKey, rawAmount]) => {
       const matchesUserZone = normalizeZoneLabel(addedByPerOutlet?.[outletKey]?.zone) === normalizedZone;
-      const matchesOutlet = zoneOutletKeys.has(normalizeTextKey(outletKey));
+      const normalizedOutletKey = normalizeTextKey(outletKey);
+      const canonicalOutletKey = outletAliasMap.get(normalizedOutletKey);
+      const matchesOutlet = Boolean(canonicalOutletKey);
       if (!matchesUserZone && !matchesOutlet) return;
 
-      const currentAmount = Number(valuesByOutlet.get(outletKey)) || 0;
+      // Do not count the same outlet twice when one document is keyed by its
+      // ID and another by its area/name.  The existing non-zero merge rule is
+      // retained so an automatic zero never erases a confirmed value.
+      const storageKey = canonicalOutletKey || normalizedOutletKey;
       const nextAmount = toNumber(rawAmount);
-      if (!valuesByOutlet.has(outletKey) || nextAmount !== 0 || currentAmount === 0) {
-        valuesByOutlet.set(outletKey, nextAmount);
+      // Prefer an ID-keyed non-zero value over an area/name alias.  A zero ID
+      // value deliberately falls back to a non-zero alias, matching the
+      // payment/allowance tables in the UI.
+      const candidatePriority = canonicalOutletKey
+        && normalizedOutletKey === normalizeTextKey(canonicalOutletKey)
+        && nextAmount !== 0
+        ? 2
+        : 1;
+      const current = valuesByOutlet.get(storageKey);
+      const currentAmount = Number(current?.amount) || 0;
+      const shouldReplace = !current
+        || candidatePriority > current.priority
+        || (candidatePriority === current.priority && (nextAmount !== 0 || currentAmount === 0));
+      if (shouldReplace) {
+        valuesByOutlet.set(storageKey, { amount: nextAmount, priority: candidatePriority });
       }
     });
   });
 
-  return Array.from(valuesByOutlet.values()).reduce((sum, amount) => sum + amount, 0);
+  return Array.from(valuesByOutlet.values()).reduce((sum, value) => sum + value.amount, 0);
 };
 
 const getCashClosureAutofill = async (zone, date) => {
@@ -371,7 +394,7 @@ const getCashClosureAutofill = async (zone, date) => {
   ]);
 
   const outlets = outletsSnap.docs.map(mapDoc);
-  const zoneOutletKeys = getZoneOutletKeys(outlets, normalizedZone);
+  const outletAliasMap = getZoneOutletAliasMap(outlets, normalizedZone);
   const zoneOutletIds = outlets
     .filter((outlet) => normalizeZoneLabel(outlet?.zoneId || outlet?.zone || outlet?.zoneNumber) === normalizedZone)
     .map((outlet) => String(outlet?.id || ""))
@@ -388,10 +411,10 @@ const getCashClosureAutofill = async (zone, date) => {
   return {
     zone: normalizedZone,
     date: normalizedDate,
-    totalCashAmount: getMergedZoneScopedTotal(cashSnap.docs, normalizedZone, zoneOutletKeys),
-    incentives: getMergedZoneScopedTotal(incentivesSnap.docs, normalizedZone, zoneOutletKeys),
-    foodAllowance: getMergedZoneScopedTotal(foodAllowanceSnap.docs, normalizedZone, zoneOutletKeys),
-    advance: getMergedZoneScopedTotal(advanceSnap.docs, normalizedZone, zoneOutletKeys),
+    totalCashAmount: getMergedZoneScopedTotal(cashSnap.docs, normalizedZone, outletAliasMap),
+    incentives: getMergedZoneScopedTotal(incentivesSnap.docs, normalizedZone, outletAliasMap),
+    foodAllowance: getMergedZoneScopedTotal(foodAllowanceSnap.docs, normalizedZone, outletAliasMap),
+    advance: getMergedZoneScopedTotal(advanceSnap.docs, normalizedZone, outletAliasMap),
     ready: syncSnap.exists && pendingOutletIds.length === 0,
     pendingOutletIds,
     sourceSyncMissing: !syncSnap.exists,
