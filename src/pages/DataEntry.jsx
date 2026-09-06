@@ -507,7 +507,11 @@ export default function DataEntry() {
   useEffect(() => {
     if (!outlet || !date) return;
     if (isManualReentry) return;
-    const pendingSyncFields = new Set(selectedFinalSync?.pendingFields || []);
+    // `sourceUnavailableFields` was written by older nightly jobs.  Honour it
+    // too, so a historical partial auto-save cannot lock zero placeholders.
+    const pendingSyncFields = new Set(
+      selectedFinalSync?.pendingFields || selectedFinalSync?.sourceUnavailableFields || []
+    );
     const getMappedPriority = (doc) => {
       const enteredManually = getMappedOutletValue(doc.addedByPerOutlet, outletKeys).found
         || getMappedOutletValue(doc.manuallyEnteredOutlets, outletKeys).found;
@@ -1052,14 +1056,17 @@ export default function DataEntry() {
         {/* ---- Fields ---- */}
         {outlet && date && (
           <>
-            {selectedFinalSync && selectedFinalSync.status !== "saved" && (
+            {selectedFinalSync && (
+              selectedFinalSync.status !== "saved" ||
+              (selectedFinalSync.pendingFields || selectedFinalSync.sourceUnavailableFields)?.length
+            ) && (
               <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
                 <p className="text-sm font-semibold text-amber-800">
                   {selectedFinalSync.status === "pending" ? "Final sync pending" : "Final sync partially saved"}
                 </p>
                 <p className="mt-1 text-xs text-amber-700">
-                  {selectedFinalSync.pendingFields?.length
-                    ? `Not locked: ${selectedFinalSync.pendingFields.join(", ")}. Refresh the source and submit these values manually if required.`
+                    {(selectedFinalSync.pendingFields || selectedFinalSync.sourceUnavailableFields)?.length
+                    ? `Not locked: ${(selectedFinalSync.pendingFields || selectedFinalSync.sourceUnavailableFields).join(", ")}. Refresh the source and submit these values manually if required.`
                     : "The source could not be read, so no zero values were locked."}
                 </p>
               </div>

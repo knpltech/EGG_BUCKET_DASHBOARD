@@ -51,6 +51,48 @@ const toNumber = (value) => {
 
 const compareIsoDates = (left, right) => String(left || "").localeCompare(String(right || ""));
 
+const addDaysToIso = (isoDate, days) => {
+  const date = new Date(`${isoDate}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return getLocalIsoDate(date);
+};
+
+const getHistoryRange = (range, now = new Date()) => {
+  const today = getLocalIsoDate(now);
+  const localToday = new Date(`${today}T00:00:00`);
+  const weekStart = addDaysToIso(today, -localToday.getDay());
+  const monthStart = `${localToday.getFullYear()}-${String(localToday.getMonth() + 1).padStart(2, "0")}-01`;
+
+  if (range === "thisWeek") return { from: weekStart, to: today };
+  if (range === "lastWeek") return { from: addDaysToIso(weekStart, -7), to: addDaysToIso(weekStart, -1) };
+  if (range === "lastMonth") {
+    const lastMonth = new Date(localToday.getFullYear(), localToday.getMonth() - 1, 1);
+    const lastMonthEnd = new Date(localToday.getFullYear(), localToday.getMonth(), 0);
+    return {
+      from: `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, "0")}-01`,
+      to: `${lastMonthEnd.getFullYear()}-${String(lastMonthEnd.getMonth() + 1).padStart(2, "0")}-${String(lastMonthEnd.getDate()).padStart(2, "0")}`,
+    };
+  }
+  if (range === "all") return { from: "", to: "" };
+  return { from: monthStart, to: today };
+};
+
+const historyDaysToFetch = (range) => ({
+  thisWeek: 7,
+  lastWeek: 14,
+  thisMonth: 31,
+  lastMonth: 62,
+  all: "all",
+}[range] || 31);
+
+const HISTORY_RANGE_OPTIONS = [
+  ["thisWeek", "This Week"],
+  ["lastWeek", "Last Week"],
+  ["thisMonth", "This Month"],
+  ["lastMonth", "Last Month"],
+  ["all", "All Dates"],
+];
+
 const getEntryWindowState = (now = new Date()) => {
   const currentDate = getLocalIsoDate(now);
   const currentHour = now.getHours();
@@ -157,7 +199,7 @@ export default function ZoneStockEntry() {
   const [damageRows, setDamageRows] = useState([]);
   const [stockOptionRows, setStockOptionRows] = useState([]);
   const [zoneStockRows, setZoneStockRows] = useState([]);
-  const [showFullHistory, setShowFullHistory] = useState(false);
+  const [historyRange, setHistoryRange] = useState("thisMonth");
   const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -229,8 +271,9 @@ export default function ZoneStockEntry() {
         } catch {}
       }
 
-      // Determine days param: override > explicit showFullHistory state
-      const daysParam = daysOverride !== undefined ? daysOverride : (showFullHistory ? "all" : 30);
+      // Fetch enough history for the selected range; client-side bounds below
+      // keep "This Month" exact rather than a rolling 30-day approximation.
+      const daysParam = daysOverride !== undefined ? daysOverride : historyDaysToFetch(historyRange);
 
       // Fetch sales and damages only for the selected date
       const salesPromise = fetch(`${API_URL}/dailysales/date/${encodeURIComponent(selectedDate)}`);
@@ -283,7 +326,7 @@ export default function ZoneStockEntry() {
         setIsLoading(false);
       }
     }
-  }, [selectedDate, selectedZone, showFullHistory]);
+  }, [selectedDate, selectedZone, historyRange]);
 
   useEffect(() => {
     const refreshTimer = window.setInterval(() => {
@@ -363,6 +406,7 @@ export default function ZoneStockEntry() {
 
   const zoneHistory = useMemo(() => {
     if (!selectedZone) return [];
+    const { from, to } = getHistoryRange(historyRange, now);
     const latestByDate = new Map();
     const sortedRows = zoneStockRows
       .filter((row) => row?.zone === selectedZone)
@@ -375,10 +419,13 @@ export default function ZoneStockEntry() {
       if (!latestByDate.has(rowDate)) latestByDate.set(rowDate, row);
     }
 
-    return Array.from(latestByDate.values()).sort((a, b) =>
+    return Array.from(latestByDate.values()).filter((row) => {
+      const rowDate = normalizeDate(row.date || row.createdAt);
+      return (!from || compareIsoDates(rowDate, from) >= 0) && (!to || compareIsoDates(rowDate, to) <= 0);
+    }).sort((a, b) =>
       compareIsoDates(normalizeDate(b.date || b.createdAt), normalizeDate(a.date || a.createdAt))
     );
-  }, [zoneStockRows, selectedZone]);
+  }, [zoneStockRows, selectedZone, historyRange, now]);
 
   const existingForDate = useMemo(
     () => zoneHistory.find((row) => normalizeDate(row.date || row.createdAt) === selectedDate) || null,
@@ -604,25 +651,33 @@ export default function ZoneStockEntry() {
             >
               {isRefreshing ? "Refreshing..." : "Refresh"}
             </button>
-            <button
-              type="button"
-              onClick={async () => {
-                if (historyLoadingMore) return;
-                const newVal = !showFullHistory;
-                setShowFullHistory(newVal);
-                setHistoryLoadingMore(true);
-                try {
-                  await loadAll(true, newVal ? "all" : 30);
-                } catch (e) {
-                } finally {
-                  setHistoryLoadingMore(false);
-                }
-              }}
-              disabled={isLoading || isRefreshing || historyLoadingMore}
-              className="w-40 rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {historyLoadingMore ? "Loading..." : showFullHistory ? "Show Last 30 Days" : "Load Full History"}
-            </button>
+            <div className="flex flex-wrap gap-1.5">
+              {HISTORY_RANGE_OPTIONS.map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  disabled={isLoading || isRefreshing || historyLoadingMore}
+                  onClick={async () => {
+                    if (value === historyRange || historyLoadingMore) return;
+                    setHistoryRange(value);
+                    setHistoryLoadingMore(true);
+                    try {
+                      await loadAll(true, historyDaysToFetch(value));
+                    } finally {
+                      setHistoryLoadingMore(false);
+                    }
+                  }}
+                  className={[
+                    "rounded-lg border px-3 py-2.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60",
+                    value === historyRange
+                      ? "border-orange-500 bg-orange-500 text-white"
+                      : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
+                  ].join(" ")}
+                >
+                  {historyLoadingMore && value === historyRange ? "Loading..." : label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

@@ -313,6 +313,7 @@ const applyInventoryMetrics = async (summary, outlet, date, suppliedMetrics) => 
 
   try {
     let metrics = suppliedMetrics;
+    let retailMetrics = suppliedMetrics || null;
     if (!metrics) {
       if (collectionDb) {
         const fsMetrics = await fetchFirestoreInventoryMetrics(collectionDb, date);
@@ -329,6 +330,13 @@ const applyInventoryMetrics = async (summary, outlet, date, suppliedMetrics) => 
       if (!metrics) {
         metrics = await getInventoryMetrics(date);
       }
+
+      // Collection snapshots can be present for only one category (for
+      // example cash), while the Retail source holds damage, allowance, or
+      // incentive for the same outlet. Always load the cached Retail metric
+      // set as a field-level fallback; do not let one non-empty collection
+      // suppress the remaining fields.
+      retailMetrics = metrics === undefined ? null : await getInventoryMetrics(date);
     }
 
     // Digital Payment must reflect what was actually handed over as UPI, not
@@ -336,7 +344,7 @@ const applyInventoryMetrics = async (summary, outlet, date, suppliedMetrics) => 
     // snapshots may not include this collection, so obtain this specific
     // value from the Retail Admin metrics API when necessary.
     if (!Array.isArray(metrics?.upiHandoverEntries)) {
-      const retailMetrics = await getInventoryMetrics(date);
+      retailMetrics = retailMetrics || await getInventoryMetrics(date);
       metrics = {
         ...metrics,
         upiHandoverEntries: retailMetrics?.upiHandoverEntries || [],
@@ -346,6 +354,16 @@ const applyInventoryMetrics = async (summary, outlet, date, suppliedMetrics) => 
     const sumForOutlet = (entries, paths) => (Array.isArray(entries) ? entries : [])
       .filter((entry) => isMatchingOutlet(entry?.outletName || entry?.outlet, outlet))
       .reduce((total, entry) => total + pickNumber(entry, paths), 0);
+
+    // Select a source separately for each field. The previous all-or-nothing
+    // choice used a partially populated collection response for every field,
+    // causing valid Retail values for that outlet to be saved as zero.
+    const entriesForOutlet = (field) => {
+      const primaryEntries = metrics?.[field];
+      const hasPrimaryOutletEntry = Array.isArray(primaryEntries) && primaryEntries
+        .some((entry) => isMatchingOutlet(entry?.outletName || entry?.outlet, outlet));
+      return hasPrimaryOutletEntry ? primaryEntries : (retailMetrics?.[field] || primaryEntries || []);
+    };
 
     // Retail keeps earlier UPI-handover submissions when an agent corrects a
     // value. Collections shows the current handover, i.e. the newest entry,
@@ -368,13 +386,13 @@ const applyInventoryMetrics = async (summary, outlet, date, suppliedMetrics) => 
         return toTimestamp(entry.createdAt) >= toTimestamp(latest.createdAt) ? entry : latest;
       }, null);
 
-    summary.damage = sumForOutlet(metrics.damageEntries, ["quantity", "damage", "damages", "Cash", "cash"]);
-    summary.cashHandover = sumForOutlet(metrics.cashHandoverEntries, ["Cash", "cash", "amount", "value"]);
+    summary.damage = sumForOutlet(entriesForOutlet("damageEntries"), ["quantity", "damage", "damages", "Cash", "cash"]);
+    summary.cashHandover = sumForOutlet(entriesForOutlet("cashHandoverEntries"), ["Cash", "cash", "amount", "value"]);
     summary.cashPayment = summary.cashHandover;
-    summary.foodAllowance = sumForOutlet(metrics.foodAllowanceEntries, ["Cash", "cash", "amount", "value"]);
-    summary.incentive = sumForOutlet(metrics.incentiveEntries, ["Cash", "cash", "amount", "value"]);
+    summary.foodAllowance = sumForOutlet(entriesForOutlet("foodAllowanceEntries"), ["Cash", "cash", "amount", "value"]);
+    summary.incentive = sumForOutlet(entriesForOutlet("incentiveEntries"), ["Cash", "cash", "amount", "value"]);
     summary.digitalPayment = pickNumber(
-      latestForOutlet(metrics.upiHandoverEntries),
+      latestForOutlet(entriesForOutlet("upiHandoverEntries")),
       ["Cash", "cash", "amount", "value"]
     );
     summary.syncAvailability = {

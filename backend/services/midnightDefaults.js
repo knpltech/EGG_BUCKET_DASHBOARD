@@ -10,6 +10,10 @@ const ZONES = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"];
 // 11:40 PM.
 const DAILY_ENTRY_FINAL_MINUTES = (23 * 60) + 20;
 const INVENTORY_FINAL_MINUTES = (23 * 60) + 40;
+const REQUIRED_SOURCE_FIELDS = ["sales", "neccRate", "cash", "digital", "damages", "incentive", "foodAllowance"];
+// A finalisation can take several source requests.  The lease prevents two
+// deployed API instances from racing to overwrite the same date's map rows.
+const DAILY_SYNC_LEASE_MS = 10 * 60 * 1000;
 
 const getIndiaDate = (offsetDays = 0) => {
   const indiaNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
@@ -208,11 +212,14 @@ const saveFinalRemarks = async (date, outletIds) => {
   }
 };
 
-const saveDailyEntrySyncStatus = async (date, outletStatuses, startedAt) => {
+const saveDailyEntrySyncStatus = async (date, outletStatuses, startedAt, finalized) => {
   const completedAt = new Date();
   await db.collection("dailyEntrySyncStatus").doc(date).set({
     date,
     outlets: outletStatuses,
+    status: finalized ? "saved" : "partial",
+    finalized,
+    leaseExpiresAt: null,
     startedAt,
     completedAt,
     durationMs: completedAt.getTime() - startedAt.getTime(),
@@ -222,8 +229,11 @@ const saveDailyEntrySyncStatus = async (date, outletStatuses, startedAt) => {
 
 const ensureDailyEntryDefaults = async (date) => {
   const outlets = await getActiveOutlets();
-  if (!outlets.length) return;
   const startedAt = new Date();
+  if (!outlets.length) {
+    await saveDailyEntrySyncStatus(date, {}, startedAt, true);
+    return true;
+  }
   const sourceResults = await Promise.allSettled(outlets.map(async (outlet) => {
     const sourceOutlet = outlet.area || outlet.name || outlet.id;
     return { outletId: outlet.id, summary: await getSourceOutletSummary(sourceOutlet, date) };
@@ -247,8 +257,11 @@ const ensureDailyEntryDefaults = async (date) => {
 
     if (result.status === "rejected") {
       outletStatuses[outletId] = {
-        status: "saved",
-        sourceUnavailableFields: ["sales", "neccRate", "cash", "digital", "damages", "incentive", "foodAllowance"],
+        // Do write placeholders so every date map retains every outlet key,
+        // but never report them as saved/lockable data in the UI.
+        status: "partial",
+        pendingFields: REQUIRED_SOURCE_FIELDS,
+        sourceUnavailableFields: REQUIRED_SOURCE_FIELDS,
         error: String(result.reason?.message || "Source data could not be read"),
         updatedAt: new Date().toISOString(),
       };
@@ -265,10 +278,11 @@ const ensureDailyEntryDefaults = async (date) => {
     if (available.incentive) values.incentive[outletId] = toNumber(summary.incentive);
     if (available.foodAllowance) values.foodAllowance[outletId] = toNumber(summary.foodAllowance);
 
-    const pendingFields = ["sales", "neccRate", "cash", "digital", "damages", "incentive", "foodAllowance"]
+    const pendingFields = REQUIRED_SOURCE_FIELDS
       .filter((field) => !available[field]);
     outletStatuses[outletId] = {
-      status: "saved",
+      status: pendingFields.length ? "partial" : "saved",
+      pendingFields,
       sourceUnavailableFields: pendingFields,
       updatedAt: new Date().toISOString(),
     };
@@ -287,11 +301,17 @@ const ensureDailyEntryDefaults = async (date) => {
     saveFinalMapValues({ collection: "foodAllowance", date, valuesField: "outlets", values: values.foodAllowance, outletIds }),
     saveFinalNeccRates(date, values.neccRate),
     saveFinalRemarks(date, outletIds),
-    saveDailyEntrySyncStatus(date, outletStatuses, startedAt),
+    saveDailyEntrySyncStatus(
+      date,
+      outletStatuses,
+      startedAt,
+      Object.values(outletStatuses).every((item) => item.status === "saved"),
+    ),
   ]);
 
   const saved = Object.values(outletStatuses).filter((item) => item.status === "saved").length;
   console.info(`Daily entry final sync ${date}: ${saved} saved in ${Date.now() - startedAt.getTime()}ms.`);
+  return saved === outlets.length;
 };
 
 let lastDailyEntryDate = "";
@@ -299,11 +319,49 @@ let lastInventoryDate = "";
 
 const getIndiaNow = () => new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
 
+const claimDailyEntrySync = async (date) => db.runTransaction(async (transaction) => {
+  const ref = db.collection("dailyEntrySyncStatus").doc(date);
+  const snapshot = await transaction.get(ref);
+  const current = snapshot.data() || {};
+  const now = new Date();
+  const leaseExpiry = current.leaseExpiresAt?.toDate?.() || new Date(current.leaseExpiresAt || 0);
+
+  if (current.finalized || (current.status === "processing" && leaseExpiry > now)) return false;
+
+  transaction.set(ref, {
+    date,
+    status: "processing",
+    finalized: false,
+    startedAt: now,
+    leaseExpiresAt: new Date(now.getTime() + DAILY_SYNC_LEASE_MS),
+    updatedAt: now,
+  }, { merge: true });
+  return true;
+});
+
+const releaseDailyEntrySyncLease = async (date, error) => {
+  await db.collection("dailyEntrySyncStatus").doc(date).set({
+    status: "failed",
+    finalized: false,
+    leaseExpiresAt: null,
+    error: String(error?.message || error || "Daily final sync failed"),
+    updatedAt: new Date(),
+  }, { merge: true });
+};
+
 const runDailyEntryDefaults = async (date) => {
   if (lastDailyEntryDate === date) return false;
-  await ensureDailyEntryDefaults(date);
-  lastDailyEntryDate = date;
-  return true;
+  if (!await claimDailyEntrySync(date)) return false;
+  try {
+    const completed = await ensureDailyEntryDefaults(date);
+    // Only a fully source-verified date is considered done. Partial dates are
+    // retried on the next scheduler pass instead of being silently frozen.
+    if (completed) lastDailyEntryDate = date;
+    return true;
+  } catch (error) {
+    await releaseDailyEntrySyncLease(date, error);
+    throw error;
+  }
 };
 
 const runInventoryDefaults = async (date) => {
@@ -313,7 +371,11 @@ const runInventoryDefaults = async (date) => {
   // saved stock, then create the cash closure with any missing manual value as
   // zero. Each helper exits without changing an existing manual record.
   await Promise.all(ZONES.map((zone) => ensureZeroStockOptionEntry(zone, date)));
-  await Promise.all(ZONES.map((zone) => ensureMissingZoneStockEntry(zone, date)));
+  const inventoryResults = await Promise.all(ZONES.map((zone) => ensureMissingZoneStockEntry(zone, date)));
+  // At 11:40 the Data Entry sync may still be retrying an unavailable outlet.
+  // Do not consume the once-per-day flag in that case; run again next minute
+  // after the source fetch succeeds so all zones receive final totals.
+  if (inventoryResults.some((result) => result?.pending)) return false;
   await Promise.all(ZONES.map((zone) => ensureCashClosureEntry(zone, date)));
   lastInventoryDate = date;
   return true;
