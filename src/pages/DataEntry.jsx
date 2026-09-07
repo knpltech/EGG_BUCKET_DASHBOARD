@@ -1058,7 +1058,7 @@ export default function DataEntry() {
           <>
             {selectedFinalSync && (
               selectedFinalSync.status !== "saved" ||
-              (selectedFinalSync.pendingFields || selectedFinalSync.sourceUnavailableFields)?.length
+              (selectedFinalSync.pendingFields || selectedFinalSync.sourceUnavailableFields)?.length > 0
             ) && (
               <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
                 <p className="text-sm font-semibold text-amber-800">
