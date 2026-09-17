@@ -58,14 +58,6 @@ const getProvisionalSalary = (dailyRates, salesDayKeys, outletId, year, month) =
   return total;
 };
 
-const hasDailyRateInMonth = (dailyRates, outletId, year, month) => {
-  const monthStart = `${year}-${String(month).padStart(2, "0")}-01`;
-  const monthEnd = toIsoDate(new Date(year, month, 0));
-  return dailyRates.some((rate) => String(rate.outletId) === String(outletId)
-    && String(rate.effectiveFrom) <= monthEnd
-    && (!rate.effectiveTo || String(rate.effectiveTo) >= monthStart));
-};
-
 const getOutletLabel = (outlet) => String(outlet?.area || outlet?.name || outlet?.id || "").trim();
 
 const buildYearOptions = () => {
@@ -121,23 +113,22 @@ export default function OutletSalary() {
       ]));
       const provisionalTotal = Object.values(provisionalOutlets).reduce((sum, amount) => sum + toNumber(amount), 0);
       if (!finalEntry && !provisionalTotal) return null;
+      // A saved entry is the final monthly snapshot.  Only months without one
+      // use the existing live provisional calculation above.
+      const rowOutlets = finalEntry
+        ? Object.fromEntries(sortedOutlets.map((outlet) => [
+          outlet.id,
+          toNumber(finalEntry?.outlets?.[outlet.id]),
+        ]))
+        : provisionalOutlets;
       return {
         ...(finalEntry || {}),
         year: selectedYear,
         month,
         monthName: monthLabel(month),
-        outlets: Object.fromEntries(sortedOutlets.map((outlet) => [
-          outlet.id,
-          hasDailyRateInMonth(dailyRates, outlet.id, selectedYear, month)
-            ? provisionalOutlets[outlet.id]
-            : toNumber(finalEntry?.outlets?.[outlet.id]),
-        ])),
-        total: sortedOutlets.reduce((sum, outlet) => sum + (
-          hasDailyRateInMonth(dailyRates, outlet.id, selectedYear, month)
-            ? provisionalOutlets[outlet.id]
-            : toNumber(finalEntry?.outlets?.[outlet.id])
-        ), 0),
-        isProvisional: !finalEntry || sortedOutlets.some((outlet) => hasDailyRateInMonth(dailyRates, outlet.id, selectedYear, month)),
+        outlets: rowOutlets,
+        total: sortedOutlets.reduce((sum, outlet) => sum + toNumber(rowOutlets[outlet.id]), 0),
+        isProvisional: !finalEntry,
       };
     }).filter(Boolean);
   }, [dailyRates, entries, salesDayKeys, selectedYear, sortedOutlets]);
