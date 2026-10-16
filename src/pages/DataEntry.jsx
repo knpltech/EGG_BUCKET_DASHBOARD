@@ -650,7 +650,7 @@ export default function DataEntry() {
             console.log("🟢 CALLING setSales with:", data.salesQty);
             setSales(String(data.salesQty));
           }
-          if (!isManualReentry && !savedLocksRef.current.digital && data.digitalPayment !== undefined) {
+          if (!savedLocksRef.current.digital && data.digitalPayment !== undefined) {
             console.log("🟢 CALLING setDigital with:", data.digitalPayment);
             setDigital(String(data.digitalPayment));
           }
@@ -661,7 +661,7 @@ export default function DataEntry() {
 
           // Cash Payment (cash handover) — prefill for any date
           const cashHandoverValue = Number(data.cashHandover ?? data.cashPayment) || 0;
-          if (!isManualReentry && !savedLocksRef.current.cash) {
+          if (!savedLocksRef.current.cash) {
             console.log("🟢 Prefilling Cash Payment with:", cashHandoverValue);
             setCash(String(cashHandoverValue));
           }

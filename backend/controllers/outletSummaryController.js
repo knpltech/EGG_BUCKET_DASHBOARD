@@ -386,11 +386,22 @@ const applyInventoryMetrics = async (summary, outlet, date, suppliedMetrics) => 
         return toTimestamp(entry.createdAt) >= toTimestamp(latest.createdAt) ? entry : latest;
       }, null);
 
-    summary.damage = sumForOutlet(entriesForOutlet("damageEntries"), ["quantity", "damage", "damages", "Cash", "cash"]);
-    summary.cashHandover = sumForOutlet(entriesForOutlet("cashHandoverEntries"), ["Cash", "cash", "amount", "value"]);
+    // A metrics source with no matching entry for this outlet returns 0. That
+    // must not erase a value already computed from the raw delivery records
+    // (getRetailSummary's per-delivery loop) — only a real, matched metric
+    // should replace it. Digital Payment has no such pre-existing delivery
+    // value by design (see the comment above), so it is always set from the
+    // metrics source.
+    const metricsDamage = sumForOutlet(entriesForOutlet("damageEntries"), ["quantity", "damage", "damages", "Cash", "cash"]);
+    const metricsCashHandover = sumForOutlet(entriesForOutlet("cashHandoverEntries"), ["Cash", "cash", "amount", "value"]);
+    const metricsFoodAllowance = sumForOutlet(entriesForOutlet("foodAllowanceEntries"), ["Cash", "cash", "amount", "value"]);
+    const metricsIncentive = sumForOutlet(entriesForOutlet("incentiveEntries"), ["Cash", "cash", "amount", "value"]);
+
+    if (metricsDamage > 0) summary.damage = metricsDamage;
+    if (metricsCashHandover > 0) summary.cashHandover = metricsCashHandover;
     summary.cashPayment = summary.cashHandover;
-    summary.foodAllowance = sumForOutlet(entriesForOutlet("foodAllowanceEntries"), ["Cash", "cash", "amount", "value"]);
-    summary.incentive = sumForOutlet(entriesForOutlet("incentiveEntries"), ["Cash", "cash", "amount", "value"]);
+    if (metricsFoodAllowance > 0) summary.foodAllowance = metricsFoodAllowance;
+    if (metricsIncentive > 0) summary.incentive = metricsIncentive;
     summary.digitalPayment = pickNumber(
       latestForOutlet(entriesForOutlet("upiHandoverEntries")),
       ["Cash", "cash", "amount", "value"]
