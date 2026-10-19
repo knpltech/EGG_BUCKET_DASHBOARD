@@ -186,6 +186,16 @@ const extractErrorMessage = (text, fallback = "Failed to save one of the entries
   return cleaned || fallback;
 };
 
+const fetchJson = async (url, options = {}) => {
+  try {
+    const response = await fetch(url, options);
+    if (!response.ok) return { data: null, error: `${url} returned ${response.status}` };
+    return { data: await response.json(), error: null };
+  } catch (error) {
+    return { data: null, error: error?.message || `Unable to fetch ${url}` };
+  }
+};
+
 const normalizeOutletKey = (value) => String(value || "").trim().toLowerCase();
 
 const matchesOutletKey = (value, outletKeys) =>
@@ -276,6 +286,7 @@ export default function DataEntry() {
   const [isManualReentry, setIsManualReentry] = useState(false);
   const [isFetchingSummary, setIsFetchingSummary] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
+  const [dataLoadError, setDataLoadError] = useState("");
   const [aiTotalAmount, setAiTotalAmount] = useState(0);
   const [summaryRefreshVersion, setSummaryRefreshVersion] = useState(0);
   const prevOutletDateRef = useRef({ outlet: "", date: "" });
@@ -331,40 +342,49 @@ export default function DataEntry() {
       const requestOptions = { headers, cache: "no-store" };
       const { from, to } = getDataWindow(date || todayIso);
       const query = `?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
-      const [sRes, cRes, dRes, dmRes, nRes, iRes, aRes, fRes, rRes, syncRes] = await Promise.all([
-        fetch(`${API}/dailysales/all${query}`, requestOptions),
-        fetch(`${API}/cash-payments/all${query}`, requestOptions),
-        fetch(`${API}/digital-payments/all${query}`, requestOptions),
-        fetch(`${API}/daily-damage/all${query}`, requestOptions),
-        fetch(`${API}/neccrate/all${query}`, requestOptions),
-        fetch(`${API}/incentive/all${query}`, requestOptions),
-        fetch(`${API}/advance/all${query}`, requestOptions),
-        fetch(`${API}/food-allowance/all${query}`, requestOptions),
-        fetch(`${API}/remarks/all${query}`, requestOptions),
-        date ? fetch(`${API}/data-entry/final-sync-status?date=${encodeURIComponent(date)}`, requestOptions) : Promise.resolve(null),
-      ]);
-      if (![sRes, cRes, dRes, dmRes, nRes, iRes, aRes, fRes, rRes].every((response) => response.ok)) {
-        throw new Error("Failed to load data entry records");
-      }
-      const [sData, cData, dData, dmData, nData, iData, aData, fData, rData, syncData] = await Promise.all([
-        sRes.json(), cRes.json(), dRes.json(), dmRes.json(), nRes.json(),
-        iRes.json(), aRes.json(), fRes.json(), rRes.json(),
-        syncRes?.ok ? syncRes.json() : Promise.resolve(null),
+      const results = await Promise.all([
+        fetchJson(`${API}/dailysales/all${query}`, requestOptions),
+        fetchJson(`${API}/cash-payments/all${query}`, requestOptions),
+        fetchJson(`${API}/digital-payments/all${query}`, requestOptions),
+        fetchJson(`${API}/daily-damage/all${query}`, requestOptions),
+        fetchJson(`${API}/neccrate/all${query}`, requestOptions),
+        fetchJson(`${API}/incentive/all${query}`, requestOptions),
+        fetchJson(`${API}/advance/all${query}`, requestOptions),
+        fetchJson(`${API}/food-allowance/all${query}`, requestOptions),
+        fetchJson(`${API}/remarks/all${query}`, requestOptions),
+        date
+          ? fetchJson(`${API}/data-entry/final-sync-status?date=${encodeURIComponent(date)}`, requestOptions)
+          : Promise.resolve({ data: null, error: null }),
       ]);
       // Ignore a slow response for an outlet/date that the user has already left.
       if (requestId !== loadRequestRef.current) return;
-      setAllSalesData(Array.isArray(sData) ? sData : []);
-      setAllCashData(Array.isArray(cData) ? cData : []);
-      setAllDigitalData(Array.isArray(dData) ? dData : []);
-      setAllDamagesData(Array.isArray(dmData) ? dmData : []);
-      setAllNeccData(Array.isArray(nData) ? nData : []);
-      setAllIncentiveData(Array.isArray(iData) ? iData : []);
-      setAllAdvanceData(Array.isArray(aData) ? aData : []);
-      setAllFoodAllowanceData(Array.isArray(fData) ? fData : []);
-      setAllRemarksData(Array.isArray(rData) ? rData : []);
-      setFinalSyncStatus(syncData);
+      const [
+        salesResult, cashResult, digitalResult, damagesResult, neccResult,
+        incentiveResult, advanceResult, foodAllowanceResult, remarksResult, syncResult,
+      ] = results;
+      setAllSalesData(Array.isArray(salesResult.data) ? salesResult.data : []);
+      setAllCashData(Array.isArray(cashResult.data) ? cashResult.data : []);
+      setAllDigitalData(Array.isArray(digitalResult.data) ? digitalResult.data : []);
+      setAllDamagesData(Array.isArray(damagesResult.data) ? damagesResult.data : []);
+      setAllNeccData(Array.isArray(neccResult.data) ? neccResult.data : []);
+      setAllIncentiveData(Array.isArray(incentiveResult.data) ? incentiveResult.data : []);
+      setAllAdvanceData(Array.isArray(advanceResult.data) ? advanceResult.data : []);
+      setAllFoodAllowanceData(Array.isArray(foodAllowanceResult.data) ? foodAllowanceResult.data : []);
+      setAllRemarksData(Array.isArray(remarksResult.data) ? remarksResult.data : []);
+      setFinalSyncStatus(syncResult.data);
+
+      const sourceNames = ["sales", "cash", "digital", "damages", "NECC", "incentive", "advance", "food allowance", "remarks", "sync"];
+      const failedSources = results
+        .map((result, index) => result.error ? sourceNames[index] : null)
+        .filter(Boolean);
+      if (failedSources.length > 0) {
+        const message = `Some data could not be fetched: ${failedSources.join(", ")}.`;
+        console.error(message, results.filter((result) => result.error).map((result) => result.error));
+        setDataLoadError(message);
+      }
     } catch (err) {
       console.error("Error loading all data:", err);
+      setDataLoadError("Data could not be fetched. Please refresh and try again.");
     } finally {
       if (requestId === loadRequestRef.current) setIsLoadingData(false);
     }
@@ -972,6 +992,11 @@ export default function DataEntry() {
             </span>
           )}
         </h2>
+        {dataLoadError && (
+          <div className="mb-4 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-700">
+            {dataLoadError}
+          </div>
+        )}
 
         {/* ---- Outlet Dropdown ---- */}
         <div className="mb-4">
