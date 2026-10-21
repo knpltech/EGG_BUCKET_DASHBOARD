@@ -1,4 +1,5 @@
 import { db } from "../config/firebase.js";
+import { collectionDb } from "../config/collectionFirebase.js";
 
 const OUTLETS_CACHE_TTL_MS = Number(process.env.OUTLETS_CACHE_TTL_MS || 60_000);
 const OUTLETS_STALE_MAX_MS = Number(process.env.OUTLETS_STALE_MAX_MS || 300_000);
@@ -51,7 +52,11 @@ const getCachedOutlets = async ({ allowStaleOnError = true } = {}) => {
   outletsInFlightPromise = (async () => {
     try {
       const snapshot = await db.collection("outlets").get();
-      const outlets = Array.isArray(snapshot.docs) ? snapshot.docs.map((doc) => doc.data()) : [];
+      let outlets = Array.isArray(snapshot.docs) ? snapshot.docs.map((doc) => doc.data()) : [];
+      if (outlets.length === 0 && collectionDb) {
+        const invSnapshot = await collectionDb.collection("outlets").get();
+        outlets = Array.isArray(invSnapshot.docs) ? invSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) : [];
+      }
       outletsCache = { data: outlets, fetchedAt: Date.now() };
       outletsQuotaBlockedUntil = 0;
       return { outlets, source: "firestore" };

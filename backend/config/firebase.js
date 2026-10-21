@@ -6,7 +6,7 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-if (!admin.apps.length) {
+if (!admin.apps.some((app) => app.name === "[DEFAULT]")) {
   let credential;
 
   if (

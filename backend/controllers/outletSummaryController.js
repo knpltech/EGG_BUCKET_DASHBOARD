@@ -269,17 +269,21 @@ const queryFirestoreCollectionByDateKey = async (targetDb, collectionName, dateK
 };
 
 const fetchFirestoreInventoryMetrics = async (targetDb, date) => {
-  const [foodEntries, cashEntries, damageEntries, incentiveEntries] = await Promise.all([
+  const [foodEntries, cashEntries, damageEntries, incentiveEntries, upiEntries, dailyLocks] = await Promise.all([
     queryFirestoreCollectionByDateKey(targetDb, "food_allowance_entries", date),
     queryFirestoreCollectionByDateKey(targetDb, "cash_handover_entries", date),
     queryFirestoreCollectionByDateKey(targetDb, "damage_reports", date),
     queryFirestoreCollectionByDateKey(targetDb, "incentive_entries", date),
+    queryFirestoreCollectionByDateKey(targetDb, "upi_handover_entries", date),
+    queryFirestoreCollectionByDateKey(targetDb, "daily_agent_locks", date),
   ]);
   return {
     foodAllowanceEntries: foodEntries,
     cashHandoverEntries: cashEntries,
     damageEntries: damageEntries,
     incentiveEntries: incentiveEntries,
+    upiHandoverEntries: upiEntries,
+    dailyAgentLocks: dailyLocks,
   };
 };
 
@@ -287,7 +291,9 @@ const getMetricAgentNamesForOutlet = (metrics, outlet) => [
   ...(metrics?.cashHandoverEntries || []),
   ...(metrics?.foodAllowanceEntries || []),
   ...(metrics?.incentiveEntries || []),
-  ...(metrics?.damageEntries || []),   // also check damage entries (may exist even when cash/food/incentive = 0)
+  ...(metrics?.damageEntries || []),
+  ...(metrics?.upiHandoverEntries || []),
+  ...(metrics?.dailyAgentLocks || []),
 ]
   .filter((entry) => isMatchingOutlet(entry?.outletName || entry?.outlet, outlet))
   .map((entry) => entry?.agentName)
@@ -317,47 +323,43 @@ const applyInventoryMetrics = async (summary, outlet, date, suppliedMetrics) => 
     if (!metrics) {
       if (collectionDb) {
         const fsMetrics = await fetchFirestoreInventoryMetrics(collectionDb, date);
-        if (fsMetrics.foodAllowanceEntries.length || fsMetrics.cashHandoverEntries.length || fsMetrics.damageEntries.length || fsMetrics.incentiveEntries.length) {
+        if (fsMetrics.foodAllowanceEntries.length || fsMetrics.cashHandoverEntries.length || fsMetrics.damageEntries.length || fsMetrics.incentiveEntries.length || fsMetrics.upiHandoverEntries.length || fsMetrics.dailyAgentLocks.length) {
           metrics = fsMetrics;
         }
       }
       if (!metrics && db) {
         const fsMetrics = await fetchFirestoreInventoryMetrics(db, date);
-        if (fsMetrics.foodAllowanceEntries.length || fsMetrics.cashHandoverEntries.length || fsMetrics.damageEntries.length || fsMetrics.incentiveEntries.length) {
+        if (fsMetrics.foodAllowanceEntries.length || fsMetrics.cashHandoverEntries.length || fsMetrics.damageEntries.length || fsMetrics.incentiveEntries.length || fsMetrics.upiHandoverEntries.length || fsMetrics.dailyAgentLocks.length) {
           metrics = fsMetrics;
         }
       }
       if (!metrics) {
-        metrics = await getInventoryMetrics(date);
+        try {
+          metrics = await getInventoryMetrics(date);
+        } catch (e) {
+          console.warn("Could not fetch REST inventory metrics:", e.message);
+        }
       }
 
-      // Collection snapshots can be present for only one category (for
-      // example cash), while the Retail source holds damage, allowance, or
-      // incentive for the same outlet. Always load the cached Retail metric
-      // set as a field-level fallback; do not let one non-empty collection
-      // suppress the remaining fields.
-      retailMetrics = metrics === undefined ? null : await getInventoryMetrics(date);
+      retailMetrics = metrics === undefined ? null : metrics;
     }
 
-    // Digital Payment must reflect what was actually handed over as UPI, not
-    // the total UPI collected in customer deliveries. Firestore metric
-    // snapshots may not include this collection, so obtain this specific
-    // value from the Retail Admin metrics API when necessary.
     if (!Array.isArray(metrics?.upiHandoverEntries)) {
-      retailMetrics = retailMetrics || await getInventoryMetrics(date);
-      metrics = {
-        ...metrics,
-        upiHandoverEntries: retailMetrics?.upiHandoverEntries || [],
-      };
+      try {
+        retailMetrics = retailMetrics || await getInventoryMetrics(date);
+        metrics = {
+          ...metrics,
+          upiHandoverEntries: retailMetrics?.upiHandoverEntries || [],
+        };
+      } catch (e) {
+        metrics = { ...metrics, upiHandoverEntries: [] };
+      }
     }
 
     const sumForOutlet = (entries, paths) => (Array.isArray(entries) ? entries : [])
       .filter((entry) => isMatchingOutlet(entry?.outletName || entry?.outlet, outlet))
       .reduce((total, entry) => total + pickNumber(entry, paths), 0);
 
-    // Select a source separately for each field. The previous all-or-nothing
-    // choice used a partially populated collection response for every field,
-    // causing valid Retail values for that outlet to be saved as zero.
     const entriesForOutlet = (field) => {
       const primaryEntries = metrics?.[field];
       const hasPrimaryOutletEntry = Array.isArray(primaryEntries) && primaryEntries
@@ -365,9 +367,6 @@ const applyInventoryMetrics = async (summary, outlet, date, suppliedMetrics) => 
       return hasPrimaryOutletEntry ? primaryEntries : (retailMetrics?.[field] || primaryEntries || []);
     };
 
-    // Retail keeps earlier UPI-handover submissions when an agent corrects a
-    // value. Collections shows the current handover, i.e. the newest entry,
-    // so Data Entry must not add superseded submissions together.
     const latestForOutlet = (entries) => (Array.isArray(entries) ? entries : [])
       .filter((entry) => isMatchingOutlet(entry?.outletName || entry?.outlet, outlet))
       .reduce((latest, entry) => {
@@ -381,31 +380,48 @@ const applyInventoryMetrics = async (summary, outlet, date, suppliedMetrics) => 
           return Number.isFinite(parsed) ? parsed : 0;
         };
 
-        // Keep the later array item when timestamps are equal or unavailable;
-        // the Retail API returns the current revision last in that case.
         return toTimestamp(entry.createdAt) >= toTimestamp(latest.createdAt) ? entry : latest;
       }, null);
 
-    // A metrics source with no matching entry for this outlet returns 0. That
-    // must not erase a value already computed from the raw delivery records
-    // (getRetailSummary's per-delivery loop) — only a real, matched metric
-    // should replace it. Digital Payment has no such pre-existing delivery
-    // value by design (see the comment above), so it is always set from the
-    // metrics source.
     const metricsDamage = sumForOutlet(entriesForOutlet("damageEntries"), ["quantity", "damage", "damages", "Cash", "cash"]);
     const metricsCashHandover = sumForOutlet(entriesForOutlet("cashHandoverEntries"), ["Cash", "cash", "amount", "value"]);
     const metricsFoodAllowance = sumForOutlet(entriesForOutlet("foodAllowanceEntries"), ["Cash", "cash", "amount", "value"]);
     const metricsIncentive = sumForOutlet(entriesForOutlet("incentiveEntries"), ["Cash", "cash", "amount", "value"]);
+    const latestUpiEntry = latestForOutlet(entriesForOutlet("upiHandoverEntries"));
+    const metricsDigital = pickNumber(latestUpiEntry, ["Cash", "cash", "amount", "upi", "value"]);
 
     if (metricsDamage > 0) summary.damage = metricsDamage;
     if (metricsCashHandover > 0) summary.cashHandover = metricsCashHandover;
     summary.cashPayment = summary.cashHandover;
     if (metricsFoodAllowance > 0) summary.foodAllowance = metricsFoodAllowance;
     if (metricsIncentive > 0) summary.incentive = metricsIncentive;
-    summary.digitalPayment = pickNumber(
-      latestForOutlet(entriesForOutlet("upiHandoverEntries")),
-      ["Cash", "cash", "amount", "value"]
-    );
+    if (metricsDigital > 0) summary.digitalPayment = metricsDigital;
+
+    // Daily Agent Locks fallback from inventory project
+    const matchedLocks = (metrics?.dailyAgentLocks || [])
+      .filter((entry) => isMatchingOutlet(entry?.outletName || entry?.outlet, outlet));
+    if (matchedLocks.length > 0) {
+      matchedLocks.forEach((lock) => {
+        const snap = lock?.summarySnapshot;
+        if (snap) {
+          if (!summary.cashHandover && snap.cashHandover) summary.cashHandover = Number(snap.cashHandover) || 0;
+          if (!summary.digitalPayment && snap.upiHandover) summary.digitalPayment = Number(snap.upiHandover) || 0;
+          if (!summary.damage && snap.totalDamage) summary.damage = Number(snap.totalDamage) || 0;
+          if (!summary.foodAllowance && snap.foodAllowance) summary.foodAllowance = Number(snap.foodAllowance) || 0;
+          if (!summary.incentive && snap.incentives) summary.incentive = Number(snap.incentives) || 0;
+          if (!summary.salesQty && snap.nettSales) {
+            summary.salesQty = (Number(snap.nettSales) || 0) * 30;
+            summary.totalAmount = Number(snap.totalAmount) || 0;
+          }
+        }
+      });
+      summary.cashPayment = summary.cashHandover;
+      if (!summary.salesPoint && summary.salesQty > 0) {
+        summary.salesPoint = summary.totalAmount / (summary.salesQty / 30);
+      }
+      summary.neccRate = summary.salesPoint > 0 ? summary.salesPoint / 30 : 0;
+    }
+
     summary.syncAvailability = {
       ...summary.syncAvailability,
       cash: true,
@@ -525,6 +541,18 @@ export const getOutletSummary = async (req, res) => {
       .trim();
     const searchOutletKey = normalizeOutletKey(outlet);
 
+    // Pre-fetch today's inventory metrics so we have the day's active agents and lock snapshot
+    let inventoryMetrics = null;
+    if (collectionDb) {
+      try {
+        inventoryMetrics = await fetchFirestoreInventoryMetrics(collectionDb, date);
+      } catch (err) {
+        console.warn("Could not pre-fetch inventory metrics:", err.message);
+      }
+    }
+
+    const metricAgentNames = getMetricAgentNamesForOutlet(inventoryMetrics, outlet);
+
     const matchingOutletAgents = deliveryManCache
       .filter(agent => {
         if (!agent.outlet) return false;
@@ -538,13 +566,11 @@ export const getOutletSummary = async (req, res) => {
       .map(agent => agent.uid ?? agent.id ?? agent.agentId ?? agent.agentID)
       .filter(Boolean);
 
-    // Some retail deliveries retain a former customer's assignment/route but
-    // record the actual delivery under the current agent's name. Match that
-    // name too, so an outdated assignment cannot hide a valid outlet sale.
-    const assignedAgentNames = matchingOutletAgents
-      .map(agent => agent.agentName ?? agent.name ?? agent.fullName ?? agent.displayName ?? agent.username)
-      .filter(name => normalizePersonName(name) && normalizePersonName(name) !== "-");
-
+    // Combine agents from DeliveryMan cache with agents who submitted entries for this outlet
+    const assignedAgentNames = [
+      ...matchingOutletAgents.map(agent => agent.agentName ?? agent.name ?? agent.fullName ?? agent.displayName ?? agent.username),
+      ...metricAgentNames,
+    ].filter(name => normalizePersonName(name) && normalizePersonName(name) !== "-");
 
     const hasAssignedAgents = assignedAgents.length > 0 || assignedAgentNames.length > 0;
 
@@ -554,14 +580,7 @@ export const getOutletSummary = async (req, res) => {
 
     if (!cacheEntry || now - cacheEntry.time > CUSTOMERS_CACHE_TTL) {
       try {
-        // Fetch all customers and filter in code.
-        // The previous approach used a nested-field Firestore query
-        // (.where(`last8Days.${date}.status`, "==", "delivered")) which only
-        // works when the day's delivery is stored as a plain object. Some
-        // outlets (e.g. Kudlu Gate) store deliveries as an ARRAY, making the
-        // nested-field query silently return 0 results for those outlets.
-        // Fetching all docs and filtering in code handles both formats.
-        const allSnapshot = await collectionDb.collection("customers").get();
+        let allSnapshot = collectionDb ? await collectionDb.collection("customers").get() : { docs: [] };
         customersForDate = allSnapshot.docs
           .map(doc => doc.data())
           .filter(data => {
@@ -570,6 +589,19 @@ export const getOutletSummary = async (req, res) => {
             const deliveries = Array.isArray(dayData) ? dayData : [dayData];
             return deliveries.some(d => d?.status === "delivered");
           });
+
+        // If collectionDb has no deliveries for this date, query the active retail (db) customers collection
+        if (customersForDate.length === 0 && db) {
+          const retailCustSnapshot = await db.collection("customers").get();
+          customersForDate = retailCustSnapshot.docs
+            .map(doc => doc.data())
+            .filter(data => {
+              const dayData = data.last8Days?.[date];
+              if (!dayData) return false;
+              const deliveries = Array.isArray(dayData) ? dayData : [dayData];
+              return deliveries.some(d => d?.status === "delivered");
+            });
+        }
 
         customersDateCache[date] = {
           data: customersForDate,
@@ -603,7 +635,7 @@ export const getOutletSummary = async (req, res) => {
 
       deliveries.forEach(delivery => {
         if (delivery.status === "delivered") {
-          // DeliveryMan IDs can be absent or stale for an outlet.  A delivery
+          // DeliveryMan IDs can be absent or stale for an outlet. A delivery
           // explicitly tagged with the selected outlet is equally authoritative,
           // so retain it even when DeliveryMan has a different mapping.
           const deliveryOutlet = delivery.outletName || delivery.outlet || data.outletName || data.outlet || "";
@@ -646,7 +678,7 @@ export const getOutletSummary = async (req, res) => {
       neccRate
     };
 
-    const summaryWithMetrics = await applyInventoryMetrics(summary, outlet, date);
+    const summaryWithMetrics = await applyInventoryMetrics(summary, outlet, date, inventoryMetrics);
 
     // The inventory metric collections can contain only cash/UPI handovers.
     // Do not let those values mask a failed/stale delivery lookup: sales and
@@ -657,9 +689,9 @@ export const getOutletSummary = async (req, res) => {
       "salesQty", "totalAmount", "salesPoint", "neccRate",
       "damage", "foodAllowance", "incentive",
     ];
-    const isSourceIncomplete = sourceFields.some((field) =>
-      toNumber(summaryWithMetrics[field]) <= 0
-    );
+    const isSourceIncomplete =
+      toNumber(summaryWithMetrics.salesQty) <= 0 &&
+      toNumber(summaryWithMetrics.totalAmount) <= 0;
 
     if (isSourceIncomplete) {
       try {

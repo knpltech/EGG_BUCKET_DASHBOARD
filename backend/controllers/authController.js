@@ -116,8 +116,13 @@ export const loginUser = async (req, res) => {
     }
 
 
-    // Password validation (SECURE)
-    const valid = await bcrypt.compare(password, user.password);
+    // Password validation (SECURE with plaintext fallback for legacy records)
+    let valid = false;
+    if (typeof user.password === "string" && (user.password.startsWith("$2a$") || user.password.startsWith("$2b$") || user.password.startsWith("$2y$"))) {
+      valid = await bcrypt.compare(password, user.password).catch(() => false);
+    } else {
+      valid = (password === user.password);
+    }
     if (!valid) {
       return res.status(401).json({
         success: false,
